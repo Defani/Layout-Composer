@@ -153,18 +153,13 @@ function fSeg(obj, path, options, { after } = {}) {
 }
 function fFont(obj, path, { after } = {}) {
   const f = getPath(obj, path);
-  const fam = el("select", { class: `${NS}-input ${NS}-fam` });
-  const all = knownFonts();
-  const fams = all.includes(f.family) ? all : [f.family, ...all];
-  for (const n of fams) fam.appendChild(el("option", { value: n, selected: n === f.family, style: { fontFamily: `"${n}"` } }, n));
-  fam.appendChild(el("option", { value: "__load" }, "＋ Load installed fonts…"));
-  fam.addEventListener("change", () => {
-    if (fam.value === "__load") {
-      fam.value = f.family;
-      return loadInstalledFonts();
-    }
-    liveSet(obj, `${path}.family`, fam.value, after);
-  });
+  const fam = fontPicker(f.family, (n) =>
+    liveSet(obj, `${path}.family`, n, () => {
+      if (after) after();
+      else refreshCanvas();
+      renderProps();
+      renderQuickBar();
+    }), { cls: `${NS}-fam` });
   const size = el("input", { type: "number", class: `${NS}-input ${NS}-fsize`, value: f.size, min: 2, max: 400, step: 0.5, title: "Size (pt)" });
   size.addEventListener("input", () => {
     const v = parseFloat(size.value);
@@ -228,6 +223,95 @@ function mapFrameShapeRows(item) {
   }
   if (shape !== "rect" && shape !== "rounded") rows.push(el("p", { class: `${NS}-muted` }, "Grid frame ticks and labels are drawn only on rectangular frames."));
   return rows;
+}
+
+// ---------------------------------------------------------------- typography (Figma-like detail)
+const WEIGHT_NAMES = { 100: "Thin", 200: "Extra Light", 300: "Light", 400: "Regular", 500: "Medium", 600: "Semi Bold", 700: "Bold", 800: "Extra Bold", 900: "Black" };
+const ALIGN_ICONS = {
+  left: "M4 6h16M4 10h10M4 14h16M4 18h10",
+  center: "M4 6h16M7 10h10M4 14h16M7 18h10",
+  right: "M4 6h16M10 10h10M4 14h16M10 18h10",
+  justify: "M4 6h16M4 10h16M4 14h16M4 18h16",
+  top: "M5 4h14M12 8v12M8 12l4-4 4 4",
+  middle: "M5 12h14M12 4v5M12 15v5M9 7l3 2 3-2M9 17l3-2 3 2",
+  bottom: "M5 20h14M12 4v12M8 12l4 4 4-4",
+};
+const segIcon = (d, title) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="${title}"><path d="${d}"/></svg>`;
+function typographyRows(item, path, { text = false } = {}) {
+  const f = getPath(item, path);
+  if (f.opacity == null) f.opacity = 1;
+  const p = item.props;
+  const redo = () => {
+    refreshCanvas();
+    renderProps();
+    renderQuickBar();
+  };
+  const set = (k, v) => liveSet(item, `${path}.${k}`, v, redo);
+  const gf = typeof GF !== "undefined" && GF.byFamily.get(f.family);
+  const weights = gf?.weights?.length ? gf.weights : [100, 200, 300, 400, 500, 600, 700, 800, 900];
+  const cur = fontWeight(f);
+  const wSel = el("select", { class: `${NS}-input` }, ...weights.map((w) => el("option", { value: w, selected: w === cur }, `${WEIGHT_NAMES[w] || w} ${w}`)));
+  wSel.addEventListener("change", () => {
+    const w = Number(wSel.value);
+    liveSet(item, `${path}.weight`, w, () => {
+      f.bold = w >= 600;
+      redo();
+    });
+  });
+  const size = el("input", { type: "number", class: `${NS}-input`, value: f.size, min: 1, max: 999, step: 0.5, title: "Size (pt)" });
+  size.addEventListener("input", () => {
+    const v = parseFloat(size.value);
+    if (v > 0) liveSet(item, `${path}.size`, v, () => refreshCanvas());
+  });
+  const tog = (key, html, title, on) => {
+    const b = el("button", { type: "button", class: `${NS}-tog ${on ? "active" : ""}`, title, html });
+    b.addEventListener("click", () => set(key, !getPath(item, `${path}.${key}`)));
+    return b;
+  };
+  const rows = [
+    row("Font", fontPicker(f.family, (n) => set("family", n))),
+    el("div", { class: `${NS}-grid2` },
+      row("Weight", wSel),
+      row("Size", el("span", { class: `${NS}-unitwrap` }, size, el("span", { class: `${NS}-unit` }, "pt"))),
+    ),
+    el("div", { class: `${NS}-grid2` },
+      row("Color", fColor(item, `${path}.color`, { after: () => refreshCanvas() })),
+      row("Opacity", fRange(item, `${path}.opacity`, 0, 1, 0.05, { after: () => refreshCanvas() })),
+    ),
+    row("Style", el("div", { class: `${NS}-togrow` },
+      tog("italic", "<i>I</i>", "Italic", f.italic),
+      tog("smallCaps", "<span style='font-variant:small-caps'>Sc</span>", "Small caps", f.smallCaps),
+      ...(text ? [
+        (() => {
+          const b = el("button", { type: "button", class: `${NS}-tog ${p.decoration === "underline" ? "active" : ""}`, title: "Underline", html: "<u>U</u>" });
+          b.addEventListener("click", () => liveSet(item, "props.decoration", p.decoration === "underline" ? "none" : "underline", redo));
+          return b;
+        })(),
+        (() => {
+          const b = el("button", { type: "button", class: `${NS}-tog ${p.decoration === "line-through" ? "active" : ""}`, title: "Strikethrough", html: "<s>S</s>" });
+          b.addEventListener("click", () => liveSet(item, "props.decoration", p.decoration === "line-through" ? "none" : "line-through", redo));
+          return b;
+        })(),
+      ] : []),
+    )),
+  ];
+  if (!text) return rows;
+  rows.push(
+    row("Case", fSelect(item, "props.textCase", [["none", "As typed"], ["upper", "UPPERCASE"], ["lower", "lowercase"], ["title", "Title Case"]])),
+    el("div", { class: `${NS}-grid2` },
+      row("Line height", el("span", { class: `${NS}-unitwrap` }, fNum(item, "props.lineHeight", { min: 0.5, max: 5, step: 0.05 }), el("span", { class: `${NS}-unit` }, "×"))),
+      row("Letter spacing", fNum(item, `${path}.spacing`, { min: -20, max: 100, step: 0.5, unit: "‰" })),
+    ),
+    el("div", { class: `${NS}-grid2` },
+      row("Paragraph gap", fNum(item, "props.paraSpacing", { min: 0, max: 50, step: 0.25, unit: "mm" })),
+      row("Padding", fNum(item, "props.padding", { min: 0, step: 0.25, unit: "mm" })),
+    ),
+    row("Align", fSeg(item, "props.align", ["left", "center", "right", "justify"].map((a) => [a, segIcon(ALIGN_ICONS[a], a), `Align ${a}`]))),
+    row("Vertical", fSeg(item, "props.valign", [["top", segIcon(ALIGN_ICONS.top, "top"), "Top"], ["middle", segIcon(ALIGN_ICONS.middle, "middle"), "Middle"], ["bottom", segIcon(ALIGN_ICONS.bottom, "bottom"), "Bottom"]])),
+    row("Resize", fSeg(item, "props.autoSize", [["fixed", "Fixed", "Fixed box"], ["height", "Auto H", "Height follows the text"], ["width", "Auto W", "Width and height follow the text (no wrapping)"]], { after: redo })),
+    (p.autoSize || "fixed") !== "width" ? fCheck(item, "props.wrap", "Wrap lines to the box width") : null,
+  );
+  return rows.filter(Boolean);
 }
 
 function btn(label, onClick, { primary = false, iconName, title } = {}) {
@@ -309,7 +393,7 @@ function renderProps() {
 // ---- property groups: the sections of an item are sorted into tabs
 // (Content · Style · Grid · Arrange) so long panels stay short and tidy.
 const PROP_GROUPS = [
-  ["content", "Content", /^(content|map view|data|text$|formula|table content|entries|legend|image|icon|symbols?|drawing|shape|latex|settings)/i],
+  ["content", "Content", /^(content|map view|layers|data|chart$|text$|formula|table content|entries|legend|image|icon|symbols?|drawing|shape|latex|settings)/i],
   ["style", "Style", /^(style|frame|fill|background|halo|bar$|ticks|title|table style|scale bar style|north arrow style|text effects|adjust|stroke|line|markers?)/i],
   ["grid", "Grid", /^(coordinate grid|grid|overview)/i],
   ["arrange", "Arrange", /^(position|effects)/i],
@@ -319,7 +403,7 @@ const SECTION_ICONS = [
   [/^overview/i, "map"], [/^position/i, "ruler"], [/^effects|text effects/i, "fx"], [/^text|^formula|^latex/i, "text"],
   [/^fill|^shape|^style/i, "shape"], [/^background|^halo/i, "layout"], [/^title/i, "title"], [/^ticks|^bar/i, "colorbar"],
   [/^entries|^legend/i, "list"], [/^image|^adjust/i, "image"], [/^icon|^symbol/i, "marker"], [/^table/i, "table"],
-  [/^drawing/i, "pen"], [/^scale bar/i, "scalebar"], [/^north/i, "north"], [/^settings/i, "vars"],
+  [/^drawing/i, "pen"], [/^layers/i, "layers"], [/^chart|^colors/i, "chart"], [/^scale bar/i, "scalebar"], [/^north/i, "north"], [/^settings/i, "vars"],
 ];
 function groupPropSections(host, item) {
   const secs = [...host.querySelectorAll(`:scope > details.${NS}-sec`)];
@@ -386,7 +470,7 @@ function emptyState() {
   return el("div", { class: `${NS}-emptycard` },
     el("div", { class: `${NS}-emptyicon`, html: icon("select", 22) }),
     el("b", {}, "Nothing selected"),
-    el("p", {}, "Add items from the top bar or the left toolbar; they appear in the middle of the view. Select an item to edit it here. Paper size, margins and guides are on the Page tab."),
+    el("p", {}, "Add items from the top bar; they appear in the middle of the view. Select an item to edit it here. Paper size, margins and guides are on the Page tab."),
     el("div", { class: `${NS}-keyshead` }, "Shortcuts"),
     el("ul", { class: `${NS}-keys` },
       tip("Double-click", "edit text, or pan a map's content"),
@@ -397,6 +481,111 @@ function emptyState() {
       tip("Ctrl + D", "duplicate"),
     ),
   );
+}
+
+// ---------------------------------------------------------------- precise position & size
+const LEN_UNITS = { mm: [1, 2], cm: [10, 3], in: [25.4, 3], pt: [25.4 / 72, 1], px: [25.4 / 96, 0] };
+const PREF_KEY = "glc:prefs:v1";
+function prefs() {
+  if (!S.prefs) {
+    try {
+      S.prefs = JSON.parse(localStorage.getItem(PREF_KEY) || "{}");
+    } catch {
+      S.prefs = {};
+    }
+    S.prefs = { unit: "mm", ref: "tl", ...S.prefs };
+  }
+  return S.prefs;
+}
+function savePrefs() {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify(S.prefs));
+  } catch {}
+}
+// Number field that shows a millimetre value in the preferred unit.
+function fLen(get, put, { min = -1e6, step } = {}) {
+  const [k, dec] = LEN_UNITS[prefs().unit] || LEN_UNITS.mm;
+  const input = el("input", { type: "number", class: `${NS}-input`, value: round(get() / k, dec), step: step ?? (dec ? 10 ** -Math.min(dec, 2) * 10 : 1) });
+  input.addEventListener("input", () => {
+    const v = parseFloat(input.value);
+    if (!Number.isFinite(v)) return;
+    put(Math.max(min, round(v * k, 4)));
+  });
+  return el("span", { class: `${NS}-unitwrap` }, input, el("span", { class: `${NS}-unit` }, prefs().unit));
+}
+const REF_POINTS = [["tl", 0, 0], ["tc", 0.5, 0], ["tr", 1, 0], ["ml", 0, 0.5], ["mc", 0.5, 0.5], ["mr", 1, 0.5], ["bl", 0, 1], ["bc", 0.5, 1], ["br", 1, 1]];
+function refPicker() {
+  const g = el("div", { class: `${NS}-refpick`, title: "Reference point for X and Y" });
+  for (const [id] of REF_POINTS) {
+    const b = el("button", { type: "button", class: id === prefs().ref ? "active" : "", "aria-label": `Reference ${id}` });
+    b.addEventListener("click", () => {
+      prefs().ref = id;
+      savePrefs();
+      renderProps();
+    });
+    g.appendChild(b);
+  }
+  return g;
+}
+function positionRows(item) {
+  const after = () => {
+    renderItemList();
+    refreshCanvas();
+    renderSelection();
+  };
+  const [, fx, fy] = REF_POINTS.find(([id]) => id === prefs().ref) || REF_POINTS[0];
+  const live = (fn) => (v) => liveSet(item, "_", null, () => {
+    delete item._;
+    fn(v);
+    after();
+  });
+  const unitSel = el("select", { class: `${NS}-input ${NS}-sm`, title: "Units for position and size" }, ...Object.keys(LEN_UNITS).map((u) => el("option", { value: u, selected: u === prefs().unit }, u)));
+  unitSel.addEventListener("change", () => {
+    prefs().unit = unitSel.value;
+    savePrefs();
+    renderProps();
+  });
+  const ratio = item.h ? item.w / item.h : 1;
+  const lockBtn = el("button", { type: "button", class: `${NS}-tog ${item.lockRatio ? "active" : ""}`, title: "Lock aspect ratio", html: icon(item.lockRatio ? "lock" : "unlock", 14) });
+  lockBtn.addEventListener("click", () => commit(() => (item.lockRatio = !item.lockRatio)));
+  return [
+    row("Name", fText(item, "name", { after: () => renderItemList() })),
+    el("div", { class: `${NS}-posgrid` },
+      refPicker(),
+      el("div", { class: `${NS}-grid2` },
+        row("X", fLen(() => item.x + item.w * fx, live((v) => (item.x = round(v - item.w * fx, 4))))),
+        row("Y", fLen(() => item.y + item.h * fy, live((v) => (item.y = round(v - item.h * fy, 4))))),
+      ),
+    ),
+    el("div", { class: `${NS}-whgrid` },
+      row("W", fLen(() => item.w, live((v) => {
+        const ax = item.x + item.w * fx;
+        const ay = item.y + item.h * fy;
+        item.w = Math.max(0.5, v);
+        if (item.lockRatio) item.h = round(item.w / ratio, 4);
+        item.x = round(ax - item.w * fx, 4);
+        item.y = round(ay - item.h * fy, 4);
+      }), { min: 0.5 })),
+      lockBtn,
+      row("H", fLen(() => item.h, live((v) => {
+        const ax = item.x + item.w * fx;
+        const ay = item.y + item.h * fy;
+        item.h = Math.max(0.5, v);
+        if (item.lockRatio) item.w = round(item.h * ratio, 4);
+        item.x = round(ax - item.w * fx, 4);
+        item.y = round(ay - item.h * fy, 4);
+      }), { min: 0.5 })),
+    ),
+    el("div", { class: `${NS}-grid2` },
+      row("Rotation", el("span", { class: `${NS}-rotrow` },
+        fNum(item, "rot", { min: -360, max: 360, step: 0.5, unit: "°", after }),
+        iconBtn("undo", "Rotate −90°", () => commit(() => (item.rot = (((item.rot || 0) - 90 + 540) % 360) - 180))),
+        iconBtn("redo", "Rotate +90°", () => commit(() => (item.rot = (((item.rot || 0) + 90 + 540) % 360) - 180))),
+      )),
+      row("Units", unitSel),
+    ),
+    row("Opacity", fRange(item, "opacity", 0, 1, 0.01, { after })),
+  ];
 }
 
 function commonProps(item) {
@@ -419,10 +608,7 @@ function commonProps(item) {
     fx.glass.on ? fCheck(fx, "glass.border", "Light edge", { after: refreshCanvas }) : null,
   ], fx.shadow.on || fx.glass.on);
   return [effects, section("Position & Size", [
-    row("Name", fText(item, "name", { after: () => renderItemList() })),
-    el("div", { class: `${NS}-grid2` }, row("X", fNum(item, "x", { unit: "mm", after })), row("Y", fNum(item, "y", { unit: "mm", after }))),
-    el("div", { class: `${NS}-grid2` }, row("Width", fNum(item, "w", { min: 1, unit: "mm", after })), row("Height", fNum(item, "h", { min: 1, unit: "mm", after }))),
-    el("div", { class: `${NS}-grid2` }, row("Rotation", fNum(item, "rot", { min: -360, max: 360, step: 1, unit: "°", after })), row("Opacity", fRange(item, "opacity", 0, 1, 0.05, { after }))),
+    ...positionRows(item),
     el("div", { class: `${NS}-btnrow` },
       btn("Flip H", () => commit(() => (item.flipX = !item.flipX)), { iconName: "flipH", title: "Flip horizontally" }),
       btn("Flip V", () => commit(() => (item.flipY = !item.flipY)), { iconName: "flipV", title: "Flip vertically" }),
@@ -540,6 +726,7 @@ function itemProps(item) {
             toast("Map layers reloaded");
           }, { iconName: "refresh", title: "Fetch the latest style & layers from GeoLibre" }),
         ]),
+        mapLayersSection(item),
         section("Frame", [
           ...mapFrameShapeRows(item),
           fCheck(item, P("frame.show"), "Show frame"),
@@ -639,6 +826,12 @@ function itemProps(item) {
       );
       break;
     }
+    case "attrtable":
+      out.push(...attrTableProps(item));
+      break;
+    case "chart":
+      out.push(...chartProps(item));
+      break;
     case "colorbar": {
       const sources = colorbarSourceOptions();
       const read = () =>
@@ -737,7 +930,10 @@ function itemProps(item) {
         section("Settings", [
           el("div", { class: `${NS}-grid2` }, row("Primary color", fColor(item, P("color1"))), row("Secondary color", fColor(item, P("color2")))),
           row("Letter", fSelect(item, P("label"), [["N", "N"], ["U", "U (Indonesian)"], ["", "No letter"]])),
-          row("Letter font", fSelect(item, P("fontFamily"), knownFonts().map((f) => [f, f]))),
+          row("Letter font", fontPicker(p.fontFamily || "Arial", (n) => liveSet(item, P("fontFamily"), n, () => {
+            refreshCanvas();
+            renderProps();
+          }))),
           fCheck(item, P("rotateWithMap"), "Follow map rotation"),
           row("Map", fSelect(item, P("linkedMap"), mapOptions(null))),
           row("Extra rotation", fNum(item, P("rotation"), { step: 1, unit: "°" })),
@@ -755,13 +951,7 @@ function itemProps(item) {
               el("button", { type: "button", class: `${NS}-chip`, onclick: () => commit(() => (p.text = `${p.text || ""}${v}`)) }, v),
             ),
           ),
-          row("Font", fFont(item, P("font"))),
-          row("Align", fSeg(item, P("align"), [["left", "Left"], ["center", "Center"], ["right", "Right"]])),
-          row("Vertical", fSeg(item, P("valign"), [["top", "Top"], ["middle", "Center"], ["bottom", "Bottom"]])),
-          row("Letter", fSelect(item, P("textCase"), [["none", "As typed"], ["upper", "UPPERCASE"], ["lower", "lowercase"], ["title", "Title Case"]])),
-          el("div", { class: `${NS}-grid2` }, row("Line spacing", fNum(item, P("lineHeight"), { min: 0.6, max: 4, step: 0.05 })), row("Padding", fNum(item, P("padding"), { min: 0, step: 0.5, unit: "mm" }))),
-          row("Letter spacing", fNum(item, P("font.spacing"), { min: -5, max: 50, step: 0.5 })),
-          fCheck(item, P("wrap"), "Wrap text automatically"),
+          ...typographyRows(item, "props.font", { text: true }),
           btn("Fit height to text", () => commit(() => {
             const pad = p.padding || 0;
             const lines = wrapText(applyCase(resolveVars(p.text, item), p.textCase), p.font, p.wrap ? item.w - pad * 2 : 0);
@@ -773,7 +963,6 @@ function itemProps(item) {
           row("Effect", fSelect(item, P("effect"), Object.entries(TEXT_EFFECTS), { after: () => { refreshCanvas(); renderProps(); } })),
           p.effect && p.effect !== "none" && p.effect !== "lift" && p.effect !== "hollow" ? row("Effect color", fColor(item, P("effectColor"))) : null,
           p.effect && p.effect !== "none" && p.effect !== "highlight" ? row("Strength", fRange(item, P("effectStrength"), 0, 100, 5)) : null,
-          row("Decoration", fSeg(item, P("decoration"), [["none", "None"], ["underline", "<u>U</u>"], ["line-through", "<s>S</s>"], ["overline", "<span style='text-decoration:overline'>O</span>"]])),
         ], !!(p.effect && p.effect !== "none")),
         section("Halo, Background & Border", [
           fCheck(item, P("halo"), "Text halo / outline"),
@@ -1013,17 +1202,95 @@ function pageProps() {
       el("div", { class: `${NS}-grid2` }, row("Color", fColor(pg, "border.color")), row("Width", fNum(pg, "border.width", { min: 0.05, step: 0.05, unit: "mm" }))),
       el("div", { class: `${NS}-grid2` }, row("Inset", fNum(pg, "border.inset", { min: 0, step: 0.5, unit: "mm" })), row("Double gap", fNum(pg, "border.gap", { min: 0.2, step: 0.1, unit: "mm" }))),
     ]),
-    section("Guides & Snapping", [
-      el("div", { class: `${NS}-grid2` }, row("Margin", fNum(pg, "margin", { min: 0, step: 1, unit: "mm" })), row("Grid", fNum(pg, "gridSize", { min: 0.5, step: 0.5, unit: "mm" }))),
-      fCheck(pg, "showMargin", "Show margin guides (not printed)"),
-      fCheck(pg, "showGrid", "Show canvas grid"),
-      fCheck(pg, "showGuides", "Show guides", { after: () => { renderGuides(); } }),
-      el("p", { class: `${NS}-muted` }, `Drag from a ruler to add a guide; drag it back onto the ruler to remove it. ${(pg.guides?.v.length || 0) + (pg.guides?.h.length || 0)} guide(s) on this page.`),
-      btn("Clear all guides", () => commit(() => (pg.guides = { v: [], h: [] })), { iconName: "trash" }),
+    ...gridDesignSections(pg),
+  ];
+}
+
+// ---------------------------------------------------------------- grid design (canvas grid, layout grid, guides, snapping)
+function gridDefaults(pg) {
+  pg.gridSize ??= 5;
+  pg.gridSub ??= 5;
+  pg.gridStyle ??= "lines";
+  pg.gridColor ??= "#0d99ff";
+  pg.gridOpacity ??= 0.14;
+  pg.snapTol ??= 6;
+  pg.nudge ??= 1;
+  pg.nudgeBig ??= 10;
+  pg.guideColor ??= "#00c2ff";
+  pg.layoutGrid ??= { show: false, cols: 12, colGutter: 5, rows: 0, rowGutter: 5, margin: null, color: "#ff3b6b", opacity: 0.1, snap: true };
+  pg.guides ??= { v: [], h: [] };
+}
+function gridDesignSections(pg) {
+  gridDefaults(pg);
+  const deco = () => {
+    renderPageDecor();
+    renderGuides?.();
+  };
+  const lg = pg.layoutGrid;
+  const gi = el("input", { type: "number", class: `${NS}-input`, step: 0.5, placeholder: "0" });
+  const gdir = el("select", { class: `${NS}-input ${NS}-sm` }, el("option", { value: "v" }, "Vertical at X"), el("option", { value: "h" }, "Horizontal at Y"));
+  const addGuide = btn("Add", () => {
+    const v = parseFloat(gi.value);
+    if (!Number.isFinite(v)) return toast("Type a position in mm", "warn");
+    commit(() => pg.guides[gdir.value].push(round(v, 3)));
+  }, { iconName: "plus" });
+  const guideList = el("div", { class: `${NS}-guidelist` });
+  for (const dir of ["v", "h"]) {
+    pg.guides[dir].forEach((v, i) => {
+      guideList.appendChild(el("span", { class: `${NS}-guidechip` }, `${dir === "v" ? "X" : "Y"} ${fmtNumber(v, 2)}`, iconBtn("close", "Remove guide", () => commit(() => pg.guides[dir].splice(i, 1)))));
+    });
+  }
+  return [
+    section("Canvas grid", [
+      fCheck(pg, "showGrid", "Show grid (not printed)", { after: deco }),
+      el("div", { class: `${NS}-grid2` },
+        row("Spacing", fNum(pg, "gridSize", { min: 0.5, step: 0.5, unit: "mm", after: deco })),
+        row("Major every", fNum(pg, "gridSub", { min: 1, max: 20, step: 1, after: deco })),
+      ),
+      el("div", { class: `${NS}-grid2` },
+        row("Style", fSelect(pg, "gridStyle", [["lines", "Lines"], ["dots", "Dots"]], { after: deco })),
+        row("Color", fColor(pg, "gridColor", { after: deco })),
+      ),
+      row("Opacity", fRange(pg, "gridOpacity", 0.03, 0.6, 0.01, { after: deco })),
       fCheck(pg, "snapGrid", "Snap to grid"),
-      fCheck(pg, "snapGuides", "Smart snap to item & page edges/centers"),
-      el("p", { class: `${NS}-muted` }, "Hold Alt while dragging to disable snapping temporarily. Shift = lock direction / keep proportions."),
     ]),
+    section("Layout grid", [
+      fCheck(lg, "show", "Show columns and rows (not printed)", { after: () => { deco(); renderProps(); } }),
+      el("div", { class: `${NS}-grid2` },
+        row("Columns", fNum(lg, "cols", { min: 0, max: 48, step: 1, after: deco })),
+        row("Gutter", fNum(lg, "colGutter", { min: 0, step: 0.5, unit: "mm", after: deco })),
+      ),
+      el("div", { class: `${NS}-grid2` },
+        row("Rows", fNum(lg, "rows", { min: 0, max: 48, step: 1, after: deco })),
+        row("Gutter", fNum(lg, "rowGutter", { min: 0, step: 0.5, unit: "mm", after: deco })),
+      ),
+      el("div", { class: `${NS}-grid2` },
+        row("Margin", fNum(lg, "margin", { min: 0, step: 0.5, unit: "mm", after: deco })),
+        row("Color", fColor(lg, "color", { after: deco })),
+      ),
+      el("p", { class: `${NS}-muted` }, "Margin empty or 0 uses the page margin. Items snap to column and row edges."),
+      fCheck(lg, "snap", "Snap to columns and rows"),
+    ], !!lg.show),
+    section("Guides", [
+      fCheck(pg, "showGuides", "Show guides", { after: () => renderGuides() }),
+      row("Guide color", fColor(pg, "guideColor", { after: () => renderGuides() })),
+      el("div", { class: `${NS}-addguide` }, gdir, el("span", { class: `${NS}-unitwrap` }, gi, el("span", { class: `${NS}-unit` }, "mm")), addGuide),
+      guideList.childElementCount ? guideList : el("p", { class: `${NS}-muted` }, "Drag from a ruler to add a guide, or type an exact position above."),
+      el("div", { class: `${NS}-grid2` },
+        row("Page margin", fNum(pg, "margin", { min: 0, step: 1, unit: "mm", after: deco })),
+        row("", fCheck(pg, "showMargin", "Show margin", { after: deco })),
+      ),
+      btn("Clear all guides", () => commit(() => (pg.guides = { v: [], h: [] })), { iconName: "trash" }),
+    ]),
+    section("Snapping & nudge", [
+      fCheck(pg, "snapGuides", "Smart snap to items, page, margins and guides"),
+      row("Snap distance", fNum(pg, "snapTol", { min: 1, max: 30, step: 1, unit: "px" })),
+      el("div", { class: `${NS}-grid2` },
+        row("Arrow keys", fNum(pg, "nudge", { min: 0.01, step: 0.1, unit: "mm" })),
+        row("Shift + arrows", fNum(pg, "nudgeBig", { min: 0.1, step: 1, unit: "mm" })),
+      ),
+      el("p", { class: `${NS}-muted` }, "Alt + arrows moves 0.1 mm. Hold Alt while dragging to turn snapping off; Shift keeps the direction or the proportions."),
+    ], false),
   ];
 }
 

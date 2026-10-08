@@ -189,14 +189,7 @@ function renderQuickBar() {
     renderQuickBar();
   };
   const f = getPath(item, fp);
-  const fam = el("select", { class: `${NS}-input ${NS}-qfam`, title: "Font" });
-  const all = knownFonts();
-  for (const n of all.includes(f.family) ? all : [f.family, ...all]) fam.appendChild(el("option", { value: n, selected: n === f.family, style: { fontFamily: `"${n}"` } }, n));
-  fam.appendChild(el("option", { value: "__load" }, "＋ Load installed fonts…"));
-  fam.addEventListener("change", () => {
-    if (fam.value === "__load") return loadInstalledFonts().then(renderQuickBar);
-    liveSet(item, `${fp}.family`, fam.value, rerender);
-  });
+  const fam = fontPicker(f.family, (n) => liveSet(item, `${fp}.family`, n, rerender), { cls: `${NS}-qfam` });
   const size = el("input", { type: "number", class: `${NS}-input ${NS}-qsize`, value: f.size, min: 2, max: 400, step: 0.5, title: "Font size (pt)" });
   size.addEventListener("input", () => {
     const v = parseFloat(size.value);

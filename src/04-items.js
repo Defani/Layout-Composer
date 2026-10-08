@@ -586,9 +586,32 @@ const RENDERERS = {
     const r = p.border?.radius || 0;
     if (p.background) out += `<rect width="${item.w}" height="${item.h}" rx="${r}" fill="${esc(p.background)}" fill-opacity="${p.bgOpacity ?? 1}"/>`;
     const content = applyCase(resolveVars(p.text, item), p.textCase);
-    const lines = hasMath(content) ? content.split("\n") : wrapText(content, f, p.wrap ? item.w - pad * 2 : 0);
+    const auto = p.autoSize || "fixed";
+    const wrapW = p.wrap && auto !== "width" ? item.w - pad * 2 : 0;
+    // lines with their paragraph ends (for paragraph spacing and justify)
+    const laid = [];
+    for (const para of content.split("\n")) {
+      const ls = hasMath(para) ? [para] : wrapText(para, f, wrapW);
+      ls.forEach((t, i) => laid.push({ t, end: i === ls.length - 1 }));
+    }
+    const lines = laid.map((l) => l.t);
     const lh = f.size * PT * (p.lineHeight || 1.2);
-    const blockH = lh * lines.length;
+    const ps = p.paraSpacing || 0;
+    const offs = [];
+    let acc = 0;
+    laid.forEach((l) => {
+      offs.push(acc);
+      acc += lh + (l.end ? ps : 0);
+    });
+    const blockH = acc - (laid.length && laid[laid.length - 1].end ? ps : 0);
+    if (auto === "width" && !hasMath(content)) {
+      const need = round(Math.max(...lines.map((t) => textWidthMm(t, f)), 2) + pad * 2 + 0.6, 2);
+      if (Math.abs(item.w - need) > 0.2) item.w = need;
+    }
+    if (auto === "height" || auto === "width") {
+      const needH = round(blockH + pad * 2 + 0.6, 2);
+      if (Math.abs(item.h - needH) > 0.2) item.h = needH;
+    }
     const asc = f.size * PT * 0.8;
     let y0 = pad + asc + (lh - f.size * PT) / 2;
     if (p.valign === "middle") y0 = (item.h - blockH) / 2 + asc + (lh - f.size * PT) / 2;
@@ -596,17 +619,21 @@ const RENDERERS = {
     const x = p.align === "center" ? item.w / 2 : p.align === "right" ? item.w - pad : pad;
     const anchor = p.align === "center" ? "middle" : p.align === "right" ? "end" : "start";
     const tfx = textEffect(item, lines, x, y0, lh, anchor);
+    const lineY = (i) => y0 + (offs[i] ?? i * lh);
     out += tfx.defs + tfx.before + `<g${tfx.groupAttr}>`;
     if (hasMath(content)) {
       // $...$ math: one MathJax line per text line (no automatic wrapping)
-      content.split("\n").forEach((ln, i) => {
-        out += richLine(ln, x, y0 + i * lh, f, anchor, tfx.textAttr || haloAttrs({ ...p, halo: p.halo })).svg;
+      lines.forEach((ln, i) => {
+        out += richLine(ln, x, lineY(i), f, anchor, tfx.textAttr || haloAttrs({ ...p, halo: p.halo })).svg;
       });
     } else {
       const deco = p.decoration && p.decoration !== "none" ? ` text-decoration="${p.decoration}"` : "";
       out += `<text text-anchor="${anchor}" ${fontAttrs(f)}${deco} ${tfx.textAttr || haloAttrs({ ...p, halo: p.halo })}>`;
+      const fullW = item.w - pad * 2;
       lines.forEach((ln, i) => {
-        out += `<tspan x="${round(x, 3)}" y="${round(y0 + i * lh, 3)}">${esc(ln) || " "}</tspan>`;
+        // justify: stretch every line except the last of a paragraph
+        const just = p.align === "justify" && !laid[i].end && ln.trim().includes(" ") ? ` textLength="${round(fullW, 3)}" lengthAdjust="spacing"` : "";
+        out += `<tspan x="${round(x, 3)}" y="${round(lineY(i), 3)}"${just}>${esc(ln) || " "}</tspan>`;
       });
       out += `</text>`;
     }
@@ -677,9 +704,10 @@ const RENDERERS = {
     const colW = widths.map((v) => (v / sum) * item.w);
     const pad = p.padding;
     // row heights from wrapped text
+    const isFooter = (ri) => p.footer && ri === rows.length - 1;
     const rowsLaid = rows.map((r, ri) => {
-      const f = p.header && ri === 0 ? p.headerFont : p.font;
-      const cells = colW.map((cw, ci) => wrapText(resolveVars(r[ci] ?? "", item), f, cw - pad * 2));
+      const f = p.header && ri === 0 ? p.headerFont : isFooter(ri) ? { ...p.font, bold: true } : p.font;
+      const cells = colW.map((cw, ci) => wrapText(p.vars === false ? String(r[ci] ?? "") : resolveVars(r[ci] ?? "", item), f, cw - pad * 2));
       const lh = f.size * PT * 1.25;
       const height = Math.max(...cells.map((c) => c.length)) * lh + pad * 2;
       return { cells, f, lh, height };
@@ -691,12 +719,14 @@ const RENDERERS = {
     rowsLaid.forEach((row, ri) => {
       const rh = row.height * stretch;
       if (p.header && ri === 0 && p.headerBg) out += `<rect x="0" y="${round(y, 3)}" width="${item.w}" height="${round(rh, 3)}" fill="${esc(p.headerBg)}"/>`;
+      else if (isFooter(ri) && p.footerBg) out += `<rect x="0" y="${round(y, 3)}" width="${item.w}" height="${round(rh, 3)}" fill="${esc(p.footerBg)}"/>`;
       else if (p.zebra && ri % 2 === (p.header ? 0 : 1)) out += `<rect x="0" y="${round(y, 3)}" width="${item.w}" height="${round(rh, 3)}" fill="${esc(p.zebraColor)}"/>`;
       let x = 0;
       row.cells.forEach((lines, ci) => {
         const cw = colW[ci];
-        const anchor = p.align === "center" ? "middle" : p.align === "right" ? "end" : "start";
-        const tx = p.align === "center" ? x + cw / 2 : p.align === "right" ? x + cw - pad : x + pad;
+        const al = p.colAlign?.[ci] || p.align;
+        const anchor = al === "center" ? "middle" : al === "right" ? "end" : "start";
+        const tx = al === "center" ? x + cw / 2 : al === "right" ? x + cw - pad : x + pad;
         const textH = lines.length * row.lh;
         const ty = y + (rh - textH) / 2 + row.f.size * PT * 0.85;
         out += `<text text-anchor="${anchor}" ${fontAttrs(row.f)}>`;
@@ -705,7 +735,7 @@ const RENDERERS = {
         if (p.innerBorder && ci > 0) out += `<line x1="${round(x, 3)}" y1="${round(y, 3)}" x2="${round(x, 3)}" y2="${round(y + rh, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth}"/>`;
         x += cw;
       });
-      if (p.innerBorder && ri > 0) out += `<line x1="0" y1="${round(y, 3)}" x2="${item.w}" y2="${round(y, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth}"/>`;
+      if (p.innerBorder && ri > 0) out += `<line x1="0" y1="${round(y, 3)}" x2="${item.w}" y2="${round(y, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${isFooter(ri) ? p.borderWidth * 2.5 : p.borderWidth}"/>`;
       y += rh;
     });
     if (p.outerBorder) out += `<rect width="${item.w}" height="${round(Math.max(y, item.h), 3)}" fill="none" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth * 1.6}"/>`;

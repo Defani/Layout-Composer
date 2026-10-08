@@ -1,7 +1,9 @@
 // ---------------------------------------------------------------- export
-function composePageSVG(mapImages, { background = "page" } = {}) {
+function composePageSVG(mapImages, { background = "page", fontCss = "" } = {}) {
   const pg = S.doc.page;
   let s = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${pg.width}mm" height="${pg.height}mm" viewBox="0 0 ${pg.width} ${pg.height}">`;
+  // web fonts (Google Fonts) inlined, so an SVG drawn as an image keeps them
+  if (fontCss) s += `<defs><style>${fontCss}</style></defs>`;
   s += pageDecorSVG(true, background);
   S.doc.items.forEach((item, index) => {
     if (item.hidden) return;
@@ -67,16 +69,62 @@ function loadJsPDF() {
   return jsPdfPromise;
 }
 
-function progressModal(text) {
-  const m = el("div", { class: `${NS}-modal` }, el("div", { class: `${NS}-modalcard` }, el("div", { class: `${NS}-spinner` }), el("div", { class: `${NS}-modaltext` }, text)));
-  S.ui.root.appendChild(m);
+// Export progress: a bar that fills from left to right, the current step and a
+// checklist of steps. set(text, fraction 0..1, stepKey).
+function progressView(title, { sub = "", iconName = "download", steps = [] } = {}) {
+  const fill = el("div", { class: `${NS}-progfill` });
+  const pct = el("span", { class: `${NS}-progpct` }, "0%");
+  const step = el("div", { class: `${NS}-progstep` }, "Preparing…");
+  const list = el("ol", { class: `${NS}-progsteps` }, ...steps.map(([k, label]) => el("li", { "data-k": k }, el("span", { class: `${NS}-stepdot` }), el("span", {}, label))));
+  const bar = el("div", { class: `${NS}-progbar`, role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": "0" }, fill);
+  const node = el("div", { class: `${NS}-prog` },
+    el("div", { class: `${NS}-proghead` },
+      el("span", { class: `${NS}-progicon`, html: icon(iconName, 18) }),
+      el("div", { class: `${NS}-progtitle` }, el("b", {}, title), sub ? el("small", {}, sub) : null),
+      pct,
+    ),
+    bar,
+    step,
+    steps.length ? list : null,
+  );
+  let last = 0;
+  let active = null;
   return {
-    set: (t) => (m.querySelector(`.${NS}-modaltext`).textContent = t),
-    close: () => m.remove(),
+    el: node,
+    set(text, frac, key) {
+      if (text) step.textContent = text;
+      if (key && key !== active) {
+        active = key;
+        let seen = false;
+        for (const li of list.children) {
+          const isA = li.dataset.k === key;
+          if (isA) seen = true;
+          li.classList.toggle("active", isA);
+          li.classList.toggle("done", !seen && !isA);
+        }
+      }
+      if (frac != null) {
+        last = Math.max(last, clamp(frac, 0, 1));
+        fill.style.width = `${(last * 100).toFixed(1)}%`;
+        pct.textContent = `${Math.round(last * 100)}%`;
+        bar.setAttribute("aria-valuenow", String(Math.round(last * 100)));
+        if (last >= 1) {
+          node.classList.add("done");
+          for (const li of list.children) li.classList.replace("active", "done") || li.classList.add("done");
+        }
+      }
+    },
+    close() {},
   };
 }
+function progressModal(text) {
+  const v = progressView(text);
+  const m = el("div", { class: `${NS}-modal` }, el("div", { class: `${NS}-dlg ${NS}-dlgsmall` }, el("div", { class: `${NS}-dlgbody` }, v.el)));
+  S.ui.root.appendChild(m);
+  return { el: v.el, set: v.set, close: () => m.remove() };
+}
 
-async function exportLayout(fmt) {
+async function exportLayout(fmt, progIn) {
   if (!S.doc) return;
   exitContentMode();
   const dpi = S.exportDpi || 300;
@@ -86,34 +134,43 @@ async function exportLayout(fmt) {
     if (!confirm(`${pg.size} at ${dpi} dpi is very large (${Math.round(px / 1e6)} megapixels) and may fail. Continue?`)) return;
   }
   const maps = S.doc.items.filter((i) => i.type === "map" && !i.hidden && i.props.source !== "snapshot");
-  const prog = progressModal("Preparing export…");
+  const prog = progIn || progressModal("Exporting");
+  prog.set("Preparing…", 0.03, "maps");
   const bg = S.exportBg || "page";
   try {
     const mapImages = new Map();
     let n = 0;
     for (const m of maps) {
       n += 1;
-      prog.set(`Rendering map ${n}/${maps.length} (${m.name}) at ${fmt === "svg" ? 200 : dpi} dpi…`);
+      prog.set(`Rendering map ${n} of ${maps.length} (${m.name}) at ${fmt === "svg" ? 200 : dpi} dpi…`, 0.05 + (0.6 * (n - 1)) / maps.length, "maps");
       const img = await renderMapImage(m, fmt === "svg" ? 200 : dpi);
+      prog.set(null, 0.05 + (0.6 * n) / maps.length);
       if (img) mapImages.set(m.id, img);
       else toast(`Map "${m.name}" failed to render`, "warn");
     }
     if (S.doc.items.some((i) => !i.hidden && (i.type === "latex" || JSON.stringify(i.props).includes("$")))) {
-      prog.set("Typesetting formulas…");
+      prog.set("Typesetting formulas…", 0.68);
       await loadMathJax().catch(() => {});
     }
-    prog.set("Composing page…");
-    const svg = composePageSVG(mapImages, { background: bg });
+    const gfams = docFontFamilies().filter(isGoogleFont);
+    let fontCss = "";
+    if (gfams.length && fmt !== "vpdf") {
+      prog.set(`Embedding ${gfams.length} Google font${gfams.length > 1 ? "s" : ""}…`, 0.7, "fonts");
+      fontCss = await embeddedFontCss(gfams);
+    }
+    prog.set("Composing page…", 0.72, "compose");
+    const svg = composePageSVG(mapImages, { background: bg, fontCss });
     const base = safeName(S.exportName || S.doc.name);
     if (fmt === "vpdf") {
-      prog.set("Building vector PDF…");
+      prog.set("Building vector PDF…", 0.8, "save");
       await saveVectorPdf(svg, base);
     } else if (fmt === "svg") {
       downloadBlob(new Blob([svg], { type: "image/svg+xml" }), `${base}.svg`);
     } else {
+      prog.set("Drawing the page…", 0.78, "compose");
       const canvas = await rasterize(svg, dpi, fmt === "png" && bg === "transparent" ? null : "#ffffff");
       if (fmt === "geopdf") {
-        prog.set("Georeferencing PDF…");
+        prog.set("Georeferencing PDF…", 0.9, "save");
         const JsPDF = await loadJsPDF();
         const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
         pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
@@ -122,25 +179,30 @@ async function exportLayout(fmt) {
         if (!frames.length) throw new Error("GeoPDF needs at least one visible, unrotated map frame");
         downloadBlob(new Blob([geoRegister(pdf.output("arraybuffer"), frames)], { type: "application/pdf" }), `${base}_geo.pdf`);
       } else if (fmt === "pdf") {
-        prog.set("Creating PDF…");
+        prog.set("Creating PDF…", 0.9, "save");
         const JsPDF = await loadJsPDF();
         const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
         pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pg.width, pg.height, undefined, "FAST");
         pdf.save(`${base}.pdf`);
       } else {
-        prog.set("Saving image…");
+        prog.set("Saving image…", 0.92, "save");
         const blob = await new Promise((r) => canvas.toBlob(r, fmt === "jpg" ? "image/jpeg" : "image/png", 0.95));
         if (!blob) throw new Error("Canvas too large for this browser — lower the DPI");
         downloadBlob(blob, `${base}.${fmt}`);
       }
     }
+    prog.set("Saved", 1);
     toast(`${{ vpdf: "Vector PDF", geopdf: "GeoPDF" }[fmt] || fmt.toUpperCase()} export finished`);
+    return true;
   } catch (e) {
     console.error("[Layout Composer] export failed", e);
+    prog.set(`Export failed: ${e.message}`);
+    prog.el?.classList.add("failed");
     toast(`Export failed: ${e.message}`, "warn");
+    return false;
   } finally {
-    prog.close();
+    if (!progIn) setTimeout(() => prog.close(), 600);
   }
 }
 

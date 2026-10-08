@@ -8,7 +8,7 @@
 
 const PLUGIN_ID = "geolibre-layout-composer";
 const PLUGIN_NAME = "Layout Composer";
-const PLUGIN_VERSION = "1.6.0";
+const PLUGIN_VERSION = "1.8.0";
 const NS = "glc"; // CSS class prefix
 const STORE_KEY = "glc:layouts:v1";
 const PX96 = 96 / 25.4; // CSS px per mm at 96 dpi
@@ -171,9 +171,11 @@ const measureCtx = (() => {
 function textWidthMm(text, font) {
   const ctx = measureCtx();
   // Measure at 100px then scale: font.size is in pt.
-  ctx.font = `${font.italic ? "italic " : ""}${font.bold ? "bold " : ""}100px "${font.family || "Arial"}"`;
-  const px = ctx.measureText(String(text)).width;
-  return (px / 100) * (font.size || 10) * PT * (1 + (font.spacing || 0) * 0.0);
+  ctx.font = `${font.italic ? "italic " : ""}${font.smallCaps ? "small-caps " : ""}${fontWeight(font)} 100px "${font.family || "Arial"}"`;
+  const str = String(text);
+  const px = ctx.measureText(str).width;
+  // letter-spacing is added after every character (see fontAttrs)
+  return (px / 100) * (font.size || 10) * PT + str.length * (font.spacing || 0) * PT * 0.1;
 }
 function wrapText(text, font, maxWidthMm) {
   const out = [];
@@ -195,13 +197,20 @@ function wrapText(text, font, maxWidthMm) {
   }
   return out;
 }
+// Numeric weight of a font object (100…900); `bold` is kept for older layouts.
+function fontWeight(f) {
+  return f.weight || (f.bold ? 700 : 400);
+}
 function fontAttrs(f) {
+  const w = fontWeight(f);
   return [
     `font-family="${esc(f.family || "Arial")}, Arial, sans-serif"`,
     `font-size="${round((f.size || 10) * PT, 3)}"`,
-    f.bold ? `font-weight="bold"` : "",
+    w !== 400 ? `font-weight="${w}"` : "",
     f.italic ? `font-style="italic"` : "",
+    f.smallCaps ? `font-variant="small-caps"` : "",
     `fill="${esc(f.color || "#000")}"`,
+    f.opacity != null && f.opacity < 1 ? `fill-opacity="${f.opacity}"` : "",
     f.spacing ? `letter-spacing="${round(f.spacing * PT * 0.1, 3)}"` : "",
   ].join(" ");
 }

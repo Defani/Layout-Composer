@@ -89,6 +89,29 @@ function buildFrames(G) {
   return { m1, cb };
 }
 
+// Attribute table, charts and per-frame layers.
+function buildData(G) {
+  const D = G._debug;
+  const S = G._state;
+  const A = (k, x, y, w, h, v) => {
+    D.addItemFromTool(k, { x, y, w, h }, v);
+    return S.doc.items.at(-1);
+  };
+  const m = A("map", 10, 10, 150, 110);
+  m.props.hiddenLayers = ["titik-sampel"];
+  A("legend", 10, 125, 70, 60);
+  const t = A("attrtable", 168, 10, 118, 30);
+  Object.assign(t.props, { showCount: true });
+  const c = A("chart", 168, 62, 60, 60, "donut");
+  Object.assign(c.props, { title: "Share of area", legendValues: "percent", showLegend: false });
+  const b = A("chart", 232, 62, 56, 60, "hbar");
+  Object.assign(b.props, { group: "desa", valueMode: "sum", valueField: "kode", labels: "value", decimals: 0, colorMode: "palette", palette: "viridis", title: "Sum of code per village" });
+  const b2 = A("chart", 90, 128, 196, 60, "bar");
+  Object.assign(b2.props, { group: "desa", valueMode: "count", labels: "value", colorMode: "palette", palette: "plasma", title: "Features per village" });
+  D.renderAll();
+  return { c, t, m };
+}
+
 async function run() {
   if (!shot) return;
   document.documentElement.classList.toggle("dark", shot.endsWith("-dark"));
@@ -104,7 +127,7 @@ async function run() {
   G.open();
   await sleep(1200);
   let staged = {};
-  if (!klhk) staged = shot.startsWith("frames") ? buildFrames(G) : buildFeatures(G);
+  if (!klhk) staged = shot.startsWith("frames") ? buildFrames(G) : shot.startsWith("data") || shot.startsWith("chart") || shot.startsWith("layers") ? buildData(G) : buildFeatures(G);
   const q = (sel) => document.querySelector(sel);
   const byTitle = (t) => [...document.querySelectorAll("button")].find((b) => b.title === t);
   const name = shot.replace(/-dark$/, "");
@@ -127,7 +150,7 @@ async function run() {
     await sleep(300);
     q(".glc-props .glc-swatch").click();
   }
-  if (name === "export") byTitle("Export")?.click() || [...document.querySelectorAll(".glc-btn")].find((b) => b.textContent.includes("Export")).click();
+  if (name === "export") byTitle("Export").click();
   if (name === "paper") {
     q('.glc-tab[data-tab="page"]').click();
     await sleep(300);
@@ -140,6 +163,62 @@ async function run() {
     n.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 2 }));
   }
   if (name === "frames") D.select([staged.m1.id]);
+  if (name === "data") D.select([staged.t.id]);
+  if (name === "chart") D.select([staged.c.id]);
+  if (name === "layers") {
+    D.select([staged.m.id]);
+    await sleep(400);
+    const sec = [...document.querySelectorAll(".glc-sec")].find((d) => d.querySelector("summary")?.textContent.trim() === "Layers");
+    if (sec) {
+      sec.open = true;
+      sec.scrollIntoView({ block: "start" });
+    }
+  }
+  if (name === "icons-google") {
+    S.catalogTab = "google";
+    byTitle("Symbols").click();
+    await sleep(300);
+    [...document.querySelectorAll(".glc-popover .glc-menuitem")].find((b) => b.textContent.includes("Icon catalog")).click();
+  }
+  if (name === "fonts") {
+    const txt = S.doc.items.find((i) => i.type === "text");
+    D.select([txt.id]);
+    await sleep(400);
+    S.fontTab = "google";
+    document.querySelector(".glc-props .glc-fontbtn").click();
+    await sleep(2500);
+  }
+  if (name === "position") {
+    D.select([S.doc.items.find((i) => i.type === "map").id]);
+    await sleep(300);
+    [...document.querySelectorAll(".glc-ptabs button")].find((b) => b.textContent === "Arrange").click();
+  }
+  if (name === "grid") {
+    const pg = S.doc.page;
+    Object.assign(pg, { showGrid: true, gridSize: 5, gridSub: 5 });
+    pg.layoutGrid = { show: true, cols: 6, colGutter: 5, rows: 0, rowGutter: 5, margin: 0, color: "#ff3b6b", opacity: 0.1, snap: true };
+    pg.guides = { v: [148.5], h: [105] };
+    D.select([]);
+    D.renderAll();
+    q('.glc-tab[data-tab="page"]').click();
+    await sleep(300);
+    const sec = [...document.querySelectorAll(".glc-sec")].find((d) => d.querySelector("summary")?.textContent.trim() === "Canvas grid");
+    sec?.scrollIntoView({ block: "start" });
+  }
+  if (name === "progress") {
+    const orig = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.download) return;
+      return orig.call(this);
+    };
+    S.exportDpi = 150;
+    byTitle("Export").click();
+    await sleep(300);
+    [...document.querySelectorAll(".glc-dlgfoot button")].find((b) => /Export/.test(b.textContent)).click();
+    await sleep(500);
+    document.title = "READY";
+    return;
+  }
   if (name === "templates") byTitle("New layout / templates").click();
   await sleep(2500);
   document.title = "READY";

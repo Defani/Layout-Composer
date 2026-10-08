@@ -27,7 +27,7 @@
   let k = 0;
   for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
     const x = 106.55 + i * 0.13, y = -6.65 + j * 0.15;
-    polys.features.push({ type: "Feature", properties: { kelas: kelas[k++ % 4] }, geometry: { type: "Polygon", coordinates: [[[x, y], [x + 0.12, y], [x + 0.12, y + 0.13], [x, y + 0.13], [x, y]]] } });
+    polys.features.push({ type: "Feature", properties: { kelas: kelas[k % 4], kode: 100 + k, desa: ["Cibinong", "Citeureup", "Babakan Madang", "Sukaraja"][(k++ * 7) % 4] }, geometry: { type: "Polygon", coordinates: [[[x, y], [x + 0.12, y], [x + 0.12, y + 0.13], [x, y + 0.13], [x, y]]] } });
   }
   const sungai = { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[106.5, -6.7], [106.7, -6.5], [106.85, -6.45], [107.1, -6.2]] } }] };
   const titik = { type: "FeatureCollection", features: [[106.8, -6.6], [106.9, -6.35], [106.65, -6.3]].map((c) => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: c } })) };
@@ -60,6 +60,7 @@
     addMapControl: (c, pos) => map.addControl(c, pos),
     removeMapControl: (c) => map.removeControl(c),
     registerToolbarMenu: (m) => { console.log("menu registered", m.label); return () => {}; },
+    getLayerFeatures: (id) => ({ "tutupan-lahan": polys, sungai, "titik-sampel": titik }[id]?.features || []),
     getProjectSnapshot: () => ({ name: "Peta Tutupan Lahan Kabupaten Bogor", layers: snapLayers }),
   };
   const mod = await import("../plugin/index.js?v=" + Date.now());

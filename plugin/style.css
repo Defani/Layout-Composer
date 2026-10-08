@@ -2468,3 +2468,762 @@ html.dark .glc-root .glc-toast,
   text-transform: uppercase;
   color: var(--glc-muted-fg);
 }
+
+/* ---- check lists (map layers, table columns) */
+.glc-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px 6px;
+  border-radius: var(--glc-radius);
+  background: var(--glc-muted);
+}
+.glc-checklist .glc-check {
+  min-height: 22px;
+}
+.glc-checklist small {
+  margin-left: 4px;
+  font-size: 10px;
+}
+/* segmented controls fit three or four options in the properties panel */
+.glc-props .glc-seg button {
+  padding: 3px 3px;
+  font-size: 11.5px;
+}
+.glc-props .glc-prow {
+  grid-template-columns: 80px minmax(0, 1fr);
+}
+.glc-props .glc-grid2 .glc-prow,
+.glc-props .glc-grid3 .glc-prow {
+  grid-template-columns: 1fr;
+}
+
+/* ================================================================ v1.8: tools in the top bar, export dialog */
+.glc-body,
+.glc-root.hide-left .glc-body,
+.glc-root.hide-right .glc-body,
+.glc-root.hide-left.hide-right .glc-body {
+  grid-template-columns: 0 240px minmax(0, 1fr) 280px;
+}
+.glc-root.hide-left .glc-body {
+  grid-template-columns: 0 0 minmax(0, 1fr) 280px;
+}
+.glc-root.hide-right .glc-body {
+  grid-template-columns: 0 240px minmax(0, 1fr) 0;
+}
+.glc-root.hide-left.hide-right .glc-body {
+  grid-template-columns: 0 0 minmax(0, 1fr) 0;
+}
+.glc-topc {
+  gap: 8px;
+}
+.glc-toolgrp {
+  display: flex;
+  gap: 8px;
+}
+.glc-pill {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--glc-muted);
+}
+.glc-top .glc-tool {
+  width: 32px;
+  min-height: 0;
+  height: 30px;
+  border-radius: 7px;
+  color: var(--glc-fg);
+}
+.glc-top .glc-tool:hover {
+  background: var(--glc-bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), 0 0 0 0.5px rgb(0 0 0 / 0.06);
+}
+.glc-top .glc-tool.active {
+  background: var(--glc-bg);
+  color: var(--glc-sel);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+}
+@media (max-width: 1580px) {
+  .glc-top .glc-ins span {
+    display: none;
+  }
+  .glc-top .glc-ins {
+    padding: 0 8px;
+  }
+}
+@media (max-width: 1100px) {
+  .glc-top .glc-brand,
+  .glc-top .glc-vsep {
+    display: none;
+  }
+}
+.glc-exportbtn {
+  color: var(--glc-fg);
+}
+/* export dialog */
+.glc-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 100030;
+  background: rgb(15 23 42 / 0.35);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: glc-fade 140ms ease;
+}
+@keyframes glc-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes glc-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+.glc-dlg {
+  width: min(560px, calc(100% - 32px));
+  max-height: calc(100% - 48px);
+  display: flex;
+  flex-direction: column;
+  background: var(--glc-bg);
+  color: var(--glc-fg);
+  border: 1px solid var(--glc-border);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.28), 0 2px 8px rgb(0 0 0 / 0.08);
+  overflow: hidden;
+  animation: glc-pop 160ms ease;
+}
+.glc-dlgsmall {
+  width: min(420px, calc(100% - 32px));
+}
+.glc-dlghead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 16px 8px 20px;
+}
+.glc-dlgtitle {
+  font-size: 15px;
+  font-weight: 600;
+}
+.glc-dlgsub {
+  margin-top: 2px;
+  color: var(--glc-muted-fg);
+  font-size: 11.5px;
+}
+.glc-dlgbody {
+  padding: 8px 20px 16px;
+  overflow-y: auto;
+}
+.glc-dlglabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--glc-muted-fg);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+.glc-fmtcards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.glc-fmtcard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--glc-border);
+  border-radius: 10px;
+  background: var(--glc-bg);
+  cursor: pointer;
+  transition: border-color var(--glc-ease), background var(--glc-ease), box-shadow var(--glc-ease);
+}
+.glc-fmtcard svg {
+  grid-row: 1 / span 2;
+  color: var(--glc-muted-fg);
+}
+.glc-fmtcard b {
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.glc-fmtcard small {
+  color: var(--glc-muted-fg);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glc-fmtcard:hover {
+  background: var(--glc-accent);
+}
+.glc-fmtcard.active {
+  border-color: var(--glc-sel);
+  background: var(--glc-sel-soft);
+  box-shadow: 0 0 0 1px var(--glc-sel) inset;
+}
+.glc-fmtcard.active svg {
+  color: var(--glc-sel);
+}
+.glc-dlggrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+.glc-dlgfield {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--glc-muted-fg);
+  min-width: 0;
+}
+.glc-dlgfield .glc-input {
+  height: 32px;
+  width: 100%;
+  color: var(--glc-fg);
+  background: var(--glc-muted);
+}
+.glc-dlgwide {
+  grid-column: 1 / -1;
+}
+.glc-dlgname {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.glc-dlgext {
+  color: var(--glc-muted-fg);
+  font-variant-numeric: tabular-nums;
+}
+.glc-dlginfo {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--glc-muted);
+  color: var(--glc-muted-fg);
+  font-size: 11.5px;
+}
+.glc-dlgfoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--glc-border);
+}
+.glc-dlgfoot:empty {
+  display: none;
+}
+.glc-dlgfoot .glc-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+}
+/* progress: fills from left to right */
+.glc-prog {
+  padding: 8px 0 4px;
+}
+.glc-progtop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+.glc-progtop b {
+  font-weight: 600;
+  font-size: 13px;
+}
+.glc-progpct {
+  font-variant-numeric: tabular-nums;
+  color: var(--glc-muted-fg);
+  font-weight: 600;
+}
+.glc-progbar {
+  position: relative;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--glc-muted);
+  overflow: hidden;
+}
+.glc-progfill {
+  position: relative;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0d99ff, #6e56ff);
+  transition: width 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  overflow: hidden;
+}
+/* a soft light that keeps travelling left to right while a step runs */
+.glc-progfill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  transform: translateX(-100%);
+  animation: glc-sweep 1.1s ease-in-out infinite;
+}
+@keyframes glc-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+.glc-prog.done .glc-progfill {
+  background: linear-gradient(90deg, #14ae5c, #2bc77a);
+}
+.glc-prog.done .glc-progfill::after,
+.glc-prog.failed .glc-progfill::after {
+  animation: none;
+  display: none;
+}
+.glc-prog.failed .glc-progfill {
+  background: #f24822;
+}
+.glc-progstep {
+  margin-top: 10px;
+  color: var(--glc-muted-fg);
+  font-size: 11.5px;
+  min-height: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .glc-progfill::after {
+    animation: none;
+  }
+}
+
+/* ================================================================ minimal chrome */
+.glc-top .glc-brand {
+  background: none;
+  box-shadow: none;
+  color: var(--glc-fg);
+  width: 26px;
+}
+.glc-pill,
+.glc-top .glc-insert,
+.glc-zoompill,
+.glc-layoutpick,
+.glc-selrow {
+  background: transparent;
+}
+.glc-toolgrp,
+.glc-topc {
+  gap: 0;
+}
+.glc-pill + .glc-pill,
+.glc-toolgrp + .glc-insert {
+  border-left: 1px solid var(--glc-border);
+  margin-left: 6px;
+  padding-left: 9px;
+  border-radius: 0;
+}
+.glc-top .glc-tool:hover,
+.glc-top .glc-ins:hover,
+.glc-selrow .glc-ibtn:hover {
+  background: var(--glc-accent);
+  box-shadow: none;
+}
+.glc-top .glc-tool.active,
+.glc-top .glc-ins.active {
+  background: transparent;
+  box-shadow: none;
+  color: var(--glc-sel);
+}
+.glc-layoutpick .glc-layoutsel:hover {
+  background-color: var(--glc-accent);
+}
+.glc-zoompill .glc-zoomlbl:hover {
+  background: var(--glc-accent);
+}
+.glc-emptyicon {
+  background: transparent;
+  border: 1px solid var(--glc-border);
+  color: var(--glc-muted-fg);
+}
+
+/* ---- icon catalog extras */
+.glc-catstyle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+}
+.glc-catstyle:empty {
+  display: none;
+}
+.glc-catmore {
+  grid-column: 1 / -1;
+  height: 28px;
+  border: 1px dashed var(--glc-border);
+  border-radius: var(--glc-radius);
+  background: transparent;
+  color: var(--glc-muted-fg);
+  cursor: pointer;
+}
+.glc-catmore:hover {
+  color: var(--glc-fg);
+  background: var(--glc-accent);
+}
+
+/* ---- font picker */
+.glc-fontbtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.glc-fontbtn > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.glc-fontcaret {
+  display: inline-flex;
+  color: var(--glc-muted-fg);
+  flex: none;
+}
+.glc-quick .glc-fontbtn {
+  height: 28px;
+}
+.glc-fontpop {
+  width: 300px;
+}
+.glc-fontpick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.glc-fontpick > .glc-input {
+  height: 30px;
+}
+.glc-fontcats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.glc-fontcats .glc-chip.active {
+  border-color: var(--glc-sel);
+  color: var(--glc-sel);
+}
+.glc-fontnote {
+  font-size: 11px;
+}
+.glc-fontlist {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0 -4px;
+}
+.glc-fontitem {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--glc-radius);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.glc-fontitem:hover {
+  background: var(--glc-accent);
+}
+.glc-fontitem.active {
+  color: var(--glc-sel);
+}
+.glc-fontname {
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glc-fontitem small {
+  flex: none;
+  color: var(--glc-muted-fg);
+  font-size: 10.5px;
+}
+
+/* ================================================================ precision, typography, grid design */
+.glc-paper.showgrid::after {
+  background-image:
+    linear-gradient(to right, var(--glc-grid-cm, rgb(13 153 255 / 0.3)) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--glc-grid-cm, rgb(13 153 255 / 0.3)) 1px, transparent 1px),
+    linear-gradient(to right, var(--glc-grid-c, rgb(13 153 255 / 0.13)) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--glc-grid-c, rgb(13 153 255 / 0.13)) 1px, transparent 1px);
+  background-size: var(--glc-grid-major) var(--glc-grid-major), var(--glc-grid-major) var(--glc-grid-major), var(--glc-grid) var(--glc-grid), var(--glc-grid) var(--glc-grid);
+}
+.glc-paper.showgrid.griddots::after {
+  background-image:
+    radial-gradient(circle at 0 0, var(--glc-grid-cm) 1.6px, transparent 1.7px),
+    radial-gradient(circle at 0 0, var(--glc-grid-c) 1px, transparent 1.1px);
+  background-size: var(--glc-grid-major) var(--glc-grid-major), var(--glc-grid) var(--glc-grid);
+}
+.glc-uguide::after {
+  background: var(--glc-guide-c, #00c2ff);
+}
+.glc-togrow {
+  display: flex;
+  gap: 4px;
+}
+.glc-togrow .glc-tog {
+  flex: 1;
+  height: 28px;
+}
+.glc-seg button svg {
+  display: block;
+  margin: 0 auto;
+}
+.glc-posgrid {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+.glc-refpick {
+  display: grid;
+  grid-template-columns: repeat(3, 12px);
+  grid-template-rows: repeat(3, 12px);
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid var(--glc-border);
+  border-radius: 6px;
+  margin-bottom: 2px;
+}
+.glc-refpick button {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 1.5px solid var(--glc-muted-fg);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.55;
+}
+.glc-refpick button:hover {
+  opacity: 1;
+}
+.glc-refpick button.active {
+  border-color: var(--glc-sel);
+  background: var(--glc-sel);
+  opacity: 1;
+}
+.glc-whgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px minmax(0, 1fr);
+  gap: 4px;
+  align-items: end;
+}
+.glc-whgrid .glc-prow {
+  grid-template-columns: 1fr !important;
+  gap: 3px;
+}
+.glc-whgrid .glc-tog {
+  width: 26px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.glc-rotrow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.glc-rotrow .glc-unitwrap {
+  flex: 1;
+  min-width: 0;
+}
+.glc-rotrow .glc-ibtn {
+  width: 24px;
+  height: 24px;
+}
+.glc-addguide {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+}
+.glc-guidelist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.glc-guidechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 8px;
+  height: 24px;
+  border: 1px solid var(--glc-border);
+  border-radius: 12px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.glc-guidechip .glc-ibtn {
+  width: 18px;
+  height: 18px;
+}
+/* export progress */
+.glc-prog {
+  padding: 4px 0 2px;
+}
+.glc-proghead {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.glc-progicon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--glc-border);
+  border-radius: 9px;
+  color: var(--glc-sel);
+}
+.glc-progtitle {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.glc-progtitle b {
+  font-size: 13px;
+  font-weight: 600;
+}
+.glc-progtitle small {
+  color: var(--glc-muted-fg);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glc-progpct {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--glc-fg);
+}
+.glc-progtop {
+  display: none;
+}
+.glc-progstep {
+  margin-top: 8px;
+  min-height: 16px;
+  color: var(--glc-muted-fg);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glc-progsteps {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--glc-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.glc-progsteps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--glc-muted-fg);
+  font-size: 12px;
+}
+.glc-stepdot {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1.5px solid var(--glc-border);
+  border-radius: 50%;
+}
+.glc-progsteps li.active {
+  color: var(--glc-fg);
+  font-weight: 500;
+}
+.glc-progsteps li.active .glc-stepdot {
+  border-color: var(--glc-sel);
+}
+.glc-progsteps li.active .glc-stepdot::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--glc-sel);
+}
+.glc-progsteps li.done {
+  color: var(--glc-fg);
+}
+.glc-progsteps li.done .glc-stepdot {
+  border-color: #14ae5c;
+  background: #14ae5c;
+}
+.glc-progsteps li.done .glc-stepdot::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(45deg);
+}
+.glc-prog.done .glc-progicon {
+  color: #14ae5c;
+  border-color: #14ae5c;
+}
+.glc-prog.failed .glc-progicon {
+  color: #f24822;
+  border-color: #f24822;
+}
+.glc-prog.failed .glc-progstep {
+  color: #f24822;
+  white-space: normal;
+}
+
+.glc-quick .glc-fontbtn {
+  width: 160px;
+  flex: none;
+}
+.glc-pctl .glc-range {
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+}
+.glc-pctl:has(> .glc-range) {
+  gap: 6px;
+}
+.glc-rangeval {
+  flex: none;
+  min-width: 26px;
+  text-align: right;
+}
+.glc-quick .glc-qop {
+  width: 92px;
+}

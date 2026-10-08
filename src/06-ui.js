@@ -65,13 +65,16 @@ const ICON_PATHS = {
   camera: "M3 8h4l2-3h6l2 3h4v12H3zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
   sync: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5",
   menu: "M4 7h16M4 12h16M4 17h16",
+  chart: "M4 20V10M10 20V4M16 20v-7M21 20H3",
+  donut: "M12 3a9 9 0 1 0 9 9h-5a4 4 0 1 1-4-4zM15 3.5A9 9 0 0 1 20.5 9H15z",
+  qgis: "M4 4h16v16H4zM8 9h8M8 13h5M8 17h3M15 15l3 3",
   chevron: "M7 10l5 5 5-5",
   layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5",
 };
 // Two-tone item icons: a soft tinted body (currentColor at low opacity) under a crisp outline,
 // so they follow the theme and turn blue as a whole when the tool is active.
+// Minimal outline icons in currentColor (follows light/dark; blue when active).
 const tt = (fill, line, extra = "") =>
-  `<path d="${fill}" fill="currentColor" opacity=".2" stroke="none"/>` +
   `<path d="${line}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>${extra}`;
 const ICON_SVG = {
   select: tt("M5.5 3.5l13 7.4-5.6 1.5-2.9 5.6z", "M5.5 3.5l13 7.4-5.6 1.5-2.9 5.6zM12.9 12.4l4.6 4.6"),
@@ -90,8 +93,7 @@ const ICON_SVG = {
     "M3.5 5h4v3.5h-4zM3.5 15.5h4V19h-4zM3.5 12h4M11 6.8h9.5M11 12h9.5M11 17.2h9.5",
   ),
   colorbar:
-    '<path d="M5 8h4.7v6H5z" fill="currentColor" opacity=".12"/><path d="M9.7 8h4.6v6H9.7z" fill="currentColor" opacity=".38"/><path d="M14.3 8H19v6h-4.7z" fill="currentColor" opacity=".7"/>' +
-    '<path d="M5 8h14l3 3-3 3H5l-3-3zM6 17.5v2M12 17.5v2M18 17.5v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+    '<path d="M5 8h14l3 3-3 3H5l-3-3zM9.7 8v6M14.3 8v6M6 17.5v2M12 17.5v2M18 17.5v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
   north:
     '<path d="M12 3l5.5 15L12 14.6z" fill="currentColor"/>' +
     '<path d="M12 3L6.5 18 12 14.6 17.5 18z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>' +
@@ -99,7 +101,7 @@ const ICON_SVG = {
   text: tt("M4 4h16v3.5H4z", "M4 7.5V4h16v3.5M12 4v16M9 20h6"),
   title: tt("M5 4h4v16H5zM15 4h4v16h-4z", "M7 4v16M17 4v16M7 12h10M5 4h4M5 20h4M15 4h4M15 20h4"),
   image: tt("M3.5 4.5h17v15h-17z", "M3.5 4.5h17v15h-17zM3.5 17l5.5-5.5 4 4 2.5-2.5 5 5", '<circle cx="15.5" cy="9" r="1.7" fill="currentColor"/>'),
-  shape: tt("M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", "M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", '<circle cx="7.5" cy="16.5" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="7" r="3.8" fill="currentColor" opacity=".55"/>'),
+  shape: tt("M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", "M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", '<circle cx="7.5" cy="16.5" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="7" r="3.8" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
   table: tt("M3.5 4.5h17v5h-17z", "M3.5 4.5h17v15h-17zM3.5 9.5h17M3.5 14.5h17M10 9.5v10"),
   pen: tt("M12.5 19.5l7-7 2.5 2.5-7 7z", "M12.5 19.5l7-7 2.5 2.5-7 7zM18 13l-1.5-7.5L3 2.5l3 13.5 7 1.5zM3 2.5l7.5 7.5", '<circle cx="11.5" cy="11" r="1.6" fill="currentColor"/>'),
   marker: tt("M12 21.5s7-6.4 7-11.8a7 7 0 1 0-14 0c0 5.4 7 11.8 7 11.8z", "M12 21.5s7-6.4 7-11.8a7 7 0 1 0-14 0c0 5.4 7 11.8 7 11.8z", '<circle cx="12" cy="9.7" r="2.6" fill="currentColor"/>'),
@@ -149,6 +151,16 @@ const INSERT_MENUS = [
       ["latex", "sigma", "Formula (LaTeX)", "MathJax formula"],
     ],
   },
+  {
+    id: "data", icon: "chart", label: "Data", tools: ["attrtable", "chart"],
+    items: [
+      ["attrtable", "table", "Attribute table", "Area or count per class, or a feature list"],
+      ["chart:donut", "donut", "Donut chart", "Share of each class"],
+      ["chart:pie", "donut", "Pie chart", "Share of each class"],
+      ["chart:hbar", "list", "Bar chart", "Long class names read well"],
+      ["chart:bar", "chart", "Column chart", "Compare classes"],
+    ],
+  },
   { id: "draw", icon: "pen", label: "Draw", tools: ["pen"], gallery: "draw", tool: "pen" },
   { id: "shape", icon: "shape", label: "Shape", tools: ["shape"], gallery: "shape", tool: "shape" },
   { id: "image", icon: "image", label: "Image", tools: ["image"], tool: "image" },
@@ -168,7 +180,8 @@ function buildInsertBar() {
         const it = el("button", { type: "button", class: `${NS}-menuitem`, html: `${icon(ic, 15)}<span>${esc(name)}</span><small>${esc(hint)}</small>` });
         it.addEventListener("click", () => {
           closePopover();
-          addAtCenter(tool);
+          const [t, v] = tool.split(":");
+          addAtCenter(t, v);
         });
         list.appendChild(it);
       }
@@ -210,6 +223,26 @@ function buildShell() {
   S.ui.zoomLbl = zoomLbl;
   S.exportFmt = S.exportFmt || "png";
   S.exportDpi = S.exportDpi || 300;
+  // tools live in the top bar: modes (select, pan, content) and map elements
+  const tools = el("div", { class: `${NS}-toolgrp` });
+  let pill = el("div", { class: `${NS}-pill`, role: "toolbar", "aria-label": "Tools" });
+  tools.appendChild(pill);
+  for (const t of TOOLS) {
+    if (t.sep) {
+      pill = el("div", { class: `${NS}-pill`, role: "toolbar", "aria-label": "Map elements" });
+      tools.appendChild(pill);
+      continue;
+    }
+    const b = el("button", { type: "button", class: `${NS}-tool`, "data-tool": t.id, title: t.label, "aria-label": t.label, html: icon(t.icon, 17) });
+    b.addEventListener("click", () => {
+      if (t.action) t.action(b);
+      else if (t.gallery) openToolGallery(t, b);
+      else if (["map", "inset", "legend", "colorbar"].includes(t.id)) addAtCenter(t.id);
+      else setTool(t.id);
+    });
+    pill.appendChild(b);
+  }
+
   // three zones like a desktop design app: file & history | insert | view & export
   const vsep = () => el("span", { class: `${NS}-vsep` });
   top.append(
@@ -226,7 +259,7 @@ function buildShell() {
       iconBtn("undo", "Undo (Ctrl+Z)", undo),
       iconBtn("redo", "Redo (Ctrl+Y)", redo),
     ),
-    el("div", { class: `${NS}-topc` }, buildInsertBar()),
+    el("div", { class: `${NS}-topc` }, tools, buildInsertBar()),
     el("div", { class: `${NS}-topr` },
       el("div", { class: `${NS}-zoompill` },
         iconBtn("zout", "Zoom out (Ctrl+−)", () => setZoom(S.zoom / 1.2)),
@@ -236,27 +269,11 @@ function buildShell() {
       iconBtn("fit", "Fit page (Ctrl+0)", () => fitPage()),
       vsep(),
       iconBtn("save", "Save layout file (.json)", () => exportJSON()),
-      el("button", { type: "button", class: `${NS}-btn ${NS}-primary`, title: "Export", html: `${icon("download")}<span>Export</span>`, onclick: (e) => openExportMenu(e.currentTarget) }),
+      iconBtn("download", "Export", () => openExportDialog(), `${NS}-exportbtn`),
       iconBtn("dockright", "Show / hide the Properties panel", () => toggleDock("right"), `${NS}-docktog`),
       iconBtn("close", "Close Layout Composer", () => closeComposer(), `${NS}-closebtn`),
     ),
   );
-
-  const tools = el("nav", { class: `${NS}-tools` });
-  for (const t of TOOLS) {
-    if (t.sep) {
-      tools.appendChild(el("div", { class: `${NS}-tsep` }));
-      continue;
-    }
-    const b = el("button", { type: "button", class: `${NS}-tool`, "data-tool": t.id, title: t.label, "aria-label": t.label, html: `${icon(t.icon, 18)}<span>${esc(t.short)}</span>` });
-    b.addEventListener("click", () => {
-      if (t.action) t.action(b);
-      else if (t.gallery) openToolGallery(t, b);
-      else if (["map", "inset", "legend", "colorbar"].includes(t.id)) addAtCenter(t.id);
-      else setTool(t.id);
-    });
-    tools.appendChild(b);
-  }
 
   const left = el("aside", { class: `${NS}-left` },
     el("div", { class: `${NS}-phead` }, el("span", { class: `${NS}-pheadt`, html: `${icon("layers", 14)}<span>Layers</span>` }), el("span", { class: `${NS}-count` })),
@@ -282,7 +299,7 @@ function buildShell() {
   );
 
   const status = el("footer", { class: `${NS}-status` }, el("span", { class: `${NS}-pos` }, "x –  y –"), el("span", { class: `${NS}-selinfo` }), el("span", { class: `${NS}-hint` }), el("span", { class: `${NS}-viewtoggles` }, viewToggle("grid", "Canvas grid"), viewToggle("guides", "Guides"), viewToggle("snap", "Snap")), el("span", { class: `${NS}-zoomwrap` }, buildZoomSlider()));
-  root.append(top, el("div", { class: `${NS}-body` }, tools, left, stage, right), status, el("div", { class: `${NS}-toasts` }));
+  root.append(top, el("div", { class: `${NS}-body` }, left, stage, right), status, el("div", { class: `${NS}-toasts` }));
 
   S.ui.root = root;
   S.ui.quick = stage.querySelector(`.${NS}-quick`);
@@ -339,7 +356,10 @@ function openMainMenu(anchor) {
     sep(),
     menuItem("Open layout file…", () => importJSON(), { iconName: "open" }),
     menuItem("Save layout file", () => exportJSON(), { iconName: "save" }),
-    menuItem("Export…", () => openExportMenu(anchor), { iconName: "download" }),
+    menuItem("Export…", () => openExportDialog(), { iconName: "download" }),
+    sep(),
+    menuItem("Import QGIS template (.qpt)…", () => importQpt(), { iconName: "qgis" }),
+    menuItem("Export as QGIS template (.qpt)", () => exportQpt(), { iconName: "qgis" }),
     sep(),
     menuItem("Layers panel", () => toggleDock("left"), { iconName: "dockleft" }),
     menuItem("Properties panel", () => toggleDock("right"), { iconName: "dockright" }),
@@ -391,77 +411,139 @@ function selectionBar(n) {
   );
 }
 
-function openExportMenu(anchor) {
-  const fmts = [
-    ["png", "PNG", "Raster image"],
-    ["jpg", "JPG", "Raster image, smaller file"],
-    ["pdf", "PDF", "Page flattened at the chosen resolution"],
-    ["vpdf", "Vector PDF", "Text, lines and symbols stay vector; maps are images"],
-    ["geopdf", "GeoPDF", "PDF with the map frames georeferenced (WGS 84)"],
-    ["svg", "SVG", "Editable vector page; maps embedded at 200 dpi"],
-  ];
-  const grid = el("div", { class: `${NS}-fmtgrid` });
+// ---------------------------------------------------------------- export dialog
+const EXPORT_FORMATS_INFO = [
+  ["png", "PNG", "Image", "image"],
+  ["jpg", "JPG", "Smaller image", "image"],
+  ["pdf", "PDF", "Flattened page", "page"],
+  ["vpdf", "Vector PDF", "Sharp text and lines", "layers"],
+  ["geopdf", "GeoPDF", "Georeferenced maps", "map"],
+  ["svg", "SVG", "Editable vector", "shape"],
+];
+function openExportMenu() {
+  openExportDialog();
+}
+function openExportDialog() {
+  closePopover();
+  S.ui.root.querySelector(`.${NS}-modal`)?.remove();
+  const pg = S.doc.page;
+  const overlay = el("div", { class: `${NS}-modal` });
+  const dlg = el("div", { class: `${NS}-dlg`, role: "dialog", "aria-modal": "true", "aria-label": "Export" });
+  overlay.appendChild(dlg);
+  let running = false;
+  const close = () => {
+    if (running) return;
+    overlay.remove();
+    document.removeEventListener("keydown", onKeyDlg, true);
+  };
+  const onKeyDlg = (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+    }
+    if (e.key === "Enter" && !running && document.activeElement?.tagName !== "SELECT") {
+      e.preventDefault();
+      start();
+    }
+  };
+  document.addEventListener("keydown", onKeyDlg, true);
+  overlay.addEventListener("pointerdown", (e) => e.target === overlay && close());
+
+  const head = el("div", { class: `${NS}-dlghead` },
+    el("div", {}, el("div", { class: `${NS}-dlgtitle` }, "Export"), el("div", { class: `${NS}-dlgsub` }, `${S.doc.name} · ${pg.size && pg.size !== "Custom" ? `${pg.size} ` : ""}${round(pg.width, 1)} × ${round(pg.height, 1)} mm`)),
+    iconBtn("close", "Close (Esc)", close),
+  );
+  const cards = el("div", { class: `${NS}-fmtcards`, role: "radiogroup", "aria-label": "Format" });
+  for (const [v, label, desc, ic] of EXPORT_FORMATS_INFO) {
+    const c = el("button", { type: "button", class: `${NS}-fmtcard`, "data-v": v, role: "radio", html: `${icon(ic, 18)}<b>${label}</b><small>${desc}</small>` });
+    c.addEventListener("click", () => {
+      S.exportFmt = v;
+      refresh();
+    });
+    cards.appendChild(c);
+  }
   const dpiSel = el("select", { class: `${NS}-input` }, ...[75, 96, 150, 200, 300, 400, 600].map((d) => el("option", { value: d, selected: d === S.exportDpi }, `${d} dpi`)));
   const bgSel = el("select", { class: `${NS}-input` }, el("option", { value: "page" }, "Page color"), el("option", { value: "white" }, "White"), el("option", { value: "transparent" }, "Transparent"));
   bgSel.value = S.exportBg || "page";
   const name = el("input", { class: `${NS}-input`, value: S.exportName || safeName(S.doc.name) });
-  const ext = el("span", { class: `${NS}-unit` });
-  const dpiRow = el("label", { class: `${NS}-prow` }, el("span", { class: `${NS}-plabel` }, "Resolution"), el("span", { class: `${NS}-pctl` }, dpiSel));
-  const bgRow = el("label", { class: `${NS}-prow` }, el("span", { class: `${NS}-plabel` }, "Background"), el("span", { class: `${NS}-pctl` }, bgSel));
-  const info = el("div", { class: `${NS}-muted` });
+  const ext = el("span", { class: `${NS}-dlgext` });
+  const field = (label, ctl) => el("label", { class: `${NS}-dlgfield` }, el("span", {}, label), ctl);
+  const dpiField = field("Resolution", dpiSel);
+  const info = el("div", { class: `${NS}-dlginfo` });
+  const settings = el("div", { class: `${NS}-dlggrid` }, dpiField, field("Background", bgSel), el("label", { class: `${NS}-dlgfield ${NS}-dlgwide` }, el("span", {}, "File name"), el("span", { class: `${NS}-dlgname` }, name, ext)));
+  const body = el("div", { class: `${NS}-dlgbody` }, el("div", { class: `${NS}-dlglabel` }, "Format"), cards, settings, info);
+  const cancel = el("button", { type: "button", class: `${NS}-btn`, onclick: close }, "Cancel");
+  const go = el("button", { type: "button", class: `${NS}-btn ${NS}-primary`, html: `${icon("download")}<span>Export</span>` });
+  const foot = el("div", { class: `${NS}-dlgfoot` }, cancel, go);
+  dlg.append(head, body, foot);
+
   const refresh = () => {
-    for (const b of grid.children) b.classList.toggle("active", b.dataset.v === S.exportFmt);
-    const pg = S.doc.page;
-    const px = (mm) => Math.round((mm / 25.4) * S.exportDpi);
+    for (const b of cards.children) {
+      const on = b.dataset.v === S.exportFmt;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    }
     const f = S.exportFmt;
-    dpiRow.style.display = f === "svg" ? "none" : "";
+    const px = (mm) => Math.round((mm / 25.4) * S.exportDpi);
+    dpiField.style.visibility = f === "svg" ? "hidden" : "";
     bgSel.querySelector('[value="transparent"]').disabled = !(f === "png" || f === "svg");
     if (bgSel.value === "transparent" && bgSel.querySelector('[value="transparent"]').disabled) bgSel.value = "page";
     ext.textContent = f === "vpdf" || f === "geopdf" ? ".pdf" : `.${f}`;
     info.textContent =
-      f === "svg" || f === "vpdf"
-        ? fmts.find((x) => x[0] === f)[2] + "."
-        : f === "pdf" || f === "geopdf"
-          ? `${pg.width} × ${pg.height} mm at ${S.exportDpi} dpi.${f === "geopdf" ? " Readable in QGIS, Avenza Maps and Acrobat." : ""}`
-          : `${px(pg.width)} × ${px(pg.height)} px at ${S.exportDpi} dpi.`;
+      f === "svg"
+        ? "Editable vector page; maps are embedded as images at 200 dpi."
+        : f === "vpdf"
+          ? "Text, lines and symbols stay vector; maps are images at the chosen resolution."
+          : f === "pdf" || f === "geopdf"
+            ? `${round(pg.width, 1)} × ${round(pg.height, 1)} mm at ${S.exportDpi} dpi.${f === "geopdf" ? " Map frames are georeferenced (WGS 84); opens in QGIS, Avenza Maps and Acrobat." : ""}`
+            : `${px(pg.width).toLocaleString("en-US")} × ${px(pg.height).toLocaleString("en-US")} px at ${S.exportDpi} dpi.`;
   };
-  for (const [v, label, title] of fmts) {
-    const b = el("button", { type: "button", "data-v": v, title }, label);
-    b.addEventListener("click", () => {
-      S.exportFmt = v;
-      refresh();
-    });
-    grid.appendChild(b);
-  }
   dpiSel.addEventListener("change", () => {
     S.exportDpi = parseInt(dpiSel.value, 10);
     refresh();
   });
   bgSel.addEventListener("change", () => (S.exportBg = bgSel.value));
   name.addEventListener("input", () => (S.exportName = name.value));
-  const go = el("button", { type: "button", class: `${NS}-btn ${NS}-primary ${NS}-wide`, html: `${icon("download")}<span>Export</span>` });
-  go.addEventListener("click", () => {
-    closePopover();
+
+  // progress view inside the same window
+  const start = async () => {
+    if (running) return;
     S.exportBg = bgSel.value;
     S.exportName = name.value;
-    exportLayout(S.exportFmt);
-  });
+    const fmt = S.exportFmt;
+    const info = EXPORT_FORMATS_INFO.find((x) => x[0] === fmt);
+    const label = info?.[1] || fmt;
+    const nMaps = mapItems().filter((m) => !m.hidden).length;
+    const nFonts = docFontFamilies().filter(isGoogleFont).length;
+    const steps = [
+      ...(nMaps ? [["maps", `Render ${nMaps} map frame${nMaps > 1 ? "s" : ""}`]] : []),
+      ...(nFonts && fmt !== "vpdf" ? [["fonts", `Embed ${nFonts} Google font${nFonts > 1 ? "s" : ""}`]] : []),
+      ["compose", "Compose the page"],
+      ["save", `Write the ${label} file`],
+    ];
+    const fileName = `${safeName(S.exportName || S.doc.name)}${fmt === "vpdf" ? ".pdf" : fmt === "geopdf" ? "_geo.pdf" : `.${fmt}`}`;
+    const prog = progressView(`Exporting ${label}`, { sub: `${fileName}${fmt === "svg" ? "" : ` · ${S.exportDpi} dpi`}`, iconName: info?.[3] || "download", steps });
+    body.replaceWith(el("div", { class: `${NS}-dlgbody` }, prog.el));
+    foot.replaceChildren();
+    running = true;
+    let ok = false;
+    try {
+      ok = await exportLayout(fmt, prog);
+    } finally {
+      running = false;
+    }
+    if (ok) {
+      prog.set(`Saved ${fileName}`, 1);
+      foot.append(el("button", { type: "button", class: `${NS}-btn ${NS}-primary`, onclick: close }, "Done"));
+      setTimeout(close, 1800);
+    } else {
+      foot.append(el("button", { type: "button", class: `${NS}-btn`, onclick: close }, "Close"));
+    }
+  };
+  go.addEventListener("click", start);
   refresh();
-  const pop = popoverAt(
-    anchor,
-    el("div", { class: `${NS}-exportpop` },
-      el("div", { class: `${NS}-ptitle` }, "Export"),
-      grid,
-      dpiRow,
-      bgRow,
-      el("label", { class: `${NS}-prow` }, el("span", { class: `${NS}-plabel` }, "File name"), el("span", { class: `${NS}-pctl` }, name, ext)),
-      info,
-      go,
-    ),
-  );
-  const r = anchor.getBoundingClientRect();
-  const rr = S.ui.root.getBoundingClientRect();
-  pop.style.left = `${Math.max(8, r.right - rr.left - pop.offsetWidth)}px`;
+  S.ui.root.appendChild(overlay);
+  setTimeout(() => go.focus(), 30);
 }
 
 function setTab(tab) {
@@ -486,7 +568,10 @@ function setTool(id, variant) {
 
 // ---------------------------------------------------------------- tool galleries
 function closePopover() {
-  S.ui.popover?.remove();
+  const pop = S.ui.popover;
+  if (!pop) return;
+  pop._off?.();
+  pop.remove();
   S.ui.popover = null;
 }
 function popoverAt(anchor, content, cls = "") {
@@ -498,19 +583,23 @@ function popoverAt(anchor, content, cls = "") {
   pop.style.left = `${Math.min(r.right + 6 - rr.left, rr.width - pop.offsetWidth - 8)}px`;
   pop.style.top = `${Math.max(8, Math.min(r.top - rr.top, rr.height - pop.offsetHeight - 8))}px`;
   if (r.top + pop.offsetHeight > rr.bottom) pop.style.top = `${Math.max(8, rr.height - pop.offsetHeight - 8)}px`;
-  if (anchor.closest(`.${NS}-top`)) {
+  if (anchor.closest(`.${NS}-top, .${NS}-quick`)) {
     pop.style.left = `${Math.min(r.left - rr.left, rr.width - pop.offsetWidth - 8)}px`;
     pop.style.top = `${r.bottom - rr.top + 6}px`;
   }
-  setTimeout(() => {
-    const off = (e) => {
-      if (!pop.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) {
-        closePopover();
-        document.removeEventListener("pointerdown", off, true);
-      }
-    };
-    document.addEventListener("pointerdown", off, true);
-  }, 0);
+  // close on a click outside; the listener belongs to this popover only, so a
+  // popover opened from another one (e.g. the icon catalog) is not closed by it
+  const off = (e) => {
+    if (S.ui.popover !== pop) return pop._off?.();
+    // targets removed from the DOM by a re-render inside the popover count as inside
+    if (!e.target.isConnected || pop.contains(e.target) || e.target === anchor || anchor.contains(e.target)) return;
+    closePopover();
+  };
+  const t = setTimeout(() => document.addEventListener("pointerdown", off, true), 0);
+  pop._off = () => {
+    clearTimeout(t);
+    document.removeEventListener("pointerdown", off, true);
+  };
   S.ui.popover = pop;
   requestAnimationFrame(() => {
     const b = pop.getBoundingClientRect();
@@ -724,6 +813,7 @@ function afterDocReplaced() {
   // drop live maps for items that no longer exist
   for (const id of [...S.maps.keys()]) if (!findItem(id)) destroyLiveMap(id);
   renderAll();
+  ensureDocFonts();
 }
 
 function pageDecorSVG(forExport, background = "page") {
@@ -739,10 +829,38 @@ function pageDecorSVG(forExport, background = "page") {
       s += `<rect x="${i + g}" y="${i + g}" width="${pg.width - (i + g) * 2}" height="${pg.height - (i + g) * 2}" fill="none" stroke="${esc(b.color)}" stroke-width="${b.width * 0.4}"/>`;
     }
   }
+  if (!forExport && pg.layoutGrid?.show) s += layoutGridSVG(pg);
   if (!forExport && pg.showMargin && pg.margin > 0) {
     const m = pg.margin;
     s += `<rect x="${m}" y="${m}" width="${pg.width - 2 * m}" height="${pg.height - 2 * m}" fill="none" stroke="#38bdf8" stroke-width="${0.6 / S.zoom}" stroke-dasharray="${3 / S.zoom} ${2 / S.zoom}"/>`;
   }
+  return s;
+}
+// Column / row rectangles of the layout grid (page mm).
+function layoutGridCells(pg) {
+  const g = pg.layoutGrid;
+  const m = g.margin > 0 ? g.margin : pg.margin || 0;
+  const cols = [];
+  const rows = [];
+  const span = (n, gut, len) => {
+    const out = [];
+    if (!(n > 0)) return out;
+    const w = (len - 2 * m - gut * (n - 1)) / n;
+    for (let i = 0; i < n; i++) out.push([m + i * (w + gut), m + i * (w + gut) + w]);
+    return out;
+  };
+  cols.push(...span(Math.round(g.cols), g.colGutter || 0, pg.width));
+  rows.push(...span(Math.round(g.rows), g.rowGutter || 0, pg.height));
+  return { cols, rows, m };
+}
+function layoutGridSVG(pg) {
+  const g = pg.layoutGrid;
+  const { cols, rows, m } = layoutGridCells(pg);
+  const c = esc(g.color || "#ff3b6b");
+  const op = g.opacity ?? 0.1;
+  let s = "";
+  for (const [a, b] of cols) s += `<rect x="${a}" y="${m}" width="${b - a}" height="${pg.height - 2 * m}" fill="${c}" fill-opacity="${op}"/>`;
+  for (const [a, b] of rows) s += `<rect x="${m}" y="${a}" width="${pg.width - 2 * m}" height="${b - a}" fill="${c}" fill-opacity="${op}"/>`;
   return s;
 }
 function renderPageDecor() {
@@ -751,9 +869,18 @@ function renderPageDecor() {
   S.ui.decor.innerHTML = `<svg width="${pg.width * Z}" height="${pg.height * Z}" viewBox="0 0 ${pg.width} ${pg.height}">${pageDecorSVG(false)}</svg>`;
   if (pg.showGrid && pg.gridSize > 0) {
     const g = pg.gridSize * Z;
-    S.ui.paper.style.setProperty("--glc-grid", `${g}px`);
+    const sub = Math.max(1, Math.round(pg.gridSub || 5));
+    const P = S.ui.paper.style;
+    P.setProperty("--glc-grid", `${g}px`);
+    P.setProperty("--glc-grid-major", `${g * sub}px`);
+    const [r, gg, b] = hexToRgb(pg.gridColor || "#0d99ff");
+    const op = pg.gridOpacity ?? 0.14;
+    P.setProperty("--glc-grid-c", `rgb(${r} ${gg} ${b} / ${op})`);
+    P.setProperty("--glc-grid-cm", `rgb(${r} ${gg} ${b} / ${Math.min(1, op * 2.2)})`);
     S.ui.paper.classList.add("showgrid");
-  } else S.ui.paper.classList.remove("showgrid");
+    S.ui.paper.classList.toggle("griddots", pg.gridStyle === "dots");
+  } else S.ui.paper.classList.remove("showgrid", "griddots");
+  S.ui.paper.style.setProperty("--glc-guide-c", pg.guideColor || "#00c2ff");
 }
 
 function renderPaper(onlyIds) {
@@ -984,6 +1111,11 @@ function snapTargets(excludeIds) {
     xs.push(...pg.guides.v);
     ys.push(...pg.guides.h);
   }
+  if (pg.layoutGrid?.show && pg.layoutGrid.snap !== false) {
+    const { cols, rows } = layoutGridCells(pg);
+    for (const [a, b] of cols) xs.push(a, b);
+    for (const [a, b] of rows) ys.push(a, b);
+  }
   for (const it of S.doc.items) {
     if (excludeIds.includes(it.id) || it.hidden) continue;
     xs.push(it.x, it.x + it.w, it.x + it.w / 2);
@@ -1000,7 +1132,7 @@ function showGuides(gx, gy) {
 }
 function snapPoint(x, y, exclude, { edgesX = [0], edgesY = [0] } = {}) {
   const pg = S.doc.page;
-  const thr = 6 / S.zoom;
+  const thr = (pg.snapTol || 6) / S.zoom;
   const gx = [];
   const gy = [];
   let dx = null;
@@ -1350,6 +1482,11 @@ function addItemFromTool(tool, rect, variant) {
     item.w = 25;
     item.h = 25;
   }
+  if (type === "attrtable" || type === "chart") {
+    initDataItem(item);
+    if (type === "chart" && variant) item.props.kind = variant;
+    if (type === "chart" && (variant === "bar" || variant === "hbar")) item.props.colorMode = "layer";
+  }
   commit(() => S.doc.items.push(item));
   select([item.id]);
   if (type === "image") pickImage(item);
@@ -1447,7 +1584,8 @@ function onKey(e) {
   else if (k.startsWith("arrow")) {
     const items = selectedItems().filter((i) => !i.locked);
     if (!items.length) return;
-    const d = e.shiftKey ? 10 : e.altKey ? 0.1 : 1;
+    const pg = S.doc.page;
+    const d = e.shiftKey ? pg.nudgeBig || 10 : e.altKey ? 0.1 : pg.nudge || 1;
     commit(() => {
       for (const i of items) {
         if (k === "arrowleft") i.x = round(i.x - d, 3);

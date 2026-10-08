@@ -89,7 +89,7 @@ async function buildStyle(item) {
   const m = mainMap();
   const main = m ? clone(m.getStyle()) : { version: 8, sources: {}, layers: [] };
   const kind = item.props.basemap || "geolibre";
-  if (kind === "geolibre") return main;
+  if (kind === "geolibre") return hideFrameLayers(main, item);
   const user = userLayerParts(main);
   let base;
   if (BASEMAP_URLS[kind]) {
@@ -121,11 +121,19 @@ async function buildStyle(item) {
   if (!base.glyphs) base.glyphs = main.glyphs;
   Object.assign(base.sources, user.sources);
   base.layers.push(...user.layers);
-  return base;
+  return hideFrameLayers(base, item);
+}
+// Layers switched off for one map frame (props.hiddenLayers) are hidden in its style.
+function hideFrameLayers(style, item) {
+  const hidden = item.props.hiddenLayers || [];
+  for (const id of hidden) {
+    for (const l of styleLayersFor(style, id)) l.layout = { ...(l.layout || {}), visibility: "none" };
+  }
+  return style;
 }
 
 function styleKey(item) {
-  return `${item.props.basemap}|${item.props.background}|${S.styleEpoch || 0}`;
+  return `${item.props.basemap}|${item.props.background}|${S.styleEpoch || 0}|${(item.props.hiddenLayers || []).join(",")}`;
 }
 
 // Live (preview) maps ---------------------------------------------------------
@@ -544,7 +552,8 @@ function legendFromMap() {
 
 // Merge freshly generated entries with user edits (renamed/hidden labels).
 function syncLegendEntries(item) {
-  const fresh = legendFromMap();
+  const hidden = new Set(linkedMapOf(item)?.props.hiddenLayers || []);
+  const fresh = legendFromMap().filter((e) => !hidden.has(e.layerId));
   const old = new Map((item.props.entries || []).map((e) => [e.key, e]));
   const manual = (item.props.entries || []).filter((e) => e.manual);
   item.props.entries = [

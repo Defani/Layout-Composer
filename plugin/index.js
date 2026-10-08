@@ -8,7 +8,7 @@
 
 const PLUGIN_ID = "geolibre-layout-composer";
 const PLUGIN_NAME = "Layout Composer";
-const PLUGIN_VERSION = "1.6.0";
+const PLUGIN_VERSION = "1.8.0";
 const NS = "glc"; // CSS class prefix
 const STORE_KEY = "glc:layouts:v1";
 const PX96 = 96 / 25.4; // CSS px per mm at 96 dpi
@@ -171,9 +171,11 @@ const measureCtx = (() => {
 function textWidthMm(text, font) {
   const ctx = measureCtx();
   // Measure at 100px then scale: font.size is in pt.
-  ctx.font = `${font.italic ? "italic " : ""}${font.bold ? "bold " : ""}100px "${font.family || "Arial"}"`;
-  const px = ctx.measureText(String(text)).width;
-  return (px / 100) * (font.size || 10) * PT * (1 + (font.spacing || 0) * 0.0);
+  ctx.font = `${font.italic ? "italic " : ""}${font.smallCaps ? "small-caps " : ""}${fontWeight(font)} 100px "${font.family || "Arial"}"`;
+  const str = String(text);
+  const px = ctx.measureText(str).width;
+  // letter-spacing is added after every character (see fontAttrs)
+  return (px / 100) * (font.size || 10) * PT + str.length * (font.spacing || 0) * PT * 0.1;
 }
 function wrapText(text, font, maxWidthMm) {
   const out = [];
@@ -195,13 +197,20 @@ function wrapText(text, font, maxWidthMm) {
   }
   return out;
 }
+// Numeric weight of a font object (100…900); `bold` is kept for older layouts.
+function fontWeight(f) {
+  return f.weight || (f.bold ? 700 : 400);
+}
 function fontAttrs(f) {
+  const w = fontWeight(f);
   return [
     `font-family="${esc(f.family || "Arial")}, Arial, sans-serif"`,
     `font-size="${round((f.size || 10) * PT, 3)}"`,
-    f.bold ? `font-weight="bold"` : "",
+    w !== 400 ? `font-weight="${w}"` : "",
     f.italic ? `font-style="italic"` : "",
+    f.smallCaps ? `font-variant="small-caps"` : "",
     `fill="${esc(f.color || "#000")}"`,
+    f.opacity != null && f.opacity < 1 ? `fill-opacity="${f.opacity}"` : "",
     f.spacing ? `letter-spacing="${round(f.spacing * PT * 0.1, 3)}"` : "",
   ].join(" ");
 }
@@ -1606,9 +1615,32 @@ const RENDERERS = {
     const r = p.border?.radius || 0;
     if (p.background) out += `<rect width="${item.w}" height="${item.h}" rx="${r}" fill="${esc(p.background)}" fill-opacity="${p.bgOpacity ?? 1}"/>`;
     const content = applyCase(resolveVars(p.text, item), p.textCase);
-    const lines = hasMath(content) ? content.split("\n") : wrapText(content, f, p.wrap ? item.w - pad * 2 : 0);
+    const auto = p.autoSize || "fixed";
+    const wrapW = p.wrap && auto !== "width" ? item.w - pad * 2 : 0;
+    // lines with their paragraph ends (for paragraph spacing and justify)
+    const laid = [];
+    for (const para of content.split("\n")) {
+      const ls = hasMath(para) ? [para] : wrapText(para, f, wrapW);
+      ls.forEach((t, i) => laid.push({ t, end: i === ls.length - 1 }));
+    }
+    const lines = laid.map((l) => l.t);
     const lh = f.size * PT * (p.lineHeight || 1.2);
-    const blockH = lh * lines.length;
+    const ps = p.paraSpacing || 0;
+    const offs = [];
+    let acc = 0;
+    laid.forEach((l) => {
+      offs.push(acc);
+      acc += lh + (l.end ? ps : 0);
+    });
+    const blockH = acc - (laid.length && laid[laid.length - 1].end ? ps : 0);
+    if (auto === "width" && !hasMath(content)) {
+      const need = round(Math.max(...lines.map((t) => textWidthMm(t, f)), 2) + pad * 2 + 0.6, 2);
+      if (Math.abs(item.w - need) > 0.2) item.w = need;
+    }
+    if (auto === "height" || auto === "width") {
+      const needH = round(blockH + pad * 2 + 0.6, 2);
+      if (Math.abs(item.h - needH) > 0.2) item.h = needH;
+    }
     const asc = f.size * PT * 0.8;
     let y0 = pad + asc + (lh - f.size * PT) / 2;
     if (p.valign === "middle") y0 = (item.h - blockH) / 2 + asc + (lh - f.size * PT) / 2;
@@ -1616,17 +1648,21 @@ const RENDERERS = {
     const x = p.align === "center" ? item.w / 2 : p.align === "right" ? item.w - pad : pad;
     const anchor = p.align === "center" ? "middle" : p.align === "right" ? "end" : "start";
     const tfx = textEffect(item, lines, x, y0, lh, anchor);
+    const lineY = (i) => y0 + (offs[i] ?? i * lh);
     out += tfx.defs + tfx.before + `<g${tfx.groupAttr}>`;
     if (hasMath(content)) {
       // $...$ math: one MathJax line per text line (no automatic wrapping)
-      content.split("\n").forEach((ln, i) => {
-        out += richLine(ln, x, y0 + i * lh, f, anchor, tfx.textAttr || haloAttrs({ ...p, halo: p.halo })).svg;
+      lines.forEach((ln, i) => {
+        out += richLine(ln, x, lineY(i), f, anchor, tfx.textAttr || haloAttrs({ ...p, halo: p.halo })).svg;
       });
     } else {
       const deco = p.decoration && p.decoration !== "none" ? ` text-decoration="${p.decoration}"` : "";
       out += `<text text-anchor="${anchor}" ${fontAttrs(f)}${deco} ${tfx.textAttr || haloAttrs({ ...p, halo: p.halo })}>`;
+      const fullW = item.w - pad * 2;
       lines.forEach((ln, i) => {
-        out += `<tspan x="${round(x, 3)}" y="${round(y0 + i * lh, 3)}">${esc(ln) || " "}</tspan>`;
+        // justify: stretch every line except the last of a paragraph
+        const just = p.align === "justify" && !laid[i].end && ln.trim().includes(" ") ? ` textLength="${round(fullW, 3)}" lengthAdjust="spacing"` : "";
+        out += `<tspan x="${round(x, 3)}" y="${round(lineY(i), 3)}"${just}>${esc(ln) || " "}</tspan>`;
       });
       out += `</text>`;
     }
@@ -1697,9 +1733,10 @@ const RENDERERS = {
     const colW = widths.map((v) => (v / sum) * item.w);
     const pad = p.padding;
     // row heights from wrapped text
+    const isFooter = (ri) => p.footer && ri === rows.length - 1;
     const rowsLaid = rows.map((r, ri) => {
-      const f = p.header && ri === 0 ? p.headerFont : p.font;
-      const cells = colW.map((cw, ci) => wrapText(resolveVars(r[ci] ?? "", item), f, cw - pad * 2));
+      const f = p.header && ri === 0 ? p.headerFont : isFooter(ri) ? { ...p.font, bold: true } : p.font;
+      const cells = colW.map((cw, ci) => wrapText(p.vars === false ? String(r[ci] ?? "") : resolveVars(r[ci] ?? "", item), f, cw - pad * 2));
       const lh = f.size * PT * 1.25;
       const height = Math.max(...cells.map((c) => c.length)) * lh + pad * 2;
       return { cells, f, lh, height };
@@ -1711,12 +1748,14 @@ const RENDERERS = {
     rowsLaid.forEach((row, ri) => {
       const rh = row.height * stretch;
       if (p.header && ri === 0 && p.headerBg) out += `<rect x="0" y="${round(y, 3)}" width="${item.w}" height="${round(rh, 3)}" fill="${esc(p.headerBg)}"/>`;
+      else if (isFooter(ri) && p.footerBg) out += `<rect x="0" y="${round(y, 3)}" width="${item.w}" height="${round(rh, 3)}" fill="${esc(p.footerBg)}"/>`;
       else if (p.zebra && ri % 2 === (p.header ? 0 : 1)) out += `<rect x="0" y="${round(y, 3)}" width="${item.w}" height="${round(rh, 3)}" fill="${esc(p.zebraColor)}"/>`;
       let x = 0;
       row.cells.forEach((lines, ci) => {
         const cw = colW[ci];
-        const anchor = p.align === "center" ? "middle" : p.align === "right" ? "end" : "start";
-        const tx = p.align === "center" ? x + cw / 2 : p.align === "right" ? x + cw - pad : x + pad;
+        const al = p.colAlign?.[ci] || p.align;
+        const anchor = al === "center" ? "middle" : al === "right" ? "end" : "start";
+        const tx = al === "center" ? x + cw / 2 : al === "right" ? x + cw - pad : x + pad;
         const textH = lines.length * row.lh;
         const ty = y + (rh - textH) / 2 + row.f.size * PT * 0.85;
         out += `<text text-anchor="${anchor}" ${fontAttrs(row.f)}>`;
@@ -1725,7 +1764,7 @@ const RENDERERS = {
         if (p.innerBorder && ci > 0) out += `<line x1="${round(x, 3)}" y1="${round(y, 3)}" x2="${round(x, 3)}" y2="${round(y + rh, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth}"/>`;
         x += cw;
       });
-      if (p.innerBorder && ri > 0) out += `<line x1="0" y1="${round(y, 3)}" x2="${item.w}" y2="${round(y, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth}"/>`;
+      if (p.innerBorder && ri > 0) out += `<line x1="0" y1="${round(y, 3)}" x2="${item.w}" y2="${round(y, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${isFooter(ri) ? p.borderWidth * 2.5 : p.borderWidth}"/>`;
       y += rh;
     });
     if (p.outerBorder) out += `<rect width="${item.w}" height="${round(Math.max(y, item.h), 3)}" fill="none" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth * 1.6}"/>`;
@@ -3116,6 +3155,9 @@ function markerThumb(m) {
 }
 // ---------------------------------------------------------------- icon catalog data (generated by tools/build_catalog.py)
 const CATALOG = {"iconSets":{"maki":{"label":"Maki","license":"CC0-1.0","url":"https://cdn.jsdelivr.net/npm/@mapbox/maki@8.2.0/icons/{name}.svg","groups":{"Transport":["aerialway","airfield","airport","barrier","bicycle","bicycle-share","bridge","bus","car","car-rental","car-repair","charging-station","elevator","entrance","entrance-alt1","fuel","gate","heliport","highway-rest-area","lift-gate","rail","rail-light","rail-metro","road-accident","roadblock","scooter","taxi","terminal","toll","tunnel","wheelchair"],"Food & shops":["alcohol-shop","bakery","bank","bank-JP","bar","beer","cafe","clothing-store","confectionery","convenience","fast-food","florist","furniture","gift","grocery","hairdresser","hardware","jewelry-store","laundry","restaurant","restaurant-noodle","restaurant-pizza","restaurant-seafood","restaurant-sushi","shoe","shop","teahouse"],"Sports":["american-football","baseball","basketball","bowling-alley","cricket","fitness-centre","golf","horse-riding","ice-cream","pitch","racetrack","racetrack-cycling","racetrack-horse","skateboard","skiing","soccer","stadium","swimming","table-tennis","tennis","volleyball"],"Vegetation & forest":["amusement-park","dog-park","farm","garden","garden-centre","logging","park","park-alt1","parking","parking-garage","parking-paid"],"Tourism & recreation":["animal-shelter","aquarium","attraction","bbq","campsite","casino","information","karaoke","lodging","nightclub","observation-tower","picnic-site","playground","restaurant-bbq","shelter","viewpoint","zoo"],"Basic symbols":["arrow","circle","circle-stroked","cross","diamond","heart","marker","marker-stroked","square","square-stroked","star","star-stroked","triangle","triangle-stroked"],"Education & culture":["art-gallery","castle","castle-JP","cinema","college","college-JP","historic","landmark","landmark-JP","library","marae","monument","monument-JP","museum","music","school","school-JP","theatre"],"Water & hydrology":["beach","dam","drinking-water","ferry","ferry-JP","harbor","hot-spring","lighthouse","lighthouse-JP","racetrack-boat","slipway","water","waterfall","watermill","wetland"],"Health":["blood-bank","dentist","doctor","hospital","hospital-JP","optician","pharmacy","veterinary"],"Utilities & industry":["building","building-alt1","commercial","communications-tower","construction","home","industry","recycling","residential-community","slaughterhouse","toilet","warehouse","waste-basket","windmill"],"Hazards & warnings":["caution","danger"],"Religion":["cemetery","cemetery-JP","place-of-worship","religious-buddhist","religious-christian","religious-jewish","religious-muslim","religious-shinto"],"Government & public":["city","defibrillator","embassy","emergency-phone","fire-station","fire-station-JP","police","police-JP","post","post-JP","prison","ranger-station","telephone","town","town-hall","village"],"Other":["fence","gaming","landuse","mobile-phone","paint","suitcase","watch"],"Terrain & nature":["globe","mountain","natural","rocket","snowmobile","volcano"]}},"temaki":{"label":"Temaki","license":"CC0-1.0","url":"https://cdn.jsdelivr.net/npm/@rapideditor/temaki@5.13.0/icons/{name}.svg","groups":{"Sports":["abseiling","balance_beam","bowling","bowling_alt1","cable_device","climbing","climbing_frame","climbing_wall","cross_country_skiing","dice","disc_golf_basket","field_hockey","gas_device","golf_green","gym","hang_gliding","horizontal_bar","horseshoe","horseshoes","ice_skating","pickleball","power_device","racetrack_oval","shuffleboard","skateboarding","ski_jumping","skiing","sledding","spice_bottle","table_soccer","tennis","vending_ice","vending_ice_cream","vending_ice_cream2","waste_device"],"Tourism & recreation":["accessible_space","basketswing","binoculars","cabin","cable_shutoff","casino","dog_shelter","gas_shutoff","horse_shelter","hut","info_board","maze","picnic_shelter","play_structure","playhouse","power_shutoff","roller_coaster","sandbox","sleep_shelter","slide","slide2","spa","spotting_scope","swing","telescope","tents","vending_newspaper","viewpoint","waste_shutoff","zoo"],"Other":["accounting","activity_panel","anvil","anvil_and_hammer","balloon","bench","benchmark_disk","bikini","billboard","bleachers","blind","bottles","bow_and_arrow","brick_trowel","briefcase","briefcase_asterisk","briefcase_bolt","briefcase_cross","briefcase_info","bulletin_board","bunk_beds","can","cattle_grid","chefs_knife","cleaver","clock","cloth","clothes_hanger","conveyor","curtains","cushion","dagger","detergent_bottle","drag_lift","dress","drink_cup","ear","egg","electronic","fashion_accessories","footwear_decontamination","goods_lift","gown","hand","handbag","hangar","height_restrictor","horn_cleat","hot_drink_cup","hunting_blind","inline_skating","kitchen_sink","latrine","lawyer","lipstick","lock","lounger","lounging","milestone","movie_rental","os_benchmark","perfume","pet_grooming","pick_hammer","platter_lift","plumber","polished_nail","portrait","portrait_framed","psychic","real_estate_agency","rigging","room","rope_fence","rumble_strip","saddle","seesaw","sign_and_bench","social_facility","speaker","spike_strip","splash_pad","stamp","stile_squeezer","striped_way","striped_zone","suitcase","suitcase_key","suitcase_xray","tanning","tanning2","tattoo_machine","ticket","tiling","tire","tire_course","toolbox","tools","vacuum","vacuum_station","vase","vertex","vertical_rotisserie","wall","well_pump_manual","whale_watching","wheel","wind_turbine","window","windpump","windsock","x_oblique","yield","zip_wire"],"Utilities & industry":["adit_profile","antenna","bulb","bulb2","bulb3","bulldozer","cable","cable_manhole","cable_meter","chimney","cooling_tower","cooling_tower_radiation","crane","desk_lamp","domed_tower","gas","gas_manhole","gas_meter","manhole","manufactured_home","mast","mast_communication","mast_lighting","mineshaft_cage","mineshaft_profile","oil_well","pipe","power","power_cb","power_cb2","power_circuit","power_ct","power_isolator","power_la","power_manhole","power_meter","power_pole","power_switch","power_tower","power_transformer","powered_pump","propane_tank","radiation","radio","row_houses","scaffold","silo","storage","storage_drum","storage_fermenter","storage_rental","storage_tank","tower","tower_communication","trench","utility_pole","waste","waste_manhole","waste_meter","well_pump_powered","windmill"],"Transport":["aerialway_pole","airport","app_terminal","bicycle_box","bicycle_locker","bicycle_rental","bicycle_repair","bicycle_shed","bicycle_structure","bicycle_wash","board_bus","board_gondola_lift","board_hanging_rail","board_heavy_rail","board_light_rail","board_monorail","board_school_bus","board_subway","board_train","board_train_bullet","board_train_diesel","board_train_kids","board_train_steam","board_tram","board_transit","board_trolleybus","bollard","bollard_row","bridge","buffer_stop","bus","bus_guided","camper_trailer","camper_trailer_dump","car_dealer","car_pool","car_structure","car_wash","carport","chairlift","chicane_arrow","crossing_markings-dashes","crossing_markings-dots","crossing_markings-ladder","crossing_markings-ladder_paired","crossing_markings-ladder_skewed","crossing_markings-lines","crossing_markings-lines_paired","crossing_markings-zebra","crossing_markings-zebra_bicolour","crossing_markings-zebra_double","crossing_markings-zebra_paired","crossing_rail_rail","crossing_rail_road","crossing_rail_solid","crossing_rail_striped","crossing_tram_road","crossing_tram_solid","crossing_tram_striped","cycle_barrier","cyclist_crosswalk","elevator","fighter_jet","freight_car","gate","golf_cart","gondola_lift","guard_rail","hair_care","hanging_rail","heavy_rail","jetplane_front","junction","junk_car","kerb-flush","kerb-lowered","kerb-raised","kerb-rolled","kerb-unspecified","lift_gate","light_rail","monorail","motorcycle","motorcycle_rental","motorcycle_repair","ped_cyclist_crosswalk","pedestrian","pedestrian_and_cyclist","pedestrian_crosswalk","pedestrian_walled","plane_taxiing","planes","planes_bidirectional","rail_flag","rail_profile","railing","railway_cable_track","railway_signals","railway_track","railway_track_askew","railway_track_mini","railway_track_narrow","railway_track_partial","school_bus","sign_and_car","sign_and_pedestrian","speed_bump","speed_dip","speed_dip_double","speed_hump","speed_table","speedway_8","speedway_oval","stop","subway","tall_gate","taxi_stand","toll_gantry","traffic_signals","train","train_bullet","train_diesel","train_kids","train_steam","train_wash","tram","tram_side","trampoline","transit","transit_shelter","trolleybus","truck","tunnel","turnstile","veterinary_care","wheelchair","wheelchair_active"],"Vegetation & forest":["amusement_park","bicycle_parked","car_parked","garden_bed","grapes","grass","hedge","lawn","motorcycle_parked","needle_and_spool","parking_space","plant","shrub","shrub_low","street_lamp_arm","tree_and_bench","tree_broadleaved","tree_cactus","tree_leafless","tree_needleleaved","tree_palm","tree_row","tree_stump"],"Water & hydrology":["anchor_medal","beach","board_ferry","boat","boat_dry_dock","boat_floating","boat_ramp","boat_rental","boat_repair","boat_tour","boating","buoy","canoe","coral_reef","crossing_markings-surface","diving","ferry","fish_cleaning","fish_ladder","fishing_pier","fountain","geyser_from_ground","houseboat","ice_fishing","islet_tree","jet_skiing","kayaking","pier_fixed","pier_floating","quay","rafting","sail","sailboat","sailing","scuba_diving","shower","spring_rider","surfing","swamp","water","water_bottle","water_device","water_manhole","water_meter","water_shutoff","water_tap","water_tap_drinkable","water_tower","waterskiing","wind_surfing"],"Terrain & nature":["archery","boulder1","boulder2","boulder3","cairn","cape_landform","cliff_falling_rocks","island_trees_building","mountain_asterisk","mountain_cross","mountain_range","natural_arch","rocket_firework","snow","snow_shoeing","snowboarding","snowmobile","valley"],"Government & public":["army_tent","briefcase_shield","bunker","bunker_silo","campfire","capitol","checkpoint","courthouse","embassy","fire_hydrant","fire_hydrant_underground","fireplace","letter_box","military","military_checkpoint","passport_checkpoint","police_checkpoint","police_officer","post_box","poster_box","shield","telephone","town_hall"],"Basic symbols":["asterisk","compass","diamond","heart","pin","temaki"],"Food & shops":["atm","atm2","barn","beauty_salon","bread","bubble_tea","catering","chocolate","coffee","donut","florist","food","furniture","hammer_shoe","hotpot","j_bar_lift","jewelry_store","laundry","meat","milk_jug","money_hand","pet_store","sandwich","shopping_mall","t_bar_lift","vending_bread","vending_cigarettes","vending_cold_drink","vending_cold_drink2","vending_eggs","vending_flat_coin","vending_hot_drink","vending_hot_drink2","vending_lockers","vending_love","vending_machine","vending_medicine","vending_pet_waste","vending_stamps","vending_tickets","vending_venus"],"Education & culture":["book_store","library","museum","obelisk","paifang","plaque","ruins","school","sculpture","statue"],"Health":["hearing_aid","pharmacy","physiotherapist"],"Religion":["hinduism","quakerism","shinto","sikhism","taoism"],"Hazards & warnings":["security_camera"]}}}};
+// ---------------------------------------------------------------- Google Material Symbols (generated by tools/build_material.py)
+// 3912 icons, Apache-2.0, served by jsDelivr from @material-symbols/svg-400@0.47.4
+CATALOG.iconSets.google = {"label":"Google","title":"Material Symbols","license":"Apache-2.0","url":"https://cdn.jsdelivr.net/npm/@material-symbols/svg-400@0.47.4/{name}.svg","styles":["outlined","rounded","sharp"],"groups":{"Actions":["3d_rotation","accessibility","accessibility_new","accessible","accessible_forward","account_box","account_child","account_child_invert","account_circle","account_circle_off","ad","ad_group","ad_group_off","ad_off","add_ad","add_alert","ads_click","alarm","alarm_add","alarm_off","alarm_on","alarm_pause","alarm_smart_wake","all_inclusive","all_out","anchor","api","approval","approval_delegation","approval_delegation_off","arrow_selector_tool","auto_delete","award_star","background_replace","backup","backup_table","batch_prediction","book_ribbon","bookmark","bookmark_add","bookmark_added","bookmark_bag","bookmark_check","bookmark_flag","bookmark_heart","bookmark_manager","bookmark_remove","bookmark_stacks","bookmark_star","bookmarks","browse","bug_report","build","build_circle","calendar_check","calendar_clock","calendar_lock","calendar_month","calendar_today","category","celebration","change_history","chrome_reader_mode","circle_notifications","circles","circles_ext","code","code_blocks","code_off","code_xml","collections_bookmark","commit","component_exchange","contacts_product","dangerous","data_loss_prevention","date_range","delete_history","developer_guide","domain_verification","domain_verification_off","draft_orders","dynamic_feed","edit_calendar","edit_notifications","edit_square","error","event","event_available","event_busy","event_note","event_repeat","event_upcoming","extension","feature_search","feedback","find_replace","fingerprint","fingerprint_off","flutter","flutter_dash","free_cancellation","gesture","gesture_select","hand_gesture","hand_gesture_off","help","help_center","help_clinic","history","history_2","history_off","history_toggle_off","home_app_logo","hotel_class","hourglass","hourglass_check","hourglass_disabled","hourglass_empty","hourglass_pause","how_to_reg","http","indeterminate_question_box","info","info_i","input","interests","keep","keep_off","keep_public","label","label_important","label_off","language","license","lightbulb","lightbulb_circle","lists","lock","lock_clock","lock_open","lock_open_circle","lock_open_right","lock_person","lock_reset","logo_dev","manage_accounts","manage_history","manufacturing","measuring_tape","model_training","more","more_time","new_label","no_accounts","notification_add","notification_important","offline_pin","offline_pin_off","on_device_training","online_prediction","open_in_browser","outbound","pageview","pan_tool","pan_tool_alt","pan_zoom","pending","perm_contact_calendar","person_add_disabled","person_edit","pin_end","pin_invoke","pinboard","pinboard_unread","pinch_zoom_in","pinch_zoom_out","polymer","power_settings_circle","power_settings_new","preview","preview_off","priority","priority_high","problem","published_with_changes","question_mark","rate_review","record_voice_over","release_alert","reminder","rounded_corner","rsvp","rule","running_with_errors","save_as","schedule","scrollable_header","sdk","search_activity","search_hands_free","select_window","select_window_2","select_window_off","settings_account_box","settings_overscan","settings_power","settings_screen","shadow","shadow_add","shadow_minus","shift","shift_lock","shift_lock_off","snooze","square_foot","stars","sticker","sticker_add","supervised_user_circle","supervised_user_circle_off","supervisor_account","support","swipe","target","target_check","task_alt","terminal","terminal_2","terminal_add","time_auto","timer_10_alt_1","timer_3_alt_1","timer_pause","timer_play","today","touch_app","touch_double","touch_double_2","touch_long","touch_triple","trackpad_input","trackpad_input_2","trackpad_input_3","translate","translate_indic","unlicense","unpublished","update","update_disabled","upgrade","upload_file","user_attributes","verified","verified_off","visibility","visibility_lock","visibility_off","voice_over_off","wand_shine","wand_stars","warning","warning_off","watch_screentime","water_lock","web","web_asset","web_asset_off","web_traffic","webhook","wifi_protected_setup","wysiwyg"],"Activities":["air","architecture","arrow_cool_down","arrow_warm_up","avg_pace","avg_time","azm","backpack","badminton","bath_outdoor","bath_private","bath_public_large","bia","biotech","books_movies_and_music","cadence","cake","cake_add","campaign","camping","check_in_out","cleaning","confirmation_number","construction","distance","downhill_skiing","ecg_heart","eda","elevation","engineering","exercise","experiment","family_link","featured_seasonal_and_gifts","fertile","floor","glass_cup","health_metrics","hiking","how_to_vote","hr_resting","ice_skating","ifl","interactive_space","kayaking","kitesurfing","laps","menstrual_health","mindfulness","monitor_weight_gain","monitor_weight_loss","newsstand","no_backpack","nordic_walking","onsen","pace","padel","paragliding","person_celebrate","person_play","personal_injury","phishing","physical_therapy","piano","piano_off","pickleball","podiatry","readiness_score","real_estate_agent","relax","rewarded_ads","roller_skating","rowing","sauna","school","science","science_off","scoreboard","scuba_diving","self_improvement","service_toolbox","shoe_cleats","skateboarding","sledding","sleep_score","snowboarding","snowshoeing","spo2","sports","sports_and_outdoors","sports_baseball","sports_basketball","sports_cricket","sports_esports","sports_football","sports_golf","sports_gymnastics","sports_handball","sports_hockey","sports_kabaddi","sports_martial_arts","sports_mma","sports_motorsports","sports_rugby","sports_score","sports_soccer","sports_tennis","sports_volleyball","sprint","steps","storm","stress_management","surfing","switch_account","swords","theaters","toys","toys_and_games","toys_fan","trophy","vo2_max","volunteer_activism","water","water_full","water_loss","water_medium","waves"],"Android":["1x_mobiledata","1x_mobiledata_badge","3g_mobiledata","3g_mobiledata_badge","4g_mobiledata","4g_mobiledata_badge","4g_plus_mobiledata","5g","5g_mobiledata_badge","adb","airplanemode_inactive","android","android_cell_4_bar","android_cell_4_bar_alert","android_cell_4_bar_off","android_cell_4_bar_plus","android_cell_5_bar","android_cell_5_bar_alert","android_cell_5_bar_off","android_cell_5_bar_plus","android_cell_dual_4_bar","android_cell_dual_4_bar_alert","android_cell_dual_4_bar_plus","android_cell_dual_5_bar","android_cell_dual_5_bar_alert","android_cell_dual_5_bar_plus","android_wifi_3_bar","android_wifi_3_bar_alert","android_wifi_3_bar_lock","android_wifi_3_bar_off","android_wifi_3_bar_plus","android_wifi_3_bar_question","android_wifi_4_bar","android_wifi_4_bar_alert","android_wifi_4_bar_lock","android_wifi_4_bar_off","android_wifi_4_bar_plus","android_wifi_4_bar_question","apk_document","apk_install","backlight_high","backlight_high_off","backlight_low","badge_critical_battery","battery_0_bar","battery_1_bar","battery_2_bar","battery_3_bar","battery_4_bar","battery_5_bar","battery_6_bar","battery_alert","battery_android_0","battery_android_1","battery_android_2","battery_android_3","battery_android_4","battery_android_5","battery_android_6","battery_android_alert","battery_android_bolt","battery_android_frame_1","battery_android_frame_2","battery_android_frame_3","battery_android_frame_4","battery_android_frame_5","battery_android_frame_6","battery_android_frame_alert","battery_android_frame_bolt","battery_android_frame_full","battery_android_frame_plus","battery_android_frame_question","battery_android_frame_share","battery_android_frame_shield","battery_android_full","battery_android_plus","battery_android_question","battery_android_share","battery_android_shield","battery_change","battery_charging_20","battery_charging_20_2","battery_charging_30","battery_charging_30_2","battery_charging_50","battery_charging_50_2","battery_charging_60","battery_charging_60_2","battery_charging_80","battery_charging_80_2","battery_charging_90","battery_charging_full","battery_charging_full_2","battery_error","battery_full","battery_full_alt","battery_low","battery_plus","battery_share","battery_status_good","battery_unknown","battery_very_low","bigtop_updates","bluetooth","bluetooth_connected","bluetooth_disabled","bluetooth_drive","bluetooth_searching","bolt_boost","brightness_alert","brightness_auto","brightness_empty","brightness_medium","cable","cameraswitch","charger","contextual_token","contextual_token_add","dark_mode","data_saver_on","data_usage","devices_fold","devices_fold_2","display_external_input","do_not_disturb_on_total_silence","dock_to_bottom","dock_to_left","dock_to_right","dual_screen","dvr","e_mobiledata","e_mobiledata_badge","ev_mobiledata_badge","flashlight_off","flashlight_on","g_mobiledata","g_mobiledata_badge","globe_2_cancel","globe_2_question","gpp_bad","gpp_maybe","graphic_eq","graphic_eq_off","grid_3x3","grid_3x3_off","grid_4x4","grid_goldenratio","h_mobiledata","h_mobiledata_badge","h_plus_mobiledata","h_plus_mobiledata_badge","ios","keyboard_capslock_badge","keyboard_external_input","keyboard_full","keyboard_keys","keyboard_off","keyboard_onscreen","keyboard_previous_language","light_mode","light_mode_auto","lte_mobiledata","lte_mobiledata_badge","lte_plus_mobiledata","lte_plus_mobiledata_badge","magnify_docked","magnify_fullscreen","media_bluetooth_off","media_bluetooth_on","mobile_sensor_hi","mobile_sensor_lo","mobile_wrench","mobiledata_arrows","mobiledata_off","mode_standby","nearby","nearby_error","nearby_off","network_cell","network_check","network_locked","network_ping","network_wifi","network_wifi_1_bar","network_wifi_1_bar_locked","network_wifi_2_bar","network_wifi_2_bar_locked","network_wifi_3_bar","network_wifi_3_bar_locked","network_wifi_locked","nfc","nfc_off","nightlight","noise_aware","noise_control_off","noise_control_on","overview_key","password","password_2","password_2_off","pattern","perm_data_setting","perm_scan_wifi","pin","portable_wifi_off","quick_phrases","r_mobiledata","radar","rss_feed","screen_record","screen_rotation_alt","screen_rotation_up","screenshot_frame","screenshot_frame_2","screenshot_keyboard","screenshot_region","settings_system_daydream","signal_cellular_0_bar","signal_cellular_1_bar","signal_cellular_2_bar","signal_cellular_3_bar","signal_cellular_4_bar","signal_cellular_alt","signal_cellular_alt_1_bar","signal_cellular_alt_2_bar","signal_cellular_alt_off","signal_cellular_connected_no_internet_0_bar","signal_cellular_connected_no_internet_4_bar","signal_cellular_nodata","signal_cellular_null","signal_cellular_off","signal_cellular_pause","signal_disconnected","signal_wifi_0_bar","signal_wifi_4_bar","signal_wifi_bad","signal_wifi_off","signal_wifi_statusbar_not_connected","signal_wifi_statusbar_null","sim_card_download","splitscreen","splitscreen_add","splitscreen_bottom","splitscreen_left","splitscreen_right","splitscreen_top","splitscreen_vertical_add","storage","stylus","stylus_note","thermostat","timer_10_select","timer_3_select","timer_5","timer_5_shutter","usb","usb_off","wallpaper","wallpaper_slideshow","widgets","wifi","wifi_1_bar","wifi_2_bar","wifi_calling_bar_1","wifi_calling_bar_2","wifi_calling_bar_3","wifi_find","wifi_home","wifi_lock","wifi_notification","wifi_off","wifi_tethering","wifi_tethering_error","wifi_tethering_off"],"Audio and video":["10k","1k","1k_plus","2d","2d_2","2k","2k_plus","30fps","3d","3d_2","3k","3k_plus","4k","4k_plus","5k","5k_plus","60fps","6k","6k_plus","7k","7k_plus","8k","8k_plus","9k","9k_plus","adaptive_audio_mic","adaptive_audio_mic_off","add_to_queue","airplay","album","animated_images","ar_on_you","ar_stickers","art_track","artist","audio_capture","audio_description","audio_file","autopause","autoplay","autostop","av1","av_timer","avc","brand_awareness","branding_watermark","broadcast_on_home","broadcast_on_personal","call_to_action","cinematic_blur","closed_caption","closed_caption_add","closed_caption_disabled","control_camera","digital_out_of_home","discover_tune","ear_sound","edit_audio","equalizer","explicit","eye_tracking","fast_forward","fast_rewind","featured_play_list","featured_video","fiber_dvr","fiber_manual_record","fiber_new","fiber_pin","fiber_smart_record","forward_10","forward_30","forward_5","forward_circle","forward_media","frame_person","frame_person_mic","frame_person_off","full_hd","genres","hangout_video","hangout_video_off","hd","hearing","hearing_aid","hearing_aid_disabled","hearing_aid_disabled_left","hearing_aid_left","hearing_disabled","high_quality","high_quality_off","instant_mix","interpreter_mode","library_add_check","library_books","library_music","lyrics","media_link","mic","mic_alert","mic_double","mic_gear","mic_off","missed_video_call","movie","movie_edit","movie_edit_off","movie_info","movie_off","movie_speaker","music_cast","music_history","music_note","music_note_2","music_note_add","music_off","music_video","no_sound","not_started","pause","pause_circle","play_arrow","play_circle","play_disabled","play_lesson","play_pause","playlist_add","playlist_add_check","playlist_add_check_circle","playlist_add_circle","playlist_play","playlist_remove","podcasts","privacy","queue_music","queue_play_next","radio","recent_actors","remove_from_queue","repeat","repeat_on","repeat_one","repeat_one_on","replace_audio","replace_image","replace_video","replay","replay_10","replay_30","replay_5","resume","sd","select_to_speak","settings_voice","shuffle","shuffle_on","skip_next","skip_previous","slow_motion_video","sound_detection_dog_barking","sound_detection_glass_break","sound_detection_loud_sound","sound_sampler","spatial_audio","spatial_audio_off","spatial_speaker","spatial_tracking","speech_to_text","speech_to_text_2","speed","speed_0_25","speed_0_2x","speed_0_5","speed_0_5x","speed_0_75","speed_0_7x","speed_1_2","speed_1_25","speed_1_2x","speed_1_5","speed_1_5x","speed_1_75","speed_1_7x","speed_2","speed_2x","speed_3","speed_4","split_scene","split_scene_2","split_scene_down","split_scene_left","split_scene_right","split_scene_up","stop","stop_circle","stream","subscriptions","subtitles","subtitles_gear","surround_sound","text_to_speech","video_call","video_camera_back","video_camera_back_add","video_camera_front","video_camera_front_off","video_frame_copy","video_frame_save","video_label","video_library","video_search","video_settings","video_stable","video_template","videocam","videocam_alert","videocam_off","view_in_ar","view_in_ar_off","voice_selection","voice_selection_off","volume_down","volume_mute","volume_off","volume_up"],"Business":["account_balance","account_balance_wallet","account_tree","add_business","add_card","add_chart","add_shopping_cart","analytics","area_chart","atm","atr","attach_money","bar_chart","bar_chart_4_bars","bar_chart_off","barcode","barcode_reader","barcode_scanner","bid_landscape","bid_landscape_disabled","box","box_add","box_edit","briefcase_meal","bubble_chart","bullet_chart","calculate","candlestick_chart","card_membership","card_travel","cards_star","cases","chart_data","checkbook","contactless","contactless_off","conversion_path","conversion_path_off","conveyor_belt","copyright","corporate_fare","credit_card","credit_card_clock","credit_card_gear","credit_card_heart","credit_card_off","credit_score","currency_bitcoin","currency_exchange","currency_franc","currency_lira","currency_pound","currency_ruble","currency_rupee","currency_rupee_circle","currency_yen","currency_yuan","data_exploration","data_table","database","database_off","database_search","database_upload","delivery_truck_bolt","delivery_truck_speed","domain","domain_add","domain_disabled","domain_disabled_check","donut_large","donut_small","energy","enterprise","enterprise_off","euro","euro_symbol","family_history","finance","finance_mode","flowchart","flowsheet","forklift","front_loader","full_stacked_bar_chart","graph_1","graph_2","graph_3","graph_4","graph_5","graph_6","graph_7","graph_8","grouped_bar_chart","inactive_order","insert_chart","leaderboard","legend_toggle","loyalty","mediation","meeting_room","mintmark","mitre","mobile_tap","money","money_bag","money_off","money_range","monitoring","multiline_chart","network_node","next_week","no_meeting_room","order_approve","order_play","orders","paid","pallet","payment_arrow_down","payment_card","payments","percent_discount","pie_chart","planner_review","podium","precision_manufacturing","price_change","price_check","production_quantity_limits","qr_code","qr_code_2","qr_code_2_add","qr_code_scanner","query_stats","quick_reorder","receipt","receipt_long","receipt_long_off","redeem","remove_shopping_cart","room_preferences","savings","scatter_plot","schema","search_insights","sell","sell_cloud","send_money","shop","shop_two","shopping_bag","shopping_bag_speed","shopping_basket","shopping_cart","shopping_cart_off","shoppingmode","show_chart","source_environment","ssid_chart","stacked_bar_chart","stacked_line_chart","store","storefront","strikethrough_s","tenancy","timeline","toll","track_changes","trending_down","trending_flat","trending_up","trolley","troubleshoot","universal_currency","universal_currency_alt","upi_pay","wallet","waterfall_chart","work","work_alert","work_history","work_update"],"Communicate":["3p","add_call","add_comment","all_inbox","alternate_email","attach_email","attribution","auto_read_pause","auto_read_play","business_messages","calendar_add_on","calendar_apps_script","call","call_end","call_log","call_made","call_merge","call_missed","call_missed_outgoing","call_quality","call_received","call_split","cancel_presentation","cancel_schedule_send","cell_tower","cell_wifi","chat","chat_add_on","chat_apps_script","chat_bubble","chat_bubble_off","chat_dashed","chat_error","chat_info","chat_paste_go","chat_paste_go_2","co_present","comment","comment_bank","comments_disabled","contact_emergency","contact_mail","contact_phone","contact_support","contacts","dialer_sip","dialpad","drafts","duo","e911_avatar","for_you","forum","forward_to_inbox","g_translate","group_search","hourglass_bottom","hourglass_top","hub","import_contacts","inbox","inbox_customize","inbox_text","inbox_text_asterisk","inbox_text_person","inbox_text_share","inventory_2","lan","link","link_2","link_off","live_help","mail","mail_asterisk","mail_lock","mail_off","mail_shield","mark_as_unread","mark_chat_read","mark_chat_unread","mark_email_read","mark_email_unread","mark_unread_chat_alt","markunread_mailbox","mms","mobile_cancel","mobile_sound","mobile_sound_off","mode_comment","move_to_inbox","nat","network_intel_node","network_intelligence","network_intelligence_history","network_intelligence_update","network_manage","next_plan","notification_audio","notification_audio_off","notification_multiple","notification_settings","notification_sound","notifications","notifications_active","notifications_off","notifications_paused","notifications_unread","ods","odt","outbox","outbox_alt","outgoing_mail","pause_presentation","perm_phone_msg","person_search","phone_bluetooth_speaker","phone_callback","phone_cancel","phone_disabled","phone_enabled","phone_forwarded","phone_in_talk","phone_locked","phone_missed","phone_paused","picture_in_picture","picture_in_picture_alt","picture_in_picture_center","picture_in_picture_large","picture_in_picture_medium","picture_in_picture_mobile","picture_in_picture_off","picture_in_picture_small","play_for_work","present_to_all","quickreply","reviews","ring_volume","rtt","satellite_alt","schedule_send","score","send","send_and_archive","settings_bluetooth","settings_phone","signal_cellular_add","sip","sms","speaker_notes","speaker_notes_off","speaker_phone","spoke","stacked_email","stacked_inbox","swap_calls","thread_unread","threat_intelligence","tooltip","tooltip_2","topic","unarchive","unsubscribe","upcoming","video_chat","voice_chat","voice_chat_off","voicemail","voicemail_2","wifi_add","wifi_calling","wifi_channel","wifi_proxy"],"Hardware":["add_diamond","adf_scanner","aod_tablet","aod_watch","arrows_left_right_circle","arrows_up_down_circle","assistant_device","audio_video_receiver","b_circle","balance","browser_updated","camera_video","cast","cast_connected","cast_for_education","cast_pause","cast_warning","chromecast_device","circle_circle","computer","computer_arrow_up","computer_cancel","computer_sound","connected_tv","deskphone","desktop_access_disabled","desktop_cloud","desktop_cloud_stack","desktop_mac","desktop_windows","developer_board","developer_board_off","developer_mode_tv","device_band","device_hub","device_swoosh_star","device_thermostat","devices","devices_off","devices_other","devices_wearables","disc_full","display_add","display_settings","dns","earbud_case","earbud_left","earbud_right","earbuds","earbuds_2","earbuds_battery","ecg","emoji_language","fax","fitness_tracker","fitness_trackers","game_bumper_left","game_bumper_right","game_button_l","game_button_l1","game_button_l2","game_button_r","game_button_r1","game_button_r2","game_button_zl","game_button_zr","game_stick_l3","game_stick_left","game_stick_r3","game_stick_right","game_trigger_left","game_trigger_right","gamepad","gamepad_circle_down","gamepad_circle_left","gamepad_circle_right","gamepad_circle_up","gamepad_down","gamepad_left","gamepad_right","gamepad_up","general_device","google_home_devices","handheld_controller","hard_disk","hard_drive","hard_drive_2","head_mounted_device","headphones","headphones_battery","headset_mic","headset_off","home_max","home_mini","host","important_devices","jamboard_kiosk","joystick","keyboard","keyboard_alt","keyboard_arrow_down","keyboard_arrow_left","keyboard_arrow_right","keyboard_arrow_up","keyboard_backspace","keyboard_capslock","keyboard_hide","keyboard_lock","keyboard_lock_off","keyboard_return","keyboard_tab","keyboard_tab_rtl","laptop_car","laptop_chromebook","laptop_mac","laptop_windows","lda","lift_to_talk","lightning_stand","live_tv","media_output","media_output_off","memory","memory_alt","merge","mimo","mimo_disconnect","missing_controller","mobile","mobile_2","mobile_3","mobile_alert","mobile_arrow_down","mobile_arrow_right","mobile_arrow_up_right","mobile_block","mobile_camera","mobile_cast","mobile_charge","mobile_chat","mobile_check","mobile_code","mobile_dock","mobile_dots","mobile_gear","mobile_hand","mobile_hand_left","mobile_hand_left_off","mobile_hand_off","mobile_info","mobile_landscape","mobile_layout","mobile_lock_landscape","mobile_lock_portrait","mobile_loupe","mobile_menu","mobile_off","mobile_question","mobile_rotate","mobile_rotate_lock","mobile_screensaver","mobile_share","mobile_share_stack","mobile_sound_2","mobile_speaker","mobile_text","mobile_text_2","mobile_ticket","mobile_unlock","mobile_vibrate","monitor","monitor_weight","mouse","mouse_lock","mouse_lock_off","night_sight_max","no_sim","open_jam","p2p","pacemaker","plug_connect","point_of_sale","power","power_input","power_off","print","print_add","print_connect","print_disabled","print_error","print_lock","punch_clock","ramp_left","ramp_right","rear_camera","rectangle_add","remember_me","reset_tv","reset_wrench","robot","robot_2","roundabout_left","roundabout_right","route","router","router_off","save","save_clock","scale","scanner","screen_search_desktop","screen_share","screenshot_monitor","screenshot_tablet","sd_card","sd_card_alert","security_key","server_person","settings_ethernet","settings_input_antenna","settings_input_component","settings_input_hdmi","settings_input_svideo","settings_remote","settop_component","sim_card","sim_card_lock","smart_card_reader","smart_card_reader_off","smart_display","smart_toy","speaker","speaker_3","speaker_group","square_circle","stop_screen_share","straight","tablet","tablet_android","tablet_camera","tablet_mac","touchpad_mouse","touchpad_mouse_off","triangle_circle","tty","tv","tv_displays","tv_guide","tv_next","tv_off","tv_options_edit_channels","tv_options_input_settings","tv_remote","tv_signin","ventilator","videogame_asset","videogame_asset_off","watch","watch_alert","watch_arrow","watch_arrow_down","watch_button","watch_button_press","watch_check","watch_lock","watch_off","watch_vibration","watch_wake","wifi_device","x_circle","y_circle"],"Home":["activity_zone","airwave","aq","aq_indoor","arming_countdown","arrows_more_down","arrows_more_up","assistant_on_hub","battery_horiz_000","battery_horiz_050","battery_horiz_075","battery_profile","chromecast_2","cleaning_bucket","climate_mini_split","cool_to_dry","detection_and_zone","detection_and_zone_off","detector","detector_alarm","detector_battery","detector_co","detector_offline","detector_status","door_open","door_sensor","doorbell_chime","early_on","familiar_face_and_zone","farsight_digital","floor_lamp","google_tv_remote","google_wifi","heat","heat_pump_balance","home_max_dots","home_speaker","home_storage","home_storage_gear","house_with_shield","humidity_indoor","laundry","light_group","mfg_nest_yale_lock","mode_dual","motion_sensor_active","motion_sensor_alert","motion_sensor_idle","motion_sensor_urgent","nest_audio","nest_cam_floodlight","nest_cam_indoor","nest_cam_iq","nest_cam_iq_outdoor","nest_cam_magnet_mount","nest_cam_outdoor","nest_cam_stand","nest_cam_wall_mount","nest_cam_wired_stand","nest_clock_farsight_analog","nest_clock_farsight_digital","nest_connect","nest_detect","nest_display","nest_display_max","nest_doorbell_visitor","nest_eco_leaf","nest_farsight_cool","nest_farsight_dual","nest_farsight_eco","nest_farsight_heat","nest_farsight_seasonal","nest_farsight_weather","nest_found_savings","nest_heat_link_e","nest_heat_link_gen_3","nest_hello_doorbell","nest_mini","nest_multi_room","nest_protect","nest_remote_comfort_sensor","nest_secure_alarm","nest_sunblock","nest_tag","nest_thermostat","nest_thermostat_e_eu","nest_thermostat_gen_3","nest_thermostat_sensor","nest_thermostat_sensor_eu","nest_thermostat_zirconium_eu","nest_true_radiant","nest_wake_on_approach","nest_wake_on_press","nest_wifi_point","nest_wifi_pro","nest_wifi_pro_2","nest_wifi_router","on_hub_device","productivity","self_care","sensors_krx","sensors_krx_off","settings_alert","shield_with_heart","shield_with_house","stadia_controller","table_lamp","tamper_detection_on","temp_preferences_eco","tools_flat_head","tools_installation_kit","tools_ladder","tools_level","tools_phillips","tools_pliers_wire_stripper","tools_power_drill","wall_lamp","water_pump","weather_snowy","window_closed","window_open","window_sensor","zone_person_alert","zone_person_idle","zone_person_urgent"],"Household":["ac_unit","air_freshener","air_purifier","air_purifier_gen","apparel","back_hand","balcony","bath_soak","bathroom","bathtub","bed","bedroom_baby","bedroom_child","bedroom_parent","blanket","blender","blinds","blinds_2","blinds_2_closed","blinds_closed","camera_indoor","camera_outdoor","chair","chair_alt","chair_counter","chair_fireplace","chair_umbrella","checkroom","child_care","coffee","coffee_maker","controller_gen","cooking","countertops","crib","curtains","curtains_closed","deck","desk","detector_smoke","dine_heart","dine_lamp","dining","dishwasher","dishwasher_gen","door_back","door_front","door_sliding","doorbell","doorbell_3p","dresser","dry","electric_bolt","electric_meter","emergency_heat","emergency_heat_2","emergency_home","emergency_recording","emergency_share","emergency_share_off","energy_program_saving","energy_program_time_used","energy_savings_leaf","event_seat","family_home","faucet","fence","fire_check","fire_extinguisher","fireplace","flatware","fork_spoon","foundation","fragrance","garage","garage_door","garage_door_open","garage_home","gas_meter","gate","grass","grocery","hallway","hardware","health_and_beauty","heat_pump","high_chair","highlight","home_and_garden","home_improvement_and_tools","home_iot_device","hot_tub","house","house_siding","household_supplies","humidity_high","humidity_low","humidity_mid","hvac","in_home_mode","iron","kettle","king_bed","kitchen","light","light_group_2","light_off","lightbulb_2","lightstrip","living","matter","microwave","microwave_gen","mode_cool","mode_cool_off","mode_fan","mode_fan_2","mode_fan_off","mode_heat","mode_heat_cool","mode_heat_off","mode_night","mode_off_on","mop","multicooker","outdoor_grill","outlet","oven","oven_gen","propane","propane_tank","range_hood","remote_gen","roller_shades","roller_shades_closed","roofing","scene","sensor_door","sensor_occupied","sensor_window","sensors","sensors_off","shades","shades_closed","shelves","shield_moon","shower","single_bed","skillet","skillet_cooktop","smart_outlet","soap","soundbar","speaker_2","sprinkler","stockpot","stroller","styler","subwoofer","switch","switch_off","table_bar","table_large","table_restaurant","tamper_detection_off","thermometer","thermometer_add","thermometer_alert","thermometer_gain","thermometer_loss","thermometer_minus","thermostat_auto","thermostat_carbon","tv_gen","tv_with_assistant","umbrella","vacuum","vacuum_2","vacuum_2_on","valve","vertical_shades","vertical_shades_closed","wall_art","wash","water_damage","water_heater","weekend","window","yard"],"Images":["10mp","11mp","12mp","13mp","14mp","15mp","16mp","17mp","18mp","19mp","20mp","21mp","22mp","23mp","24fps_select","24mp","2mp","30fps_select","3mp","4mp","50mp","5mp","60fps_select","6mp","7mp","8mp","9mp","add_a_photo","add_photo_alternate","adjust","animation","aspect_ratio","auto_awesome_mosaic","auto_awesome_motion","auto_stories","auto_stories_off","autofps_select","background_dot_large","background_dot_small","background_grid_small","blur_circular","blur_linear","blur_medium","blur_off","blur_on","blur_short","brightness_1","brightness_2","brightness_3","brightness_4","brightness_5","brightness_6","brightness_7","broken_image","brush","burst_mode","camera","camera_roll","center_focus_strong","center_focus_weak","circle","colorize","compare","contrast","contrast_circle","contrast_rtl_off","contrast_square","control_point_duplicate","crop","crop_16_9","crop_21_9","crop_2_3","crop_3_2","crop_5_4","crop_7_5","crop_9_16","crop_free","crop_landscape","crop_portrait","crop_rotate","crop_square","deblur","dehaze","details","dirty_lens","dropper_eye","edit","ev_shadow","ev_shadow_add","ev_shadow_minus","exposure","exposure_neg_1","exposure_neg_2","exposure_plus_1","exposure_plus_2","exposure_zero","face_retouching_off","file_png","filter","filter_1","filter_2","filter_3","filter_4","filter_5","filter_6","filter_7","filter_8","filter_9","filter_9_plus","filter_b_and_w","filter_center_focus","filter_drama","filter_frames","filter_none","filter_retrolux","filter_tilt_shift","filter_vintage","flaky","flare","flash_auto","flash_off","flash_on","flip","flip_camera_android","flip_camera_ios","fluorescent","gallery_thumbnail","gif","gif_2","gif_box","gradient","grain","grid_off","grid_on","hdr_auto","hdr_auto_select","hdr_enhanced_select","hdr_off","hdr_off_select","hdr_on","hdr_on_select","hdr_plus","hdr_plus_off","hdr_strong","hdr_weak","healing","hevc","hide_image","high_density","high_res","image","image_arrow_up","image_aspect_ratio","image_inset","image_search","imagesmode","incomplete_circle","invert_colors","invert_colors_off","landscape","landscape_2","landscape_2_edit","landscape_2_off","leak_add","leak_remove","lens_blur","linked_camera","looks","looks_3","looks_4","looks_5","looks_6","looks_one","looks_two","loupe","low_density","macro_auto","macro_off","masked_transitions","masked_transitions_add","mic_external_off","mic_external_on","mobile_camera_front","mobile_camera_rear","monochrome_photos","motion_blur","motion_mode","motion_photos_auto","motion_photos_on","motion_photos_paused","motion_play","mp","nature","nature_people","night_sight_auto","night_sight_auto_off","no_flash","no_photography","opacity","palette","panorama","panorama_horizontal","panorama_photosphere","panorama_vertical","panorama_wide_angle","party_mode","perm_camera_mic","photo","photo_album","photo_auto_merge","photo_camera","photo_camera_back","photo_camera_front","photo_frame","photo_library","photo_prints","photo_size_select_large","photo_size_select_small","picture_as_pdf","planner_banner_ad_pt","raw_off","raw_on","reset_brightness","reset_colors","reset_exposure","reset_focus","reset_iso","reset_settings","reset_shadow","reset_shutter_speed","reset_white_balance","rotate_90_degrees_ccw","rotate_90_degrees_cw","rotate_left","rotate_right","settings_b_roll","settings_brightness","settings_cinematic_blur","settings_motion_mode","settings_night_sight","settings_panorama","settings_photo_camera","settings_slow_motion","settings_timelapse","settings_video_camera","shutter_speed","shutter_speed_add","shutter_speed_minus","slideshow","spatial_gallery","straighten","style","switch_camera","switch_video","texture","texture_add","texture_minus","timelapse","timer","timer_1","timer_10","timer_2","timer_3","timer_off","tonality","tonality_2","trail_length","trail_length_medium","trail_length_short","transform","transition_chop","transition_dissolve","transition_fade","transition_push","transition_slide","tune","unknown_2","view_comfy","view_compact","view_real_size","vignette","vignette_2","vr180_create2d","vr180_create2d_off","vrpano","wb_auto","wb_incandescent","wb_iridescent","wb_shade","wb_sunny","wb_twilight","wb_twilight_2","web_stories"],"Maps":["360","add_home","add_home_work","add_location","add_location_alt","add_road","add_triangle","airline_stops","alt_route","assist_walker","award_meal","baby_changing_station","beenhere","business_center","calendar_meal_2","castle","church","cleaning_services","compass_calibration","connecting_airports","crisis_alert","directions","directions_alt","directions_alt_off","directions_off","dry_cleaning","east","edit_attributes","edit_location","edit_location_alt","edit_road","electrical_services","emergency","ev_station","explore","explore_nearby","explore_off","factory","fastfood","file_map_stack","fire_hydrant","fire_truck","flag","flag_2","flag_check","flag_circle","flight_class","fmd_bad","fort","globe","globe_asia","globe_clock","globe_location_pin","globe_uk","hanami_dango","handyman","home_pin","home_repair_service","home_work","kanji_alcohol","kebab_dining","layers","layers_clear","local_activity","local_atm","local_car_wash","local_convenience_store","local_drink","local_fire_department","local_florist","local_gas_station","local_hospital","local_laundry_service","local_library","local_mall","local_parking","local_pharmacy","local_pizza","local_police","local_post_office","local_see","location_away","location_disabled","location_home","location_off","location_on","location_searching","map","map_pin_heart","map_pin_review","map_search","maps_ugc","meal_dinner","meal_lunch","medical_services","minor_crash","mode_of_travel","mosque","move","move_location","moved_location","moving","moving_ministry","multiple_airports","multiple_stop","my_location","navigation","near_me","near_me_disabled","no_meals","north","north_east","north_west","not_listed_location","package","package_2","parent_child_dining","park","pergola","person_pin","person_pin_circle","pest_control","pest_control_rodent","pet_supplies","pin_drop","pin_history","pin_road","pin_road_2","plumbing","remove_road","rest_area","restaurant","run_circle","safety_check","safety_check_off","satellite","set_meal","share_eta","share_location","shaved_ice","signpost","soba","solo_dining","sos","soup_kitchen","south","south_east","south_west","stadium","streetview","synagogue","takeout_dining","takeout_dining_2","tatami_seat","temple_buddhist","temple_hindu","theater_comedy","things_to_do","tilt_arrow_down","tilt_arrow_up","tour","traffic","transfer_within_a_station","transit_enterexit","trip_origin","udon","universal_local","warehouse","west","where_to_vote","wine_bar","wrong_location","yakitori","zoom_in_map","zoom_out_map"],"Privacy":["add_moderator","admin_panel_settings","assured_workload","badge","disabled_visible","e911_emergency","encrypted","encrypted_add","encrypted_add_circle","encrypted_minus_circle","encrypted_off","enhanced_encryption","exclamation","id_card","id_card_2","identity_aware_proxy","key_visualizer","mobile_theft","no_encryption","passkey","person_shield","policy","policy_alert","privacy_tip","private_connectivity","remove_moderator","report","report_off","security","shield","shield_card","shield_lock","shield_locked","shield_person","shield_question","shield_radar","shield_toggle","sync_lock","verified_user","vpn_key","vpn_key_alert","vpn_key_off","vpn_lock","vpn_lock_2","wifi_password"],"Social":["18_up_rating","6_ft_apart","acupuncture","add_reaction","admin_meds","agender","allergies","allergy","altitude","antigravity","avocado_bean","barefoot","bedtime","bedtime_off","blind","blood_pressure","bloodtype","body_fat","body_system","bomb","boy","breastfeeding","brick","bring_your_own_ip","calendar_meal","candle","cannabis","cardio_load","cardiology","cheer","chef_hat","chess","chess_bishop","chess_bishop_2","chess_king","chess_king_2","chess_knight","chess_pawn","chess_pawn_2","chess_queen","chess_rook","child_hat","clean_hands","clear_day","clinical_notes","co2","cognition","cognition_2","comedy_mask","comic_bubble","communication","communities","compost","conditions","congenital","connect_without_contact","conversation","cookie","cookie_off","coronavirus","crossword","crowdsource","crown","cruelty_free","cyclone","deceased","demography","dentistry","dermatology","destruction","dew_point","diamond","diamond_shine","digital_wellbeing","dine_in","diversity_1","diversity_2","diversity_3","diversity_4","domino_mask","drone","drone_2","earthquake","eco","editor_choice","egg","egg_alt","elderly","elderly_woman","emoji_food_beverage","emoji_nature","emoji_objects","emoji_people","emoji_symbols","emoji_transportation","emoticon","endocrinology","ent","explosion","eyebrow","eyeglasses","eyeglasses_2","eyeglasses_2_sound","eyeglasses_3","face","face_2","face_3","face_4","face_5","face_6","face_down","face_left","face_nod","face_right","face_shake","face_up","falling","family_group","family_star","female","femur","femur_alt","flood","fluid","fluid_balance","fluid_med","foggy","folded_hands","follow_the_signs","foot_bones","footprint","forest","fork_chart","front_hand","garden_cart","gastroenterology","gavel","genetics","girl","globe_book","glucose","group","group_add","group_off","group_remove","group_work","groups","groups_2","groups_3","guardian","gynecology","hand_bones","hand_meal","hand_package","handshake","health_and_safety","health_cross","heart_broken","heart_smile","helicopter","hematology","hive","home_health","humerus","humerus_alt","humidity_percentage","identity_platform","immunology","infrared","inpatient","jewelry","kid_star","lab_panel","lab_research","labs","landslide","lips","male","man","man_2","man_3","man_4","manga","masks","massage","medical_information","medical_mask","medication","medication_liquid","menu_book_2","metabolism","microbiology","military_tech","mist","mixture_med","monitor_heart","mood","mood_bad","mood_heart","moon_stars","mountain_flag","moving_beds","mystery","nephrology","neurology","no_adult_content","not_accessible","not_accessible_forward","nutrition","oil_barrel","oncology","ophthalmology","oral_disease","orbit","orthopedics","outdoor_garden","outpatient","outpatient_med","owl","oxygen_saturation","partly_cloudy_day","partly_cloudy_night","partner_exchange","partner_heart","pediatrics","people_size_decrease","people_size_increase","person","person_2","person_3","person_4","person_add","person_alert","person_apron","person_cancel","person_check","person_heart","person_off","person_raised_hand","person_remove","person_text","pets","pill","pill_off","planet","playground","playground_2","playing_cards","poker_chip","potted_plant","prayer_times","pregnancy","pregnant_woman","prescriptions","procedure","psychiatry","psychology","psychology_alt","public","public_off","pulmonology","pulse_alert","quiz","radiology","rainy","rainy_heavy","rainy_light","rainy_snow","raven","recent_patient","recommend","recycling","reduce_capacity","respiratory_rate","rheumatology","rib_cage","rocket","rocket_launch","routine","safety_divider","salinity","sanitizer","sentiment_calm","sentiment_content","sentiment_dissatisfied","sentiment_excited","sentiment_extremely_dissatisfied","sentiment_frustrated","sentiment_neutral","sentiment_sad","sentiment_satisfied","sentiment_stressed","sentiment_very_dissatisfied","sentiment_very_satisfied","sentiment_worried","settings_seating","severe_cold","share","share_off","shield_watch","short_stay","sick","sign_language","sign_language_off","simulation","siren","siren_check","siren_open","siren_question","skeleton","skull","skull_list","snail","snowflake","snowing","snowing_heavy","social_distance","social_leaderboard","solar_power","south_america","specific_gravity","square_dot","star_shine","stars_2","stethoscope","stethoscope_arrow","stethoscope_check","strategy","sunny","sunny_snowing","support_agent","surgical","sword_rose","symptoms","syringe","table_sign","tactic","taunt","thumb_down","thumb_up","thumbs_up_double","thumbs_up_down","thunderstorm","tibia","tibia_alt","tornado","total_dissolved_solids","transgender","travel_explore","tsunami","ulna_radius","ulna_radius_alt","undereye","urology","vaccines","vape_free","vaping_rooms","vital_signs","volcano","ward","water_bottle","water_bottle_large","water_do","water_drop","water_drops","water_ec","water_lux","water_orp","water_ph","water_voc","waving_hand","wc","weather_hail","weather_mix","weight","whatshot","wheat","wind_power","woman","woman_2","workspace_premium","workspaces","wounds_injuries","wrist"],"Text":["add_column_left","add_column_right","add_link","add_notes","add_row_above","add_row_below","add_to_drive","align_center","align_end","align_flex_center","align_flex_end","align_flex_start","align_horizontal_center","align_horizontal_left","align_horizontal_right","align_items_stretch","align_justify_center","align_justify_flex_end","align_justify_flex_start","align_justify_space_around","align_justify_space_between","align_justify_space_even","align_justify_stretch","align_self_stretch","align_space_around","align_space_between","align_space_even","align_start","align_stretch","align_vertical_bottom","align_vertical_center","align_vertical_top","amp_stories","archive","article","article_person","article_shortcut","assignment","assignment_add","assignment_globe","assignment_ind","assignment_late","assignment_return","assignment_returned","assignment_turned_in","asterisk","attach_file","attach_file_add","attach_file_off","attachment","automation","ballot","book","book_2","book_3","book_4","book_5","book_6","border_all","border_bottom","border_clear","border_color","border_horizontal","border_inner","border_left","border_outer","border_right","border_style","border_top","border_vertical","brand_family","breaking_news","breaking_news_alt_1","business_chip","calendar_view_day","calendar_view_month","calendar_view_week","cards_stack","cell_merge","checklist","checklist_rtl","clarify","cloud","cloud_alert","cloud_circle","cloud_done","cloud_download","cloud_lock","cloud_off","cloud_sync","cloud_upload","colors","combine_columns","contact_page","content_copy","content_cut","content_paste","content_paste_go","content_paste_off","content_paste_search","contract","contract_delete","contract_edit","convert_to_text","copy_all","counter_0","counter_1","counter_2","counter_3","counter_4","counter_5","counter_6","counter_7","counter_8","counter_9","csv","custom_typography","dashboard","dashboard_2","dashboard_2_add","dashboard_2_edit","dashboard_2_gear","dashboard_customize","data_array","data_object","decimal_decrease","decimal_increase","description","deselect","design_services","diagnosis","diagonal_line","dictionary","difference","docs","docs_add_on","docs_apps_script","document_scanner","document_search","draft","drag_handle","draw","draw_abstract","draw_collage","drive_export","drive_file_move","drive_file_rename","drive_folder_upload","edit_document","edit_note","edit_off","equal","eraser_size_1","eraser_size_2","eraser_size_3","eraser_size_4","eraser_size_5","export_notes","fact_check","file_copy","file_copy_off","file_present","file_save","file_save_off","files","finance_chip","find_in_page","fit_page","fit_page_height","fit_page_width","fit_width","flex_direction","flex_no_wrap","flex_wrap","flip_to_back","flip_to_front","folder","folder_check","folder_check_2","folder_code","folder_copy","folder_data","folder_delete","folder_eye","folder_info","folder_limited","folder_managed","folder_match","folder_off","folder_open","folder_shared","folder_special","folder_supervised","folder_zip","font_download","font_download_off","format_align_center","format_align_justify","format_align_left","format_align_right","format_bold","format_clear","format_color_fill","format_color_reset","format_color_text","format_h1","format_h2","format_h3","format_h4","format_h5","format_h6","format_image_back","format_image_break_left","format_image_break_right","format_image_front","format_image_inline_left","format_image_inline_right","format_image_left","format_image_right","format_indent_decrease","format_indent_increase","format_ink_highlighter","format_italic","format_letter_spacing","format_letter_spacing_2","format_letter_spacing_standard","format_letter_spacing_wide","format_letter_spacing_wider","format_line_spacing","format_list_bulleted","format_list_bulleted_add","format_list_numbered","format_list_numbered_rtl","format_overline","format_paint","format_paint_off","format_paragraph","format_quote","format_quote_off","format_shapes","format_size","format_strikethrough","format_text_clip","format_text_overflow","format_text_wrap","format_textdirection_l_to_r","format_textdirection_r_to_l","format_textdirection_vertical","format_underlined","format_underlined_squiggle","forms_add_on","forms_apps_script","frame_inspect","frame_reload","frame_source","full_coverage","function","functions","glyphs","grading","grid_guides","grid_layout_side","grid_view","heap_snapshot_large","heap_snapshot_multiple","heap_snapshot_thumbnail","height","hexagon","highlighter_size_1","highlighter_size_2","highlighter_size_3","highlighter_size_4","highlighter_size_5","history_edu","horizontal_align_center","horizontal_align_left","horizontal_align_right","horizontal_distribute","horizontal_rule","horizontal_split","imagesearch_roller","ink_eraser","ink_eraser_off","ink_highlighter","ink_highlighter_move","ink_highlighter_off","ink_marker","ink_pen","ink_selection","insert_page_break","insert_text","integration_instructions","inventory","join","join_inner","join_left","join_right","lab_profile","language_chinese_array","language_chinese_cangjie","language_chinese_dayi","language_chinese_pinyin","language_chinese_quick","language_chinese_wubi","language_french","language_gb_english","language_international","language_japanese_kana","language_korean_latin","language_pinyin","language_spanish","language_us","language_us_colemak","language_us_dvorak","lasso_select","letter_switch","line_axis","line_curve","line_end","line_end_arrow","line_end_arrow_notch","line_end_circle","line_end_diamond","line_end_square","line_start","line_start_arrow","line_start_arrow_notch","line_start_circle","line_start_diamond","line_start_square","line_style","line_weight","linear_scale","list","list_2","list_alt","list_alt_add","list_alt_check","list_arrow","location_chip","low_priority","lowercase","margin","markdown","markdown_copy","markdown_paste","match_case","match_case_off","match_word","menu_book","merge_type","news","newsmode","newspaper","note_add","note_alt","note_stack","note_stack_add","notes","numbers","other_admission","overview","padding","page_footer","page_header","pageless","pages","pen_size_1","pen_size_2","pen_size_3","pen_size_4","pen_size_5","pending_actions","pentagon","percent","perm_media","person_book","pivot_table_chart","plagiarism","polyline","post","post_add","process_chart","read_more","rectangle","regular_expression","remove_selection","reorder","request_page","request_quote","reset_image","restore_page","rubric","rule_folder","scan","scan_delete","script","segment","select","serif","shape_line","shapes","sheets_rtl","short_text","signature","slab_serif","slide_library","smb_share","snippet_folder","source_notes","space_bar","space_dashboard","space_dashboard_2","special_character","spellcheck","square","stack_hexagon","sticky_note","sticky_note_2","stock_media","stroke_full","stroke_partial","stylus_brush","stylus_fountain_pen","stylus_highlighter","stylus_laser_pointer","stylus_pen","stylus_pencil","subject","subscript","subtitles_off","summarize","superscript","table","table_chart","table_chart_view","table_convert","table_edit","table_eye","table_rows","table_rows_narrow","table_view","tag","task","team_dashboard","text_ad","text_ad_off","text_compare","text_decrease","text_fields","text_fields_alt","text_format","text_increase","text_rotate_up","text_rotate_vertical","text_rotation_angledown","text_rotation_angleup","text_rotation_down","text_rotation_none","text_select_end","text_select_jump_to_beginning","text_select_jump_to_end","text_select_move_back_character","text_select_move_back_word","text_select_move_down","text_select_move_forward_character","text_select_move_forward_word","text_select_move_up","text_select_start","text_snippet","text_up","thumbnail_bar","title","titlecase","toc","top_panel_close","top_panel_open","tsv","two_pager","two_pager_store","type_specimen","ungroup","unknown_document","uppercase","variable_add","variable_insert","variable_remove","variables","vertical_align_bottom","vertical_align_center","vertical_align_top","vertical_distribute","vertical_split","video_file","view_agenda","view_array","view_carousel","view_column","view_column_2","view_day","view_headline","view_list","view_module","view_object_track","view_quilt","view_sidebar","view_stream","view_week","voting_chip","wrap_text"],"Transit":["agriculture","airlines","airport_shuttle","ambulance","auto_towing","auto_transmission","bike_dock","bike_lane","bike_scooter","boat_bus","boat_railway","bus_alert","bus_map_pin","bus_railway","cable_car","car_crash","car_defrost_left","car_defrost_low_left","car_defrost_low_right","car_defrost_mid_left","car_defrost_mid_low_left","car_defrost_mid_low_right","car_defrost_mid_right","car_defrost_right","car_fan_low_left","car_fan_low_mid_left","car_fan_low_right","car_fan_mid_left","car_fan_mid_low_right","car_fan_mid_right","car_fan_recirculate","car_fan_recirculate_2","car_gear","car_lock","car_mirror_heat","car_seat_off","car_tag","commute","departure_board","directions_bike","directions_boat","directions_bus","directions_car","directions_railway","directions_railway_2","directions_run","directions_subway","directions_walk","electric_bike","electric_car","electric_moped","electric_rickshaw","electric_scooter","fan_focus","fan_indirect","flight","flight_land","flight_takeoff","flyover","fork_left","fork_right","funicular","garage_check","garage_money","gondola_lift","hail","hov","hvac_max_defrost","local_shipping","local_taxi","metro","monorail","moped","moped_package","motorcycle","no_crash","no_transfer","parking_meter","parking_sign","parking_valet","pedal_bike","plane_contrails","railway_alert","railway_alert_2","road","rv_hookup","sailing","scooter","seat_cool_left","seat_cool_right","seat_heat_left","seat_heat_right","seat_read","seat_vent_left","seat_vent_right","seat_window","snowmobile","speed_camera","steering_wheel_cool","steering_wheel_heat","subway","subway_walk","swap_driving_apps","swap_driving_apps_wheel","taxi_alert","tire_repair","traffic_jam","train","tram","transit_ticket","transportation","trolley_cable_car","turn_left","turn_right","turn_sharp_left","turn_sharp_right","turn_slight_left","turn_slight_right","two_wheeler","u_turn_left","u_turn_right","unpaved_road","walk_bike","windshield_defrost_auto","windshield_defrost_front","windshield_defrost_rear","windshield_heat_front"],"Travel":["airline_seat_flat","airline_seat_flat_angled","airline_seat_individual_suite","airline_seat_legroom_extra","airline_seat_legroom_normal","airline_seat_legroom_reduced","airline_seat_recline_extra","airline_seat_recline_normal","airplane_ticket","apartment","attractions","bakery_dining","bath_bedrock","beach_access","beer_meal","bento","breakfast_dining","brunch_dining","bungalow","cabin","car_rental","car_repair","carpenter","carry_on_bag","carry_on_bag_checked","carry_on_bag_inactive","carry_on_bag_question","casino","chalet","checked_bag","checked_bag_question","child_friendly","concierge","cottage","dinner_dining","do_not_step","do_not_touch","elevator","escalator","escalator_warning","family_restroom","festival","fitness_center","flights_and_hotels","food_bank","gite","golf_course","holiday_village","hotel","houseboat","icecream","japanese_curry","japanese_flag","liquor","local_bar","local_cafe","local_dining","location_city","luggage","lunch_dining","mountain_steam","museum","night_shelter","nightlife","no_drinks","no_food","no_luggage","no_stroller","okonomiyaki","other_houses","passport","personal_bag","personal_bag_off","personal_bag_question","personal_places","pool","ramen_dining","rice_bowl","room_service","smoke_free","smoking_rooms","spa","sports_bar","stairs","stairs_2","tapas","travel","travel_luggage_and_bags","trip","villa","washoku","wheelchair_pickup","yoshoku","your_trips"],"UI actions":["123","abc","accessible_menu","action_key","acute","add","add_2","add_box","add_circle","add_task","all_match","amend","app_badging","app_registration","apps","apps_outage","arrow_and_edge","arrow_back","arrow_back_2","arrow_back_ios","arrow_back_ios_new","arrow_circle_down","arrow_circle_left","arrow_circle_right","arrow_circle_up","arrow_downward","arrow_downward_alt","arrow_drop_down","arrow_drop_down_circle","arrow_drop_up","arrow_forward","arrow_forward_ios","arrow_insert","arrow_left","arrow_left_alt","arrow_menu_close","arrow_menu_open","arrow_or_edge","arrow_outward","arrow_range","arrow_right","arrow_right_alt","arrow_shape_up","arrow_shape_up_stack","arrow_shape_up_stack_2","arrow_split","arrow_top_left","arrow_top_right","arrow_upload_progress","arrow_upload_ready","arrow_upward","arrow_upward_alt","arrows_input","arrows_output","arrows_outward","assistant_direction","assistant_navigation","autorenew","back_to_tab","backspace","block","bolt","borg","bottom_app_bar","bottom_drawer","bottom_navigation","bottom_panel_close","bottom_panel_open","bottom_right_click","bottom_sheets","browse_activity","browse_gallery","bubble","bubbles","bucket_check","buttons_alt","cached","cancel","captive_portal","capture","cards","category_search","change_circle","check","check_alert","check_box","check_box_outline_blank","check_circle","check_circle_unread","check_indeterminate_small","check_small","chevron_backward","chevron_forward","chevron_left","chevron_line_up","chevron_right","chip_extraction","chips","chronic","clear_all","clock_arrow_down","clock_arrow_up","clock_loader_10","clock_loader_20","clock_loader_40","clock_loader_60","clock_loader_80","clock_loader_90","close","close_fullscreen","close_small","collapse_all","collapse_content","compare_arrows","compress","create_new_folder","css","cycle","data_alert","data_check","data_info_alert","data_thresholding","dataset","dataset_linked","delete","delete_forever","delete_sweep","density_large","density_medium","density_small","deployed_code","deployed_code_account","deployed_code_alert","deployed_code_history","deployed_code_update","desktop_landscape","desktop_landscape_add","desktop_portrait","dialogs","directory_sync","disabled_by_default","do_not_disturb_off","do_not_disturb_on","done_all","done_outline","double_arrow","download","download_2","download_done","download_for_offline","downloading","drag_click","drag_indicator","drag_pan","dropdown","dropdown_menu","dynamic_form","edit_arrow_down","edit_arrow_up","eject","empty_dashboard","enable","error_med","event_list","exit_to_app","expand","expand_all","expand_circle_down","expand_circle_right","expand_circle_up","expand_content","expansion_panels","extension_off","favorite","file_download_off","file_export","file_json","file_open","file_upload_off","filter_alt","filter_alt_off","filter_arrow_right","filter_list","filter_list_off","first_page","fit_screen","float_landscape_2","float_portrait_2","forward","frame_bug","frame_exclamation","fullscreen","fullscreen_exit","fullscreen_portrait","go_to_line","heart_check","heart_minus","heart_plus","hide","hide_source","highlight_keyboard_focus","highlight_mouse_cursor","highlight_text_cursor","hls","hls_off","home","hourglass_arrow_down","hourglass_arrow_up","html","iframe","iframe_off","indeterminate_check_box","input_circle","install_desktop","ios_share","javascript","jump_to_element","key","key_off","key_vertical","keyboard_command_key","keyboard_control_key","keyboard_double_arrow_down","keyboard_double_arrow_left","keyboard_double_arrow_right","keyboard_double_arrow_up","keyboard_option_key","last_page","left_click","left_panel_close","left_panel_open","library_add","linked_services","login","logout","magnification_large","magnification_small","manage_search","maximize","menu","menu_open","minimize","modeling","more_down","more_horiz","more_up","more_vert","move_down","move_group","move_item","move_selection_down","move_selection_left","move_selection_right","move_selection_up","move_up","multimodal_hand_eye","new_window","open_in_full","open_in_new","open_in_new_down","open_in_new_off","open_run","open_with","output","output_circle","page_control","page_info","page_menu_ios","partner_reports","patient_list","php","pinch","pip","pip_exit","place_item","point_scan","position_bottom_left","position_bottom_right","position_top_right","preliminary","progress_activity","prompt_suggestion","publish","question_exchange","quick_reference","quick_reference_all","radio_button_checked","radio_button_partial","radio_button_unchecked","rebase","rebase_edit","recenter","redo","refresh","remove","remove_done","reopen_window","repartition","reply","reply_all","resize","resize_window","responsive_layout","restart_alt","restore_from_trash","right_click","right_panel_close","right_panel_open","ripples","rotate_auto","rule_settings","saved_search","search","search_check","search_check_2","search_gear","search_off","select_all","select_check_box","send_time_extension","settings","settings_accessibility","settings_applications","settings_backup_restore","settings_heart","share_reviews","share_windows","shelf_auto_hide","shelf_position","shopping_cart_checkout","side_navigation","single_arrow","sliders","sort","sort_by_alpha","splitscreen_landscape","splitscreen_landscape_add","splitscreen_portrait","sql","stack","stack_group","stack_off","stack_star","stacks","star","star_half","star_rate","star_rate_half","start","stat_0","stat_1","stat_2","stat_3","stat_minus_1","stat_minus_2","stat_minus_3","step","step_into","step_out","step_over","steppers","subdirectory_arrow_left","subdirectory_arrow_right","subheader","swap_horiz","swap_horizontal_circle","swap_vert","swap_vertical_circle","sweep","swipe_down","swipe_down_alt","swipe_left","swipe_left_2","swipe_left_alt","swipe_right","swipe_right_2","swipe_right_alt","swipe_up","swipe_up_alt","swipe_vertical","switch_access","switch_access_2","switch_access_3","switch_access_shortcut","switch_access_shortcut_add","switch_left","switch_right","switches","sync","sync_alt","sync_arrow_down","sync_arrow_up","sync_desktop","sync_disabled","sync_problem","sync_saved_locally","sync_saved_locally_off","system_update_alt","tab","tab_close","tab_close_inactive","tab_close_right","tab_duplicate","tab_group","tab_inactive","tab_move","tab_new_right","tab_recent","tab_search","tab_unselected","tabs","thermostat_arrow_down","thermostat_arrow_up","tile_large","tile_medium","tile_small","timer_arrow_down","timer_arrow_up","toast","toggle_off","toggle_on","token","toolbar","undo","unfold_less","unfold_less_double","unfold_more","unfold_more_double","unknown_5","unknown_med","upload","upload_2","view_apps","view_comfy_alt","view_compact_alt","view_cozy","view_kanban","view_timeline","widget_medium","widget_menu","widget_small","widget_width","width_full","width_normal","width_wide","youtube_searched_for","zoom_in","zoom_out"]}};
 // ---------------------------------------------------------------- icon catalog
 // Icons (Maki, Temaki — both CC0) load from jsDelivr on first use and are then
 // stored inline in the item, so layouts keep working offline and export cleanly.
@@ -3140,7 +3182,7 @@ const iconCache = new Map();
 async function fetchIconSvg(set, name) {
   const key = `${set}/${name}`;
   if (iconCache.has(key)) return iconCache.get(key);
-  const url = CATALOG.iconSets[set].url.replace("{name}", encodeURIComponent(name));
+  const url = CATALOG.iconSets[set].url.replace("{name}", name.split("/").map(encodeURIComponent).join("/"));
   const p = fetch(url)
     .then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -3166,7 +3208,7 @@ async function fetchIconSvg(set, name) {
 async function addIconItem(set, name) {
   const pg = S.doc.page;
   const item = newItem("icon", pg.width / 2 - 5, pg.height / 2 - 5);
-  item.name = name.replace(/[-_]/g, " ");
+  item.name = name.split("/").pop().replace(/-fill$/, " (filled)").replace(/[-_]/g, " ");
   item.props.set = set;
   item.props.name = name;
   commit(() => S.doc.items.push(item));
@@ -3182,49 +3224,618 @@ async function addIconItem(set, name) {
   }
 }
 
-// ---- catalog browser: Maki / Temaki (CC0, jsDelivr)
-const ICON_SET_LABELS = { maki: "Maki", temaki: "Temaki" };
+// ---- catalog browser: Maki / Temaki (CC0) and Google Material Symbols (Apache-2.0), all from jsDelivr
+const ICON_SET_LABELS = { maki: "Maki", temaki: "Temaki", google: "Google" };
+const ICON_GROUP_ORDER = {
+  default: ["Basic symbols", "Water & hydrology", "Terrain & nature", "Vegetation & forest", "Transport", "Government & public", "Health", "Education & culture", "Religion", "Tourism & recreation", "Sports", "Food & shops", "Utilities & industry", "Hazards & warnings", "Other"],
+  google: ["Maps", "Travel", "Transit", "Home", "Household", "Activities", "Business", "Social", "Communicate", "Actions", "UI actions", "Images", "Text", "Hardware", "Audio and video", "Privacy", "Android"],
+};
+const CATALOG_BATCH = 60;
 function openCatalog(anchor) {
   const tabs = el("div", { class: `${NS}-seg ${NS}-segfull` });
   const search = el("input", { type: "search", class: `${NS}-input`, placeholder: "Search icons (water, mountain, airport…)" });
+  const styleBar = el("div", { class: `${NS}-catstyle` });
   const body = el("div", { class: `${NS}-catbody` });
   let tab = S.catalogTab && ICON_SET_LABELS[S.catalogTab] ? S.catalogTab : "maki";
+  S.catalogStyle = S.catalogStyle || { style: "outlined", fill: false };
+  const expanded = new Set();
+  const iconName = (n) => (tab === "google" ? `${S.catalogStyle.style}/${n}${S.catalogStyle.fill ? "-fill" : ""}` : n);
+  const iconBtnFor = (set, n) => {
+    const full = iconName(n);
+    const b = el("button", { type: "button", class: `${NS}-iconbtn ${NS}-remote`, title: n.replace(/_/g, " ") });
+    b.appendChild(el("img", { src: set.url.replace("{name}", full.split("/").map(encodeURIComponent).join("/")), alt: n, loading: "lazy", decoding: "async" }));
+    b.addEventListener("click", () => {
+      closePopover();
+      addIconItem(tab, full);
+    });
+    return b;
+  };
+  const drawStyle = () => {
+    styleBar.innerHTML = "";
+    if (tab !== "google") return;
+    const seg = el("span", { class: `${NS}-seg` });
+    for (const st of CATALOG.iconSets.google.styles) {
+      const b = el("button", { type: "button", class: st === S.catalogStyle.style ? "active" : "" }, st[0].toUpperCase() + st.slice(1));
+      b.addEventListener("click", () => {
+        S.catalogStyle.style = st;
+        drawStyle();
+        draw();
+      });
+      seg.appendChild(b);
+    }
+    const fill = el("input", { type: "checkbox", checked: S.catalogStyle.fill });
+    fill.addEventListener("change", () => {
+      S.catalogStyle.fill = fill.checked;
+      draw();
+    });
+    styleBar.append(seg, el("label", { class: `${NS}-check` }, fill, el("span", {}, "Filled")));
+  };
   const draw = () => {
     S.catalogTab = tab;
     for (const b of tabs.children) b.classList.toggle("active", b.dataset.v === tab);
     body.innerHTML = "";
     const q = search.value.trim().toLowerCase();
     const set = CATALOG.iconSets[tab];
-    body.append(el("p", { class: `${NS}-muted` }, `${set.label} icons · ${set.license} (public domain). Click to place on the page.`));
-    const order = ["Basic symbols", "Water & hydrology", "Terrain & nature", "Vegetation & forest", "Transport", "Government & public", "Health", "Education & culture", "Religion", "Tourism & recreation", "Sports", "Food & shops", "Utilities & industry", "Hazards & warnings", "Other"];
-    for (const gname of order) {
-      const names = (set.groups[gname] || []).filter((n) => !q || n.includes(q.replace(/\s+/g, "-")) || n.includes(q.replace(/\s+/g, "_")));
+    const lic = set.license === "CC0-1.0" ? "CC0 (public domain)" : set.license;
+    body.append(el("p", { class: `${NS}-muted` }, `${set.title || set.label} icons · ${lic}. Click to place on the page.`));
+    const order = ICON_GROUP_ORDER[tab] || ICON_GROUP_ORDER.default;
+    const groups = [...order.filter((g) => set.groups[g]), ...Object.keys(set.groups).filter((g) => !order.includes(g))];
+    const words = q.split(/\s+/).filter(Boolean);
+    const match = (n) => !words.length || words.every((w) => n.includes(w) || n.includes(w.replace(/-/g, "_")) || n.replace(/[_-]/g, " ").includes(w));
+    let shown = 0;
+    for (const gname of groups) {
+      const names = (set.groups[gname] || []).filter(match);
       if (!names.length) continue;
       const grid = el("div", { class: `${NS}-icongrid` });
-      for (const n of names) {
-        const b = el("button", { type: "button", class: `${NS}-iconbtn ${NS}-remote`, title: n });
-        b.appendChild(el("img", { src: set.url.replace("{name}", encodeURIComponent(n)), alt: n, loading: "lazy" }));
-        b.addEventListener("click", () => {
-          closePopover();
-          addIconItem(tab, n);
-        });
-        grid.appendChild(b);
-      }
-      body.appendChild(el("details", { class: `${NS}-catgrp`, open: !!q || gname === "Basic symbols" || gname === "Water & hydrology" }, el("summary", {}, gname, el("small", {}, String(names.length))), grid));
+      const limit = expanded.has(gname) ? names.length : CATALOG_BATCH;
+      const det = el("details", { class: `${NS}-catgrp`, open: !!q || groups.indexOf(gname) < 2 || expanded.has(gname) }, el("summary", {}, gname, el("small", {}, String(names.length))), grid);
+      // fill the grid only when the group is open (thousands of icons stay cheap)
+      const fillGrid = () => {
+        if (grid.childElementCount) return;
+        for (const n of names.slice(0, limit)) grid.appendChild(iconBtnFor(set, n));
+        if (names.length > limit) {
+          const more = el("button", { type: "button", class: `${NS}-catmore` }, `Show all ${names.length}`);
+          more.addEventListener("click", () => {
+            expanded.add(gname);
+            more.remove();
+            for (const n of names.slice(limit)) grid.appendChild(iconBtnFor(set, n));
+          });
+          grid.appendChild(more);
+        }
+      };
+      if (det.open) fillGrid();
+      det.addEventListener("toggle", () => det.open && fillGrid());
+      body.appendChild(det);
+      shown += names.length;
     }
+    if (!shown) body.append(el("p", { class: `${NS}-muted` }, `No icon matches “${q}”. Try another word, or another set.`));
   };
   for (const [v, label] of Object.entries(ICON_SET_LABELS)) {
+    if (!CATALOG.iconSets[v]) continue;
     const b = el("button", { type: "button", "data-v": v }, label);
     b.addEventListener("click", () => {
       tab = v;
+      expanded.clear();
+      drawStyle();
       draw();
     });
     tabs.appendChild(b);
   }
-  search.addEventListener("input", draw);
+  let timer = 0;
+  search.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(draw, 180);
+  });
+  search.addEventListener("keydown", (e) => e.stopPropagation());
+  drawStyle();
   draw();
-  return popoverAt(anchor, el("div", { class: `${NS}-catalog` }, el("div", { class: `${NS}-ptitle` }, "Icon catalog"), tabs, search, body), `${NS}-catpop`);
+  const pop = popoverAt(anchor, el("div", { class: `${NS}-catalog` }, el("div", { class: `${NS}-ptitle` }, "Icon catalog"), tabs, styleBar, search, body), `${NS}-catpop`);
+  setTimeout(() => search.focus(), 30);
+  return pop;
 }
+// ---------------------------------------------------------------- data items
+// Attribute tables and charts read the features of a GeoLibre layer, filter
+// them, group them and add up a value (count, a numeric field, area or length).
+
+// Features of a GeoLibre layer (GeoJSON features), or [].
+function layerFeatures(id) {
+  if (!id) return [];
+  try {
+    const f = S.app?.getLayerFeatures?.(id);
+    if (Array.isArray(f)) return f;
+    if (Array.isArray(f?.features)) return f.features;
+  } catch (e) {
+    console.warn("[Layout Composer] getLayerFeatures", e);
+  }
+  return [];
+}
+// Vector layers that can feed a table or chart.
+function dataLayerOptions(emptyLabel = "Choose a layer…") {
+  const opts = [["", emptyLabel]];
+  for (const l of allProjectLayers()) if (!isDataRaster(l) && !isTileLayer(l)) opts.push([l.id, l.name || l.id]);
+  return opts;
+}
+// Attribute names (and whether they are numeric) of a layer.
+function layerFields(id) {
+  const feats = layerFeatures(id).slice(0, 500);
+  const seen = new Map();
+  for (const f of feats) {
+    for (const [k, v] of Object.entries(f?.properties || {})) {
+      if (v == null || v === "") continue;
+      const num = typeof v === "number" || (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)));
+      const cur = seen.get(k);
+      seen.set(k, cur == null ? num : cur && num);
+    }
+  }
+  return [...seen].map(([name, numeric]) => ({ name, numeric }));
+}
+
+// ---- geodesic area / length (WGS84 sphere, like turf)
+const R_EARTH = 6378137;
+function ringAreaM2(ring) {
+  let a = 0;
+  const n = ring.length;
+  if (n < 3) return 0;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = ring[i];
+    const [x2, y2] = ring[(i + 1) % n];
+    a += ((x2 - x1) * Math.PI) / 180 * (2 + Math.sin((y1 * Math.PI) / 180) + Math.sin((y2 * Math.PI) / 180));
+  }
+  return Math.abs((a * R_EARTH * R_EARTH) / 2);
+}
+function geomAreaM2(g) {
+  if (!g) return 0;
+  const poly = (rings) => (rings.length ? ringAreaM2(rings[0]) - rings.slice(1).reduce((s, r) => s + ringAreaM2(r), 0) : 0);
+  if (g.type === "Polygon") return poly(g.coordinates);
+  if (g.type === "MultiPolygon") return g.coordinates.reduce((s, p) => s + poly(p), 0);
+  if (g.type === "GeometryCollection") return g.geometries.reduce((s, x) => s + geomAreaM2(x), 0);
+  return 0;
+}
+function haversineM([x1, y1], [x2, y2]) {
+  const r = Math.PI / 180;
+  const a = Math.sin(((y2 - y1) * r) / 2) ** 2 + Math.cos(y1 * r) * Math.cos(y2 * r) * Math.sin(((x2 - x1) * r) / 2) ** 2;
+  return 2 * R_EARTH * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+function geomLengthM(g) {
+  if (!g) return 0;
+  const line = (c) => c.slice(1).reduce((s, p, i) => s + haversineM(c[i], p), 0);
+  if (g.type === "LineString") return line(g.coordinates);
+  if (g.type === "MultiLineString" || g.type === "Polygon") return g.coordinates.reduce((s, c) => s + line(c), 0);
+  if (g.type === "MultiPolygon") return g.coordinates.reduce((s, p) => s + p.reduce((t, c) => t + line(c), 0), 0);
+  return 0;
+}
+
+// ---- filtering and grouping
+const FILTER_OPS = [["=", "equals"], ["!=", "is not"], [">", ">"], [">=", "≥"], ["<", "<"], ["<=", "≤"], ["contains", "contains"]];
+function passFilter(f, flt) {
+  if (!flt?.field) return true;
+  const v = f?.properties?.[flt.field];
+  const t = flt.value ?? "";
+  const nv = Number(v);
+  const nt = Number(t);
+  const numeric = t !== "" && Number.isFinite(nt) && Number.isFinite(nv);
+  switch (flt.op) {
+    case "!=":
+      return String(v ?? "") !== String(t);
+    case ">":
+      return numeric && nv > nt;
+    case ">=":
+      return numeric && nv >= nt;
+    case "<":
+      return numeric && nv < nt;
+    case "<=":
+      return numeric && nv <= nt;
+    case "contains":
+      return String(v ?? "").toLowerCase().includes(String(t).toLowerCase());
+    default:
+      return String(v ?? "") === String(t);
+  }
+}
+// Value of one feature for a value mode.
+function featureValue(f, mode, field) {
+  if (mode === "area") return geomAreaM2(f.geometry) / 10000; // hectares
+  if (mode === "areakm") return geomAreaM2(f.geometry) / 1e6;
+  if (mode === "length") return geomLengthM(f.geometry) / 1000; // km
+  if (mode === "sum" || mode === "mean") {
+    const n = Number(f?.properties?.[field]);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 1;
+}
+const VALUE_MODES = [
+  ["count", "Number of features"],
+  ["sum", "Sum of a field"],
+  ["mean", "Average of a field"],
+  ["area", "Area (ha)"],
+  ["areakm", "Area (km²)"],
+  ["length", "Length (km)"],
+];
+const VALUE_UNITS = { area: "ha", areakm: "km²", length: "km" };
+// [{key, value, count}] grouped by `group` (or one row per feature when group is empty).
+function aggregate(p) {
+  const feats = layerFeatures(p.layer).filter((f) => passFilter(f, p.filter));
+  const groups = new Map();
+  for (const f of feats) {
+    const key = p.group ? String(f?.properties?.[p.group] ?? "(empty)") : "All";
+    const g = groups.get(key) || { key, value: 0, count: 0 };
+    g.value += featureValue(f, p.valueMode, p.valueField);
+    g.count += 1;
+    groups.set(key, g);
+  }
+  let rows = [...groups.values()];
+  if (p.valueMode === "mean") rows.forEach((r) => (r.value = r.count ? r.value / r.count : 0));
+  if (p.sort === "value-desc") rows.sort((a, b) => b.value - a.value);
+  else if (p.sort === "value-asc") rows.sort((a, b) => a.value - b.value);
+  else if (p.sort === "label") rows.sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
+  const top = Math.round(p.topN || 0);
+  if (top > 0 && rows.length > top) {
+    const rest = rows.slice(top);
+    rows = rows.slice(0, top);
+    rows.push({ key: p.otherLabel || "Other", value: rest.reduce((s, r) => s + r.value, 0), count: rest.reduce((s, r) => s + r.count, 0), other: true });
+  }
+  return { rows, total: rows.reduce((s, r) => s + r.value, 0), totalCount: rows.reduce((s, r) => s + r.count, 0), featureCount: feats.length };
+}
+function fmtData(v, p) {
+  const d = Math.max(0, Math.min(6, Math.round(p.decimals ?? 2)));
+  const s = Number(v).toLocaleString(p.locale || "en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  return s;
+}
+
+// Colors of a layer's classes (from its GeoLibre symbology), keyed by attribute value.
+function symbologyColors(layerId, field) {
+  const m = mainMap();
+  const out = new Map();
+  if (!m || !layerId) return out;
+  let style;
+  try {
+    style = m.getStyle();
+  } catch {
+    return out;
+  }
+  for (const l of styleLayersFor(style, layerId)) {
+    const paint = l.paint || {};
+    const expr = paint["fill-color"] ?? paint["circle-color"] ?? paint["line-color"] ?? paint["fill-extrusion-color"];
+    if (!Array.isArray(expr) || expr[0] !== "match") continue;
+    const input = expr[1];
+    const getField = Array.isArray(input) && (input[0] === "get" || (input[0] === "to-string" && Array.isArray(input[1]) && input[1][0] === "get")) ? (input[0] === "get" ? input[1] : input[1][1]) : null;
+    if (field && getField && getField !== field) continue;
+    for (let i = 2; i < expr.length - 1; i += 2) {
+      const keys = Array.isArray(expr[i]) ? expr[i] : [expr[i]];
+      if (typeof expr[i + 1] === "string") for (const k of keys) out.set(String(k), expr[i + 1]);
+    }
+    if (typeof expr[expr.length - 1] === "string") out.set("__other", expr[expr.length - 1]);
+    if (out.size) break;
+  }
+  return out;
+}
+// One color per aggregated row.
+function dataColors(p, rows) {
+  const n = rows.length;
+  const pal = (i) => sampleColors(colorbarColors({ colormap: p.palette || "viridis", reverse: !!p.paletteReverse }), n > 1 ? i / (n - 1) : 0.5);
+  if (p.colorMode === "single") return rows.map(() => p.color || "#0d99ff");
+  if (p.colorMode === "palette") return rows.map((_, i) => pal(i));
+  const sym = symbologyColors(p.layer, p.group);
+  return rows.map((r, i) => (r.other ? "#bdbdbd" : sym.get(r.key) || sym.get("__other") || pal(i)));
+}
+
+// Fill defaults shared by the table and the chart.
+const DATA_DEFAULTS = () => ({
+  layer: "",
+  group: "",
+  valueMode: "area",
+  valueField: "",
+  filter: { field: "", op: "=", value: "" },
+  sort: "value-desc",
+  topN: 0,
+  otherLabel: "Other",
+  decimals: 2,
+  locale: "en-US",
+});
+// Pick the first vector layer and a sensible grouping field when a data item is added.
+function initDataItem(item) {
+  const p = item.props;
+  const first = dataLayerOptions().find(([id]) => id);
+  if (!first) return;
+  p.layer = first[0];
+  autoGroupField(p);
+}
+function autoGroupField(p) {
+  const fields = layerFields(p.layer);
+  const sym = symbologyColors(p.layer, "");
+  // prefer the field the layer is styled by, otherwise the first text field
+  const m = mainMap();
+  let styled = "";
+  try {
+    for (const l of styleLayersFor(m.getStyle(), p.layer)) {
+      const e = l.paint?.["fill-color"] ?? l.paint?.["circle-color"] ?? l.paint?.["line-color"];
+      if (Array.isArray(e) && e[0] === "match" && Array.isArray(e[1]) && e[1][0] === "get") styled = e[1][1];
+      if (styled) break;
+    }
+  } catch {}
+  p.group = styled || fields.find((f) => !f.numeric)?.name || "";
+  const geomType = layerFeatures(p.layer)[0]?.geometry?.type || "";
+  if (/Polygon/.test(geomType)) p.valueMode = "area";
+  else if (/Line/.test(geomType)) p.valueMode = "length";
+  else p.valueMode = "count";
+  void sym;
+}
+
+// ---------------------------------------------------------------- attribute table
+ITEM_TYPES.attrtable = {
+  label: "Attribute Table",
+  icon: "table",
+  size: [90, 40],
+  defaults: () => ({
+    ...DATA_DEFAULTS(),
+    mode: "summary",
+    columns: [],
+    showCount: false,
+    showPercent: true,
+    showTotal: true,
+    groupHeader: "",
+    valueHeader: "",
+    maxRows: 30,
+    header: true,
+    colWidths: "",
+    font: font({ size: 7 }),
+    headerFont: font({ size: 7.5, bold: true, color: "#ffffff" }),
+    headerBg: "#1f4e79",
+    zebra: true,
+    zebraColor: "#eef3f8",
+    footerBg: "#dde6f0",
+    borderColor: "#5b6b7b",
+    borderWidth: 0.2,
+    outerBorder: true,
+    innerBorder: true,
+    padding: 1.2,
+    background: "#ffffff",
+    align: "left",
+    autoHeight: true,
+  }),
+};
+// Rows of strings + per-column alignment for an attribute table.
+function attrTableRows(p) {
+  if (p.mode === "rows") {
+    const feats = layerFeatures(p.layer).filter((f) => passFilter(f, p.filter));
+    let cols = (p.columns || []).filter(Boolean);
+    if (!cols.length) cols = layerFields(p.layer).slice(0, 4).map((f) => f.name);
+    const withVal = p.valueMode === "area" || p.valueMode === "areakm" || p.valueMode === "length";
+    const list = feats.map((f) => ({ f, v: withVal ? featureValue(f, p.valueMode) : 0 }));
+    if (p.sort === "value-desc" && withVal) list.sort((a, b) => b.v - a.v);
+    else if (p.sort === "value-asc" && withVal) list.sort((a, b) => a.v - b.v);
+    else if (p.sort === "label" && cols[0]) list.sort((a, b) => String(a.f.properties?.[cols[0]] ?? "").localeCompare(String(b.f.properties?.[cols[0]] ?? ""), undefined, { numeric: true }));
+    const shown = list.slice(0, Math.max(1, Math.round(p.maxRows || 30)));
+    const head = [...cols, ...(withVal ? [p.valueHeader || `${VALUE_MODES.find(([k]) => k === p.valueMode)[1]}`] : [])];
+    const numCol = cols.map((c) => layerFields(p.layer).find((f) => f.name === c)?.numeric);
+    const rows = shown.map(({ f, v }) => [
+      ...cols.map((c, i) => {
+        const raw = f.properties?.[c];
+        return numCol[i] && raw !== "" && raw != null ? fmtData(raw, { ...p, decimals: Number.isInteger(Number(raw)) ? 0 : p.decimals }) : String(raw ?? "");
+      }),
+      ...(withVal ? [fmtData(v, p)] : []),
+    ]);
+    const align = [...numCol.map((n) => (n ? "right" : "left")), ...(withVal ? ["right"] : [])];
+    let footer = null;
+    if (p.showTotal && withVal) footer = [`Total (${list.length})`, ...cols.slice(1).map(() => ""), fmtData(list.reduce((s, x) => s + x.v, 0), p)];
+    if (list.length > shown.length) rows.push([`… ${list.length - shown.length} more`, ...head.slice(1).map(() => "")]);
+    return { head, rows, footer, align };
+  }
+  const agg = aggregate(p);
+  const unit = VALUE_UNITS[p.valueMode];
+  const vh = p.valueHeader || (p.valueMode === "count" ? "Count" : p.valueMode === "sum" || p.valueMode === "mean" ? `${p.valueMode === "mean" ? "Average" : "Total"} ${p.valueField || ""}`.trim() : `${VALUE_MODES.find(([k]) => k === p.valueMode)[1]}`);
+  const head = [p.groupHeader || p.group || "Class", vh];
+  const align = ["left", "right"];
+  if (p.showCount && p.valueMode !== "count") {
+    head.push("Count");
+    align.push("right");
+  }
+  if (p.showPercent) {
+    head.push("%");
+    align.push("right");
+  }
+  const rows = agg.rows.map((r) => {
+    const row = [r.key, fmtData(r.value, { ...p, decimals: p.valueMode === "count" ? 0 : p.decimals })];
+    if (p.showCount && p.valueMode !== "count") row.push(fmtData(r.count, { ...p, decimals: 0 }));
+    if (p.showPercent) row.push(fmtData(agg.total ? (r.value / agg.total) * 100 : 0, { ...p, decimals: 1 }));
+    return row;
+  });
+  let footer = null;
+  if (p.showTotal) {
+    footer = ["Total", fmtData(agg.total, { ...p, decimals: p.valueMode === "count" ? 0 : p.decimals })];
+    if (p.showCount && p.valueMode !== "count") footer.push(fmtData(agg.totalCount, { ...p, decimals: 0 }));
+    if (p.showPercent) footer.push(agg.total ? "100.0" : "0.0");
+  }
+  void unit;
+  return { head, rows, footer, align };
+}
+RENDERERS.attrtable = function attrtable(item, ctx) {
+  const p = item.props;
+  if (!p.layer) return ctx.export ? "" : placeholder(item, "Choose a layer in the panel");
+  const t = attrTableRows(p);
+  if (!t.rows.length) return ctx.export ? "" : placeholder(item, "No features match");
+  const rows = [...(p.header ? [t.head] : []), ...t.rows, ...(t.footer ? [t.footer] : [])];
+  const fake = { ...item, props: { ...p, rows, colAlign: t.align, footer: !!t.footer, vars: false } };
+  const svg = RENDERERS.table(fake, ctx);
+  const natural = S.legendCache.get(item.id);
+  if (p.autoHeight && natural && Math.abs(item.h - natural) > 0.3) item.h = round(natural, 2);
+  return svg;
+};
+
+// ---------------------------------------------------------------- chart
+const CHART_KINDS = [["pie", "Pie"], ["donut", "Donut"], ["bar", "Column"], ["hbar", "Bar"]];
+ITEM_TYPES.chart = {
+  label: "Chart",
+  icon: "chart",
+  size: [80, 55],
+  defaults: () => ({
+    ...DATA_DEFAULTS(),
+    kind: "donut",
+    colorMode: "layer",
+    palette: "viridis",
+    paletteReverse: false,
+    color: "#0d99ff",
+    labels: "percent",
+    showLegend: true,
+    legendValues: "value",
+    title: "",
+    titleFont: font({ size: 9, bold: true }),
+    font: font({ size: 6.5 }),
+    hole: 0.55,
+    centerText: "total",
+    gridlines: true,
+    axisColor: "#6b7280",
+    sliceStroke: "#ffffff",
+    background: "",
+    bgOpacity: 1,
+    padding: 2,
+    border: { show: false, color: "#333333", width: 0.25, radius: 0 },
+  }),
+};
+function chartArc(cx, cy, r0, r1, a0, a1) {
+  const P = (v) => round(v, 3);
+  const large = a1 - a0 > Math.PI ? 1 : 0;
+  const pt = (r, a) => [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+  if (a1 - a0 >= Math.PI * 2 - 1e-6) {
+    // full circle as two halves
+    const half = chartArc(cx, cy, r0, r1, a0, a0 + Math.PI) + chartArc(cx, cy, r0, r1, a0 + Math.PI, a1 - 1e-6);
+    return half;
+  }
+  const [x1, y1] = pt(r1, a0);
+  const [x2, y2] = pt(r1, a1);
+  if (r0 <= 0) return `M${P(cx)},${P(cy)}L${P(x1)},${P(y1)}A${P(r1)},${P(r1)} 0 ${large} 1 ${P(x2)},${P(y2)}Z`;
+  const [x3, y3] = pt(r0, a1);
+  const [x4, y4] = pt(r0, a0);
+  return `M${P(x1)},${P(y1)}A${P(r1)},${P(r1)} 0 ${large} 1 ${P(x2)},${P(y2)}L${P(x3)},${P(y3)}A${P(r0)},${P(r0)} 0 ${large} 0 ${P(x4)},${P(y4)}Z`;
+}
+RENDERERS.chart = function chart(item, ctx) {
+  const p = item.props;
+  if (!p.layer) return ctx.export ? "" : placeholder(item, "Choose a layer in the panel");
+  const agg = aggregate(p);
+  const rows = agg.rows.filter((r) => r.value > 0);
+  if (!rows.length) return ctx.export ? "" : placeholder(item, "No data to chart");
+  const cols = dataColors(p, rows);
+  const f = p.font;
+  const fh = f.size * PT;
+  const P = (v) => round(v, 3);
+  const pad = p.padding || 0;
+  const unit = VALUE_UNITS[p.valueMode] ? ` ${VALUE_UNITS[p.valueMode]}` : "";
+  const dec = p.valueMode === "count" ? 0 : p.decimals;
+  const fmtV = (v) => fmtData(v, { ...p, decimals: dec });
+  const pct = (v) => `${fmtData(agg.total ? (v / agg.total) * 100 : 0, { ...p, decimals: 1 })}%`;
+  let out = "";
+  if (p.background) out += `<rect width="${item.w}" height="${item.h}" rx="${p.border?.radius || 0}" fill="${esc(p.background)}" fill-opacity="${p.bgOpacity ?? 1}"/>`;
+  let top = pad;
+  if (String(p.title || "").trim()) {
+    const tf = p.titleFont;
+    out += richLine(resolveVars(p.title, item), item.w / 2, pad + tf.size * PT * 0.9, tf, "middle").svg;
+    top += tf.size * PT * 1.5;
+  }
+  const W = item.w - pad * 2;
+  const H = item.h - top - pad;
+  if (p.kind === "pie" || p.kind === "donut") {
+    // legend to the right when there is room, otherwise below
+    const legendW = p.showLegend ? Math.min(W * 0.5, Math.max(...rows.map((r, i) => textWidthMm(`${r.key}  ${p.legendValues === "percent" ? pct(r.value) : p.legendValues === "value" ? fmtV(r.value) + unit : ""}`, f))) + fh * 1.8) : 0;
+    const side = p.showLegend && W - legendW >= H * 0.75;
+    const lh = fh * 1.45;
+    const legendH = p.showLegend && !side ? rows.length * lh : 0;
+    const areaW = side ? W - legendW - 2 : W;
+    const areaH = H - legendH;
+    const r1 = Math.max(2, Math.min(areaW, areaH) / 2 - 0.5);
+    const r0 = p.kind === "donut" ? r1 * clamp(p.hole ?? 0.55, 0.2, 0.85) : 0;
+    const cx = pad + areaW / 2;
+    const cy = top + areaH / 2;
+    let a = 0;
+    rows.forEach((r, i) => {
+      const da = (r.value / agg.total) * Math.PI * 2;
+      out += `<path d="${chartArc(cx, cy, r0, r1, a, a + da)}" fill="${esc(cols[i])}" stroke="${esc(p.sliceStroke || "none")}" stroke-width="${p.sliceStroke ? 0.25 : 0}" stroke-linejoin="round"/>`;
+      if (p.labels !== "none" && da > 0.32) {
+        const mid = a + da / 2;
+        const rr = r0 ? (r0 + r1) / 2 : r1 * 0.62;
+        const txt = p.labels === "percent" ? pct(r.value) : p.labels === "value" ? fmtV(r.value) : r.key;
+        out += `<text x="${P(cx + rr * Math.sin(mid))}" y="${P(cy - rr * Math.cos(mid))}" text-anchor="middle" dominant-baseline="central" ${fontAttrs({ ...f, color: "#ffffff", bold: true })} stroke="rgba(0,0,0,0.35)" stroke-width="0.35" paint-order="stroke">${esc(txt)}</text>`;
+      }
+      a += da;
+    });
+    if (r0 && p.centerText === "total") {
+      out += `<text x="${P(cx)}" y="${P(cy - fh * 0.15)}" text-anchor="middle" ${fontAttrs({ ...f, bold: true, size: f.size * 1.35 })}>${esc(fmtV(agg.total))}</text>`;
+      out += `<text x="${P(cx)}" y="${P(cy + fh * 1.05)}" text-anchor="middle" ${fontAttrs({ ...f, color: "#6b7280" })}>${esc((unit || " features").trim())}</text>`;
+    }
+    if (p.showLegend) {
+      const lx = side ? pad + areaW + 2 : pad;
+      let ly = side ? top + Math.max(0, (H - rows.length * lh) / 2) : top + areaH + 1;
+      rows.forEach((r, i) => {
+        const val = p.legendValues === "percent" ? pct(r.value) : p.legendValues === "value" ? `${fmtV(r.value)}${unit}` : "";
+        out += `<rect x="${P(lx)}" y="${P(ly + (lh - fh) / 2)}" width="${P(fh)}" height="${P(fh)}" rx="${P(fh * 0.2)}" fill="${esc(cols[i])}"/>`;
+        out += `<text x="${P(lx + fh * 1.5)}" y="${P(ly + lh / 2)}" dominant-baseline="central" ${fontAttrs(f)}>${esc(r.key)}${val ? `<tspan fill="#6b7280"> ${esc(val)}</tspan>` : ""}</text>`;
+        ly += lh;
+      });
+    }
+  } else {
+    const horiz = p.kind === "hbar";
+    const max = Math.max(...rows.map((r) => r.value));
+    // axis ticks: as many as fit without touching
+    const tickFmt = (t, st) => fmtData(t, { ...p, decimals: st % 1 ? Math.min(2, p.decimals) : 0 });
+    const makeTicks = (target) => {
+      const st = niceStep(max, Math.max(1, target));
+      const top = Math.ceil(max / st - 1e-9) * st || 1;
+      const list = [];
+      for (let v = 0; v <= top + st * 1e-6; v += st) list.push(v);
+      return { step: st, axisMax: top, ticks: list };
+    };
+    let { step, axisMax, ticks } = makeTicks(4);
+    const tickW = Math.max(...ticks.map((t) => textWidthMm(tickFmt(t, step), f)));
+    const valueText = (r) => (p.labels === "percent" ? pct(r.value) : p.labels === "value" ? fmtV(r.value) : "");
+    const ac = esc(p.axisColor || "#6b7280");
+    if (horiz) {
+      const labW = Math.min(W * 0.4, Math.max(...rows.map((r) => textWidthMm(r.key, f))) + 1.5);
+      const x0 = pad + labW;
+      const plotW = Math.max(5, W - labW - (p.labels !== "none" ? Math.max(...rows.map((r) => textWidthMm(valueText(r), f))) + 1.5 : 1));
+      const plotH = H - fh * 1.6;
+      const fitN = Math.floor(plotW / (tickW + 2.5));
+      if (fitN < ticks.length - 1) ({ step, axisMax, ticks } = makeTicks(Math.max(1, fitN)));
+      if (ticks.length > 2 && plotW / (ticks.length - 1) < tickW + 1) ticks = [0, axisMax];
+      const bh = plotH / rows.length;
+      ticks.forEach((t) => {
+        const x = x0 + (t / axisMax) * plotW;
+        if (p.gridlines) out += `<line x1="${P(x)}" y1="${P(top)}" x2="${P(x)}" y2="${P(top + plotH)}" stroke="#e5e7eb" stroke-width="0.15"/>`;
+        out += `<text x="${P(x)}" y="${P(top + plotH + fh * 1.2)}" text-anchor="middle" ${fontAttrs({ ...f, color: "#6b7280" })}>${esc(tickFmt(t, step))}</text>`;
+      });
+      rows.forEach((r, i) => {
+        const y = top + i * bh;
+        const bw = (r.value / axisMax) * plotW;
+        out += `<rect x="${P(x0)}" y="${P(y + bh * 0.15)}" width="${P(Math.max(bw, 0.2))}" height="${P(bh * 0.7)}" rx="${P(Math.min(0.6, bh * 0.15))}" fill="${esc(cols[i])}"/>`;
+        out += `<text x="${P(x0 - 1)}" y="${P(y + bh / 2)}" text-anchor="end" dominant-baseline="central" ${fontAttrs(f)}>${esc(r.key)}</text>`;
+        if (p.labels !== "none") out += `<text x="${P(x0 + bw + 0.8)}" y="${P(y + bh / 2)}" dominant-baseline="central" ${fontAttrs({ ...f, color: "#374151" })}>${esc(valueText(r) || r.key)}</text>`;
+      });
+      out += `<line x1="${P(x0)}" y1="${P(top)}" x2="${P(x0)}" y2="${P(top + plotH)}" stroke="${ac}" stroke-width="0.25"/>`;
+    } else {
+      const x0 = pad + tickW + 1;
+      const rot = rows.length > 4;
+      const labH = rot ? Math.min(H * 0.35, Math.max(...rows.map((r) => textWidthMm(r.key, f))) * 0.75 + fh) : fh * 1.6;
+      const plotW = W - tickW - 1;
+      const plotH = H - labH - fh;
+      const y0 = top + fh + plotH;
+      const bw = plotW / rows.length;
+      ticks.forEach((t) => {
+        const y = y0 - (t / axisMax) * plotH;
+        if (p.gridlines) out += `<line x1="${P(x0)}" y1="${P(y)}" x2="${P(x0 + plotW)}" y2="${P(y)}" stroke="#e5e7eb" stroke-width="0.15"/>`;
+        out += `<text x="${P(x0 - 0.8)}" y="${P(y)}" text-anchor="end" dominant-baseline="central" ${fontAttrs({ ...f, color: "#6b7280" })}>${esc(tickFmt(t, step))}</text>`;
+      });
+      rows.forEach((r, i) => {
+        const x = x0 + i * bw;
+        const bh = (r.value / axisMax) * plotH;
+        out += `<rect x="${P(x + bw * 0.15)}" y="${P(y0 - bh)}" width="${P(bw * 0.7)}" height="${P(Math.max(bh, 0.2))}" rx="${P(Math.min(0.6, bw * 0.1))}" fill="${esc(cols[i])}"/>`;
+        if (p.labels !== "none") out += `<text x="${P(x + bw / 2)}" y="${P(y0 - bh - 0.8)}" text-anchor="middle" ${fontAttrs({ ...f, color: "#374151" })}>${esc(valueText(r) || r.key)}</text>`;
+        out += rot
+          ? `<text transform="translate(${P(x + bw / 2)} ${P(y0 + 1.2)}) rotate(-40)" text-anchor="end" dominant-baseline="hanging" ${fontAttrs(f)}>${esc(r.key)}</text>`
+          : `<text x="${P(x + bw / 2)}" y="${P(y0 + fh * 1.2)}" text-anchor="middle" ${fontAttrs(f)}>${esc(r.key)}</text>`;
+      });
+      out += `<line x1="${P(x0)}" y1="${P(y0)}" x2="${P(x0 + plotW)}" y2="${P(y0)}" stroke="${ac}" stroke-width="0.25"/>`;
+    }
+  }
+  if (p.border?.show) out += `<rect width="${item.w}" height="${item.h}" rx="${p.border.radius || 0}" fill="none" stroke="${esc(p.border.color)}" stroke-width="${p.border.width}"/>`;
+  return out;
+};
 // ---------------------------------------------------------------- MapLibre bridge
 function mainMap() {
   try {
@@ -3316,7 +3927,7 @@ async function buildStyle(item) {
   const m = mainMap();
   const main = m ? clone(m.getStyle()) : { version: 8, sources: {}, layers: [] };
   const kind = item.props.basemap || "geolibre";
-  if (kind === "geolibre") return main;
+  if (kind === "geolibre") return hideFrameLayers(main, item);
   const user = userLayerParts(main);
   let base;
   if (BASEMAP_URLS[kind]) {
@@ -3348,11 +3959,19 @@ async function buildStyle(item) {
   if (!base.glyphs) base.glyphs = main.glyphs;
   Object.assign(base.sources, user.sources);
   base.layers.push(...user.layers);
-  return base;
+  return hideFrameLayers(base, item);
+}
+// Layers switched off for one map frame (props.hiddenLayers) are hidden in its style.
+function hideFrameLayers(style, item) {
+  const hidden = item.props.hiddenLayers || [];
+  for (const id of hidden) {
+    for (const l of styleLayersFor(style, id)) l.layout = { ...(l.layout || {}), visibility: "none" };
+  }
+  return style;
 }
 
 function styleKey(item) {
-  return `${item.props.basemap}|${item.props.background}|${S.styleEpoch || 0}`;
+  return `${item.props.basemap}|${item.props.background}|${S.styleEpoch || 0}|${(item.props.hiddenLayers || []).join(",")}`;
 }
 
 // Live (preview) maps ---------------------------------------------------------
@@ -3771,7 +4390,8 @@ function legendFromMap() {
 
 // Merge freshly generated entries with user edits (renamed/hidden labels).
 function syncLegendEntries(item) {
-  const fresh = legendFromMap();
+  const hidden = new Set(linkedMapOf(item)?.props.hiddenLayers || []);
+  const fresh = legendFromMap().filter((e) => !hidden.has(e.layerId));
   const old = new Map((item.props.entries || []).map((e) => [e.key, e]));
   const manual = (item.props.entries || []).filter((e) => e.manual);
   item.props.entries = [
@@ -3850,13 +4470,16 @@ const ICON_PATHS = {
   camera: "M3 8h4l2-3h6l2 3h4v12H3zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
   sync: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5",
   menu: "M4 7h16M4 12h16M4 17h16",
+  chart: "M4 20V10M10 20V4M16 20v-7M21 20H3",
+  donut: "M12 3a9 9 0 1 0 9 9h-5a4 4 0 1 1-4-4zM15 3.5A9 9 0 0 1 20.5 9H15z",
+  qgis: "M4 4h16v16H4zM8 9h8M8 13h5M8 17h3M15 15l3 3",
   chevron: "M7 10l5 5 5-5",
   layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5",
 };
 // Two-tone item icons: a soft tinted body (currentColor at low opacity) under a crisp outline,
 // so they follow the theme and turn blue as a whole when the tool is active.
+// Minimal outline icons in currentColor (follows light/dark; blue when active).
 const tt = (fill, line, extra = "") =>
-  `<path d="${fill}" fill="currentColor" opacity=".2" stroke="none"/>` +
   `<path d="${line}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>${extra}`;
 const ICON_SVG = {
   select: tt("M5.5 3.5l13 7.4-5.6 1.5-2.9 5.6z", "M5.5 3.5l13 7.4-5.6 1.5-2.9 5.6zM12.9 12.4l4.6 4.6"),
@@ -3875,8 +4498,7 @@ const ICON_SVG = {
     "M3.5 5h4v3.5h-4zM3.5 15.5h4V19h-4zM3.5 12h4M11 6.8h9.5M11 12h9.5M11 17.2h9.5",
   ),
   colorbar:
-    '<path d="M5 8h4.7v6H5z" fill="currentColor" opacity=".12"/><path d="M9.7 8h4.6v6H9.7z" fill="currentColor" opacity=".38"/><path d="M14.3 8H19v6h-4.7z" fill="currentColor" opacity=".7"/>' +
-    '<path d="M5 8h14l3 3-3 3H5l-3-3zM6 17.5v2M12 17.5v2M18 17.5v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+    '<path d="M5 8h14l3 3-3 3H5l-3-3zM9.7 8v6M14.3 8v6M6 17.5v2M12 17.5v2M18 17.5v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
   north:
     '<path d="M12 3l5.5 15L12 14.6z" fill="currentColor"/>' +
     '<path d="M12 3L6.5 18 12 14.6 17.5 18z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>' +
@@ -3884,7 +4506,7 @@ const ICON_SVG = {
   text: tt("M4 4h16v3.5H4z", "M4 7.5V4h16v3.5M12 4v16M9 20h6"),
   title: tt("M5 4h4v16H5zM15 4h4v16h-4z", "M7 4v16M17 4v16M7 12h10M5 4h4M5 20h4M15 4h4M15 20h4"),
   image: tt("M3.5 4.5h17v15h-17z", "M3.5 4.5h17v15h-17zM3.5 17l5.5-5.5 4 4 2.5-2.5 5 5", '<circle cx="15.5" cy="9" r="1.7" fill="currentColor"/>'),
-  shape: tt("M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", "M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", '<circle cx="7.5" cy="16.5" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="7" r="3.8" fill="currentColor" opacity=".55"/>'),
+  shape: tt("M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", "M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", '<circle cx="7.5" cy="16.5" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="7" r="3.8" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
   table: tt("M3.5 4.5h17v5h-17z", "M3.5 4.5h17v15h-17zM3.5 9.5h17M3.5 14.5h17M10 9.5v10"),
   pen: tt("M12.5 19.5l7-7 2.5 2.5-7 7z", "M12.5 19.5l7-7 2.5 2.5-7 7zM18 13l-1.5-7.5L3 2.5l3 13.5 7 1.5zM3 2.5l7.5 7.5", '<circle cx="11.5" cy="11" r="1.6" fill="currentColor"/>'),
   marker: tt("M12 21.5s7-6.4 7-11.8a7 7 0 1 0-14 0c0 5.4 7 11.8 7 11.8z", "M12 21.5s7-6.4 7-11.8a7 7 0 1 0-14 0c0 5.4 7 11.8 7 11.8z", '<circle cx="12" cy="9.7" r="2.6" fill="currentColor"/>'),
@@ -3934,6 +4556,16 @@ const INSERT_MENUS = [
       ["latex", "sigma", "Formula (LaTeX)", "MathJax formula"],
     ],
   },
+  {
+    id: "data", icon: "chart", label: "Data", tools: ["attrtable", "chart"],
+    items: [
+      ["attrtable", "table", "Attribute table", "Area or count per class, or a feature list"],
+      ["chart:donut", "donut", "Donut chart", "Share of each class"],
+      ["chart:pie", "donut", "Pie chart", "Share of each class"],
+      ["chart:hbar", "list", "Bar chart", "Long class names read well"],
+      ["chart:bar", "chart", "Column chart", "Compare classes"],
+    ],
+  },
   { id: "draw", icon: "pen", label: "Draw", tools: ["pen"], gallery: "draw", tool: "pen" },
   { id: "shape", icon: "shape", label: "Shape", tools: ["shape"], gallery: "shape", tool: "shape" },
   { id: "image", icon: "image", label: "Image", tools: ["image"], tool: "image" },
@@ -3953,7 +4585,8 @@ function buildInsertBar() {
         const it = el("button", { type: "button", class: `${NS}-menuitem`, html: `${icon(ic, 15)}<span>${esc(name)}</span><small>${esc(hint)}</small>` });
         it.addEventListener("click", () => {
           closePopover();
-          addAtCenter(tool);
+          const [t, v] = tool.split(":");
+          addAtCenter(t, v);
         });
         list.appendChild(it);
       }
@@ -3995,6 +4628,26 @@ function buildShell() {
   S.ui.zoomLbl = zoomLbl;
   S.exportFmt = S.exportFmt || "png";
   S.exportDpi = S.exportDpi || 300;
+  // tools live in the top bar: modes (select, pan, content) and map elements
+  const tools = el("div", { class: `${NS}-toolgrp` });
+  let pill = el("div", { class: `${NS}-pill`, role: "toolbar", "aria-label": "Tools" });
+  tools.appendChild(pill);
+  for (const t of TOOLS) {
+    if (t.sep) {
+      pill = el("div", { class: `${NS}-pill`, role: "toolbar", "aria-label": "Map elements" });
+      tools.appendChild(pill);
+      continue;
+    }
+    const b = el("button", { type: "button", class: `${NS}-tool`, "data-tool": t.id, title: t.label, "aria-label": t.label, html: icon(t.icon, 17) });
+    b.addEventListener("click", () => {
+      if (t.action) t.action(b);
+      else if (t.gallery) openToolGallery(t, b);
+      else if (["map", "inset", "legend", "colorbar"].includes(t.id)) addAtCenter(t.id);
+      else setTool(t.id);
+    });
+    pill.appendChild(b);
+  }
+
   // three zones like a desktop design app: file & history | insert | view & export
   const vsep = () => el("span", { class: `${NS}-vsep` });
   top.append(
@@ -4011,7 +4664,7 @@ function buildShell() {
       iconBtn("undo", "Undo (Ctrl+Z)", undo),
       iconBtn("redo", "Redo (Ctrl+Y)", redo),
     ),
-    el("div", { class: `${NS}-topc` }, buildInsertBar()),
+    el("div", { class: `${NS}-topc` }, tools, buildInsertBar()),
     el("div", { class: `${NS}-topr` },
       el("div", { class: `${NS}-zoompill` },
         iconBtn("zout", "Zoom out (Ctrl+−)", () => setZoom(S.zoom / 1.2)),
@@ -4021,27 +4674,11 @@ function buildShell() {
       iconBtn("fit", "Fit page (Ctrl+0)", () => fitPage()),
       vsep(),
       iconBtn("save", "Save layout file (.json)", () => exportJSON()),
-      el("button", { type: "button", class: `${NS}-btn ${NS}-primary`, title: "Export", html: `${icon("download")}<span>Export</span>`, onclick: (e) => openExportMenu(e.currentTarget) }),
+      iconBtn("download", "Export", () => openExportDialog(), `${NS}-exportbtn`),
       iconBtn("dockright", "Show / hide the Properties panel", () => toggleDock("right"), `${NS}-docktog`),
       iconBtn("close", "Close Layout Composer", () => closeComposer(), `${NS}-closebtn`),
     ),
   );
-
-  const tools = el("nav", { class: `${NS}-tools` });
-  for (const t of TOOLS) {
-    if (t.sep) {
-      tools.appendChild(el("div", { class: `${NS}-tsep` }));
-      continue;
-    }
-    const b = el("button", { type: "button", class: `${NS}-tool`, "data-tool": t.id, title: t.label, "aria-label": t.label, html: `${icon(t.icon, 18)}<span>${esc(t.short)}</span>` });
-    b.addEventListener("click", () => {
-      if (t.action) t.action(b);
-      else if (t.gallery) openToolGallery(t, b);
-      else if (["map", "inset", "legend", "colorbar"].includes(t.id)) addAtCenter(t.id);
-      else setTool(t.id);
-    });
-    tools.appendChild(b);
-  }
 
   const left = el("aside", { class: `${NS}-left` },
     el("div", { class: `${NS}-phead` }, el("span", { class: `${NS}-pheadt`, html: `${icon("layers", 14)}<span>Layers</span>` }), el("span", { class: `${NS}-count` })),
@@ -4067,7 +4704,7 @@ function buildShell() {
   );
 
   const status = el("footer", { class: `${NS}-status` }, el("span", { class: `${NS}-pos` }, "x –  y –"), el("span", { class: `${NS}-selinfo` }), el("span", { class: `${NS}-hint` }), el("span", { class: `${NS}-viewtoggles` }, viewToggle("grid", "Canvas grid"), viewToggle("guides", "Guides"), viewToggle("snap", "Snap")), el("span", { class: `${NS}-zoomwrap` }, buildZoomSlider()));
-  root.append(top, el("div", { class: `${NS}-body` }, tools, left, stage, right), status, el("div", { class: `${NS}-toasts` }));
+  root.append(top, el("div", { class: `${NS}-body` }, left, stage, right), status, el("div", { class: `${NS}-toasts` }));
 
   S.ui.root = root;
   S.ui.quick = stage.querySelector(`.${NS}-quick`);
@@ -4124,7 +4761,10 @@ function openMainMenu(anchor) {
     sep(),
     menuItem("Open layout file…", () => importJSON(), { iconName: "open" }),
     menuItem("Save layout file", () => exportJSON(), { iconName: "save" }),
-    menuItem("Export…", () => openExportMenu(anchor), { iconName: "download" }),
+    menuItem("Export…", () => openExportDialog(), { iconName: "download" }),
+    sep(),
+    menuItem("Import QGIS template (.qpt)…", () => importQpt(), { iconName: "qgis" }),
+    menuItem("Export as QGIS template (.qpt)", () => exportQpt(), { iconName: "qgis" }),
     sep(),
     menuItem("Layers panel", () => toggleDock("left"), { iconName: "dockleft" }),
     menuItem("Properties panel", () => toggleDock("right"), { iconName: "dockright" }),
@@ -4176,77 +4816,139 @@ function selectionBar(n) {
   );
 }
 
-function openExportMenu(anchor) {
-  const fmts = [
-    ["png", "PNG", "Raster image"],
-    ["jpg", "JPG", "Raster image, smaller file"],
-    ["pdf", "PDF", "Page flattened at the chosen resolution"],
-    ["vpdf", "Vector PDF", "Text, lines and symbols stay vector; maps are images"],
-    ["geopdf", "GeoPDF", "PDF with the map frames georeferenced (WGS 84)"],
-    ["svg", "SVG", "Editable vector page; maps embedded at 200 dpi"],
-  ];
-  const grid = el("div", { class: `${NS}-fmtgrid` });
+// ---------------------------------------------------------------- export dialog
+const EXPORT_FORMATS_INFO = [
+  ["png", "PNG", "Image", "image"],
+  ["jpg", "JPG", "Smaller image", "image"],
+  ["pdf", "PDF", "Flattened page", "page"],
+  ["vpdf", "Vector PDF", "Sharp text and lines", "layers"],
+  ["geopdf", "GeoPDF", "Georeferenced maps", "map"],
+  ["svg", "SVG", "Editable vector", "shape"],
+];
+function openExportMenu() {
+  openExportDialog();
+}
+function openExportDialog() {
+  closePopover();
+  S.ui.root.querySelector(`.${NS}-modal`)?.remove();
+  const pg = S.doc.page;
+  const overlay = el("div", { class: `${NS}-modal` });
+  const dlg = el("div", { class: `${NS}-dlg`, role: "dialog", "aria-modal": "true", "aria-label": "Export" });
+  overlay.appendChild(dlg);
+  let running = false;
+  const close = () => {
+    if (running) return;
+    overlay.remove();
+    document.removeEventListener("keydown", onKeyDlg, true);
+  };
+  const onKeyDlg = (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+    }
+    if (e.key === "Enter" && !running && document.activeElement?.tagName !== "SELECT") {
+      e.preventDefault();
+      start();
+    }
+  };
+  document.addEventListener("keydown", onKeyDlg, true);
+  overlay.addEventListener("pointerdown", (e) => e.target === overlay && close());
+
+  const head = el("div", { class: `${NS}-dlghead` },
+    el("div", {}, el("div", { class: `${NS}-dlgtitle` }, "Export"), el("div", { class: `${NS}-dlgsub` }, `${S.doc.name} · ${pg.size && pg.size !== "Custom" ? `${pg.size} ` : ""}${round(pg.width, 1)} × ${round(pg.height, 1)} mm`)),
+    iconBtn("close", "Close (Esc)", close),
+  );
+  const cards = el("div", { class: `${NS}-fmtcards`, role: "radiogroup", "aria-label": "Format" });
+  for (const [v, label, desc, ic] of EXPORT_FORMATS_INFO) {
+    const c = el("button", { type: "button", class: `${NS}-fmtcard`, "data-v": v, role: "radio", html: `${icon(ic, 18)}<b>${label}</b><small>${desc}</small>` });
+    c.addEventListener("click", () => {
+      S.exportFmt = v;
+      refresh();
+    });
+    cards.appendChild(c);
+  }
   const dpiSel = el("select", { class: `${NS}-input` }, ...[75, 96, 150, 200, 300, 400, 600].map((d) => el("option", { value: d, selected: d === S.exportDpi }, `${d} dpi`)));
   const bgSel = el("select", { class: `${NS}-input` }, el("option", { value: "page" }, "Page color"), el("option", { value: "white" }, "White"), el("option", { value: "transparent" }, "Transparent"));
   bgSel.value = S.exportBg || "page";
   const name = el("input", { class: `${NS}-input`, value: S.exportName || safeName(S.doc.name) });
-  const ext = el("span", { class: `${NS}-unit` });
-  const dpiRow = el("label", { class: `${NS}-prow` }, el("span", { class: `${NS}-plabel` }, "Resolution"), el("span", { class: `${NS}-pctl` }, dpiSel));
-  const bgRow = el("label", { class: `${NS}-prow` }, el("span", { class: `${NS}-plabel` }, "Background"), el("span", { class: `${NS}-pctl` }, bgSel));
-  const info = el("div", { class: `${NS}-muted` });
+  const ext = el("span", { class: `${NS}-dlgext` });
+  const field = (label, ctl) => el("label", { class: `${NS}-dlgfield` }, el("span", {}, label), ctl);
+  const dpiField = field("Resolution", dpiSel);
+  const info = el("div", { class: `${NS}-dlginfo` });
+  const settings = el("div", { class: `${NS}-dlggrid` }, dpiField, field("Background", bgSel), el("label", { class: `${NS}-dlgfield ${NS}-dlgwide` }, el("span", {}, "File name"), el("span", { class: `${NS}-dlgname` }, name, ext)));
+  const body = el("div", { class: `${NS}-dlgbody` }, el("div", { class: `${NS}-dlglabel` }, "Format"), cards, settings, info);
+  const cancel = el("button", { type: "button", class: `${NS}-btn`, onclick: close }, "Cancel");
+  const go = el("button", { type: "button", class: `${NS}-btn ${NS}-primary`, html: `${icon("download")}<span>Export</span>` });
+  const foot = el("div", { class: `${NS}-dlgfoot` }, cancel, go);
+  dlg.append(head, body, foot);
+
   const refresh = () => {
-    for (const b of grid.children) b.classList.toggle("active", b.dataset.v === S.exportFmt);
-    const pg = S.doc.page;
-    const px = (mm) => Math.round((mm / 25.4) * S.exportDpi);
+    for (const b of cards.children) {
+      const on = b.dataset.v === S.exportFmt;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    }
     const f = S.exportFmt;
-    dpiRow.style.display = f === "svg" ? "none" : "";
+    const px = (mm) => Math.round((mm / 25.4) * S.exportDpi);
+    dpiField.style.visibility = f === "svg" ? "hidden" : "";
     bgSel.querySelector('[value="transparent"]').disabled = !(f === "png" || f === "svg");
     if (bgSel.value === "transparent" && bgSel.querySelector('[value="transparent"]').disabled) bgSel.value = "page";
     ext.textContent = f === "vpdf" || f === "geopdf" ? ".pdf" : `.${f}`;
     info.textContent =
-      f === "svg" || f === "vpdf"
-        ? fmts.find((x) => x[0] === f)[2] + "."
-        : f === "pdf" || f === "geopdf"
-          ? `${pg.width} × ${pg.height} mm at ${S.exportDpi} dpi.${f === "geopdf" ? " Readable in QGIS, Avenza Maps and Acrobat." : ""}`
-          : `${px(pg.width)} × ${px(pg.height)} px at ${S.exportDpi} dpi.`;
+      f === "svg"
+        ? "Editable vector page; maps are embedded as images at 200 dpi."
+        : f === "vpdf"
+          ? "Text, lines and symbols stay vector; maps are images at the chosen resolution."
+          : f === "pdf" || f === "geopdf"
+            ? `${round(pg.width, 1)} × ${round(pg.height, 1)} mm at ${S.exportDpi} dpi.${f === "geopdf" ? " Map frames are georeferenced (WGS 84); opens in QGIS, Avenza Maps and Acrobat." : ""}`
+            : `${px(pg.width).toLocaleString("en-US")} × ${px(pg.height).toLocaleString("en-US")} px at ${S.exportDpi} dpi.`;
   };
-  for (const [v, label, title] of fmts) {
-    const b = el("button", { type: "button", "data-v": v, title }, label);
-    b.addEventListener("click", () => {
-      S.exportFmt = v;
-      refresh();
-    });
-    grid.appendChild(b);
-  }
   dpiSel.addEventListener("change", () => {
     S.exportDpi = parseInt(dpiSel.value, 10);
     refresh();
   });
   bgSel.addEventListener("change", () => (S.exportBg = bgSel.value));
   name.addEventListener("input", () => (S.exportName = name.value));
-  const go = el("button", { type: "button", class: `${NS}-btn ${NS}-primary ${NS}-wide`, html: `${icon("download")}<span>Export</span>` });
-  go.addEventListener("click", () => {
-    closePopover();
+
+  // progress view inside the same window
+  const start = async () => {
+    if (running) return;
     S.exportBg = bgSel.value;
     S.exportName = name.value;
-    exportLayout(S.exportFmt);
-  });
+    const fmt = S.exportFmt;
+    const info = EXPORT_FORMATS_INFO.find((x) => x[0] === fmt);
+    const label = info?.[1] || fmt;
+    const nMaps = mapItems().filter((m) => !m.hidden).length;
+    const nFonts = docFontFamilies().filter(isGoogleFont).length;
+    const steps = [
+      ...(nMaps ? [["maps", `Render ${nMaps} map frame${nMaps > 1 ? "s" : ""}`]] : []),
+      ...(nFonts && fmt !== "vpdf" ? [["fonts", `Embed ${nFonts} Google font${nFonts > 1 ? "s" : ""}`]] : []),
+      ["compose", "Compose the page"],
+      ["save", `Write the ${label} file`],
+    ];
+    const fileName = `${safeName(S.exportName || S.doc.name)}${fmt === "vpdf" ? ".pdf" : fmt === "geopdf" ? "_geo.pdf" : `.${fmt}`}`;
+    const prog = progressView(`Exporting ${label}`, { sub: `${fileName}${fmt === "svg" ? "" : ` · ${S.exportDpi} dpi`}`, iconName: info?.[3] || "download", steps });
+    body.replaceWith(el("div", { class: `${NS}-dlgbody` }, prog.el));
+    foot.replaceChildren();
+    running = true;
+    let ok = false;
+    try {
+      ok = await exportLayout(fmt, prog);
+    } finally {
+      running = false;
+    }
+    if (ok) {
+      prog.set(`Saved ${fileName}`, 1);
+      foot.append(el("button", { type: "button", class: `${NS}-btn ${NS}-primary`, onclick: close }, "Done"));
+      setTimeout(close, 1800);
+    } else {
+      foot.append(el("button", { type: "button", class: `${NS}-btn`, onclick: close }, "Close"));
+    }
+  };
+  go.addEventListener("click", start);
   refresh();
-  const pop = popoverAt(
-    anchor,
-    el("div", { class: `${NS}-exportpop` },
-      el("div", { class: `${NS}-ptitle` }, "Export"),
-      grid,
-      dpiRow,
-      bgRow,
-      el("label", { class: `${NS}-prow` }, el("span", { class: `${NS}-plabel` }, "File name"), el("span", { class: `${NS}-pctl` }, name, ext)),
-      info,
-      go,
-    ),
-  );
-  const r = anchor.getBoundingClientRect();
-  const rr = S.ui.root.getBoundingClientRect();
-  pop.style.left = `${Math.max(8, r.right - rr.left - pop.offsetWidth)}px`;
+  S.ui.root.appendChild(overlay);
+  setTimeout(() => go.focus(), 30);
 }
 
 function setTab(tab) {
@@ -4271,7 +4973,10 @@ function setTool(id, variant) {
 
 // ---------------------------------------------------------------- tool galleries
 function closePopover() {
-  S.ui.popover?.remove();
+  const pop = S.ui.popover;
+  if (!pop) return;
+  pop._off?.();
+  pop.remove();
   S.ui.popover = null;
 }
 function popoverAt(anchor, content, cls = "") {
@@ -4283,19 +4988,23 @@ function popoverAt(anchor, content, cls = "") {
   pop.style.left = `${Math.min(r.right + 6 - rr.left, rr.width - pop.offsetWidth - 8)}px`;
   pop.style.top = `${Math.max(8, Math.min(r.top - rr.top, rr.height - pop.offsetHeight - 8))}px`;
   if (r.top + pop.offsetHeight > rr.bottom) pop.style.top = `${Math.max(8, rr.height - pop.offsetHeight - 8)}px`;
-  if (anchor.closest(`.${NS}-top`)) {
+  if (anchor.closest(`.${NS}-top, .${NS}-quick`)) {
     pop.style.left = `${Math.min(r.left - rr.left, rr.width - pop.offsetWidth - 8)}px`;
     pop.style.top = `${r.bottom - rr.top + 6}px`;
   }
-  setTimeout(() => {
-    const off = (e) => {
-      if (!pop.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) {
-        closePopover();
-        document.removeEventListener("pointerdown", off, true);
-      }
-    };
-    document.addEventListener("pointerdown", off, true);
-  }, 0);
+  // close on a click outside; the listener belongs to this popover only, so a
+  // popover opened from another one (e.g. the icon catalog) is not closed by it
+  const off = (e) => {
+    if (S.ui.popover !== pop) return pop._off?.();
+    // targets removed from the DOM by a re-render inside the popover count as inside
+    if (!e.target.isConnected || pop.contains(e.target) || e.target === anchor || anchor.contains(e.target)) return;
+    closePopover();
+  };
+  const t = setTimeout(() => document.addEventListener("pointerdown", off, true), 0);
+  pop._off = () => {
+    clearTimeout(t);
+    document.removeEventListener("pointerdown", off, true);
+  };
   S.ui.popover = pop;
   requestAnimationFrame(() => {
     const b = pop.getBoundingClientRect();
@@ -4509,6 +5218,7 @@ function afterDocReplaced() {
   // drop live maps for items that no longer exist
   for (const id of [...S.maps.keys()]) if (!findItem(id)) destroyLiveMap(id);
   renderAll();
+  ensureDocFonts();
 }
 
 function pageDecorSVG(forExport, background = "page") {
@@ -4524,10 +5234,38 @@ function pageDecorSVG(forExport, background = "page") {
       s += `<rect x="${i + g}" y="${i + g}" width="${pg.width - (i + g) * 2}" height="${pg.height - (i + g) * 2}" fill="none" stroke="${esc(b.color)}" stroke-width="${b.width * 0.4}"/>`;
     }
   }
+  if (!forExport && pg.layoutGrid?.show) s += layoutGridSVG(pg);
   if (!forExport && pg.showMargin && pg.margin > 0) {
     const m = pg.margin;
     s += `<rect x="${m}" y="${m}" width="${pg.width - 2 * m}" height="${pg.height - 2 * m}" fill="none" stroke="#38bdf8" stroke-width="${0.6 / S.zoom}" stroke-dasharray="${3 / S.zoom} ${2 / S.zoom}"/>`;
   }
+  return s;
+}
+// Column / row rectangles of the layout grid (page mm).
+function layoutGridCells(pg) {
+  const g = pg.layoutGrid;
+  const m = g.margin > 0 ? g.margin : pg.margin || 0;
+  const cols = [];
+  const rows = [];
+  const span = (n, gut, len) => {
+    const out = [];
+    if (!(n > 0)) return out;
+    const w = (len - 2 * m - gut * (n - 1)) / n;
+    for (let i = 0; i < n; i++) out.push([m + i * (w + gut), m + i * (w + gut) + w]);
+    return out;
+  };
+  cols.push(...span(Math.round(g.cols), g.colGutter || 0, pg.width));
+  rows.push(...span(Math.round(g.rows), g.rowGutter || 0, pg.height));
+  return { cols, rows, m };
+}
+function layoutGridSVG(pg) {
+  const g = pg.layoutGrid;
+  const { cols, rows, m } = layoutGridCells(pg);
+  const c = esc(g.color || "#ff3b6b");
+  const op = g.opacity ?? 0.1;
+  let s = "";
+  for (const [a, b] of cols) s += `<rect x="${a}" y="${m}" width="${b - a}" height="${pg.height - 2 * m}" fill="${c}" fill-opacity="${op}"/>`;
+  for (const [a, b] of rows) s += `<rect x="${m}" y="${a}" width="${pg.width - 2 * m}" height="${b - a}" fill="${c}" fill-opacity="${op}"/>`;
   return s;
 }
 function renderPageDecor() {
@@ -4536,9 +5274,18 @@ function renderPageDecor() {
   S.ui.decor.innerHTML = `<svg width="${pg.width * Z}" height="${pg.height * Z}" viewBox="0 0 ${pg.width} ${pg.height}">${pageDecorSVG(false)}</svg>`;
   if (pg.showGrid && pg.gridSize > 0) {
     const g = pg.gridSize * Z;
-    S.ui.paper.style.setProperty("--glc-grid", `${g}px`);
+    const sub = Math.max(1, Math.round(pg.gridSub || 5));
+    const P = S.ui.paper.style;
+    P.setProperty("--glc-grid", `${g}px`);
+    P.setProperty("--glc-grid-major", `${g * sub}px`);
+    const [r, gg, b] = hexToRgb(pg.gridColor || "#0d99ff");
+    const op = pg.gridOpacity ?? 0.14;
+    P.setProperty("--glc-grid-c", `rgb(${r} ${gg} ${b} / ${op})`);
+    P.setProperty("--glc-grid-cm", `rgb(${r} ${gg} ${b} / ${Math.min(1, op * 2.2)})`);
     S.ui.paper.classList.add("showgrid");
-  } else S.ui.paper.classList.remove("showgrid");
+    S.ui.paper.classList.toggle("griddots", pg.gridStyle === "dots");
+  } else S.ui.paper.classList.remove("showgrid", "griddots");
+  S.ui.paper.style.setProperty("--glc-guide-c", pg.guideColor || "#00c2ff");
 }
 
 function renderPaper(onlyIds) {
@@ -4769,6 +5516,11 @@ function snapTargets(excludeIds) {
     xs.push(...pg.guides.v);
     ys.push(...pg.guides.h);
   }
+  if (pg.layoutGrid?.show && pg.layoutGrid.snap !== false) {
+    const { cols, rows } = layoutGridCells(pg);
+    for (const [a, b] of cols) xs.push(a, b);
+    for (const [a, b] of rows) ys.push(a, b);
+  }
   for (const it of S.doc.items) {
     if (excludeIds.includes(it.id) || it.hidden) continue;
     xs.push(it.x, it.x + it.w, it.x + it.w / 2);
@@ -4785,7 +5537,7 @@ function showGuides(gx, gy) {
 }
 function snapPoint(x, y, exclude, { edgesX = [0], edgesY = [0] } = {}) {
   const pg = S.doc.page;
-  const thr = 6 / S.zoom;
+  const thr = (pg.snapTol || 6) / S.zoom;
   const gx = [];
   const gy = [];
   let dx = null;
@@ -5135,6 +5887,11 @@ function addItemFromTool(tool, rect, variant) {
     item.w = 25;
     item.h = 25;
   }
+  if (type === "attrtable" || type === "chart") {
+    initDataItem(item);
+    if (type === "chart" && variant) item.props.kind = variant;
+    if (type === "chart" && (variant === "bar" || variant === "hbar")) item.props.colorMode = "layer";
+  }
   commit(() => S.doc.items.push(item));
   select([item.id]);
   if (type === "image") pickImage(item);
@@ -5232,7 +5989,8 @@ function onKey(e) {
   else if (k.startsWith("arrow")) {
     const items = selectedItems().filter((i) => !i.locked);
     if (!items.length) return;
-    const d = e.shiftKey ? 10 : e.altKey ? 0.1 : 1;
+    const pg = S.doc.page;
+    const d = e.shiftKey ? pg.nudgeBig || 10 : e.altKey ? 0.1 : pg.nudge || 1;
     commit(() => {
       for (const i of items) {
         if (k === "arrowleft") i.x = round(i.x - d, 3);
@@ -6218,6 +6976,259 @@ function finishInlineEdit() {
     });
   }
 }
+// ---------------------------------------------------------------- fonts: Google Fonts + installed fonts
+// The Google Fonts family list comes from the Fontsource API (keyless, CORS);
+// fonts load from Google Fonts CSS2. On export, the fonts in use are embedded
+// in the page SVG as data URLs so raster and PDF output keep the right faces.
+
+const GF_LIST_URL = "https://api.fontsource.org/v1/fonts";
+const GF_CSS = "https://fonts.googleapis.com/css2";
+const GF_KEY = "glc:gfonts:v1";
+const GF = { list: null, byFamily: new Map(), loading: null, loaded: new Set(), preview: new Set(), embedded: new Map() };
+const GF_CATEGORIES = [["", "All"], ["sans-serif", "Sans"], ["serif", "Serif"], ["display", "Display"], ["handwriting", "Script"], ["monospace", "Mono"]];
+
+function gfIndex(list) {
+  GF.list = list;
+  GF.byFamily = new Map(list.map((f) => [f.family, f]));
+}
+// [{family, category, weights, italic}] of every Google font; cached for a week.
+function loadGoogleFontList() {
+  if (GF.list) return Promise.resolve(GF.list);
+  if (GF.loading) return GF.loading;
+  try {
+    const c = JSON.parse(localStorage.getItem(GF_KEY) || "null");
+    if (c && Date.now() - c.t < 7 * 864e5 && Array.isArray(c.fonts) && c.fonts.length > 100) {
+      gfIndex(c.fonts.map(([family, category, weights, italic]) => ({ family, category, weights, italic: !!italic })));
+      return Promise.resolve(GF.list);
+    }
+  } catch {}
+  GF.loading = fetch(GF_LIST_URL)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((all) => {
+      const fonts = all
+        .filter((f) => f.type === "google")
+        .map((f) => ({ family: f.family, category: f.category, weights: f.weights || [400], italic: (f.styles || []).includes("italic") }))
+        .sort((a, b) => a.family.localeCompare(b.family));
+      gfIndex(fonts);
+      try {
+        localStorage.setItem(GF_KEY, JSON.stringify({ t: Date.now(), fonts: fonts.map((f) => [f.family, f.category, f.weights, f.italic ? 1 : 0]) }));
+      } catch {}
+      return fonts;
+    })
+    .catch((e) => {
+      console.warn("[Layout Composer] Google Fonts list", e);
+      GF.loading = null;
+      return [];
+    });
+  return GF.loading;
+}
+function isGoogleFont(family) {
+  return GF.byFamily.has(family);
+}
+// CSS2 URL for the given weights (default regular + bold), with italics when the family has them.
+function gfCssUrl(family, extra = "", want = [400, 700]) {
+  const info = GF.byFamily.get(family);
+  const ws = info?.weights?.length ? info.weights : [400];
+  const pick = (w) => ws.reduce((a, b) => (Math.abs(b - w) < Math.abs(a - w) ? b : a), ws[0]);
+  const weights = [...new Set(want.map(pick))].sort((a, b) => a - b);
+  const fam = encodeURIComponent(family).replace(/%20/g, "+");
+  const axes = info?.italic ? `:ital,wght@${[0, 1].flatMap((i) => weights.map((w) => `${i},${w}`)).join(";")}` : `:wght@${weights.join(";")}`;
+  return `${GF_CSS}?family=${fam}${axes}&display=swap${extra}`;
+}
+function addStylesheet(href) {
+  if (document.querySelector(`link[data-glc-font="${CSS.escape(href)}"]`)) return;
+  const l = document.createElement("link");
+  l.rel = "stylesheet";
+  l.href = href;
+  l.dataset.glcFont = href;
+  document.head.appendChild(l);
+}
+// Make a Google font usable on the canvas (and in text measurement).
+async function ensureFont(family) {
+  if (!family || GF.loaded.has(family)) return;
+  await loadGoogleFontList();
+  if (!isGoogleFont(family)) return;
+  GF.loaded.add(family);
+  // every weight the family has, so the weight menu previews correctly
+  addStylesheet(gfCssUrl(family, "", GF.byFamily.get(family)?.weights || [400, 700]));
+  try {
+    await Promise.all([document.fonts.load(`400 16px "${family}"`), document.fonts.load(`700 16px "${family}"`)]);
+  } catch {}
+  clearTimeout(ensureFont.t);
+  ensureFont.t = setTimeout(() => S.ui?.root && refreshCanvas(), 60);
+}
+// Every font family used by the current layout.
+function docFontFamilies(doc = S.doc) {
+  const out = new Set();
+  const walk = (o) => {
+    if (!o || typeof o !== "object") return;
+    if (Array.isArray(o)) return o.forEach(walk);
+    if (typeof o.family === "string" && "size" in o) out.add(o.family);
+    if (typeof o.fontFamily === "string") out.add(o.fontFamily);
+    for (const v of Object.values(o)) if (v && typeof v === "object") walk(v);
+  };
+  for (const it of doc?.items || []) walk(it.props);
+  return [...out];
+}
+// Weights of a family used by the layout (for export embedding).
+function docFontWeights(family) {
+  const out = new Set();
+  const walk = (o) => {
+    if (!o || typeof o !== "object") return;
+    if (Array.isArray(o)) return o.forEach(walk);
+    if (o.family === family && "size" in o) out.add(fontWeight(o));
+    if (o.fontFamily === family) out.add(700);
+    for (const v of Object.values(o)) if (v && typeof v === "object") walk(v);
+  };
+  for (const it of S.doc?.items || []) walk(it.props);
+  return out.size ? [...out] : [400];
+}
+async function ensureDocFonts() {
+  await loadGoogleFontList();
+  await Promise.all(docFontFamilies().filter(isGoogleFont).map(ensureFont));
+}
+// @font-face rules with the font files inlined, for the export SVG (latin + latin-ext).
+async function embeddedFontCss(families) {
+  await loadGoogleFontList();
+  const out = [];
+  for (const fam of families.filter(isGoogleFont)) {
+    if (!GF.embedded.has(fam)) {
+      GF.embedded.set(fam, (async () => {
+        const css = await fetch(gfCssUrl(fam, "", docFontWeights(fam))).then((r) => (r.ok ? r.text() : ""));
+        const blocks = css.split(/(?=\/\*\s*[\w-]+\s*\*\/)/).filter((b) => /\/\*\s*(latin|latin-ext)\s*\*\//.test(b) || !/\/\*/.test(b));
+        const done = [];
+        for (const b of blocks) {
+          const m = /url\((https:[^)]+)\)/.exec(b);
+          if (!m) continue;
+          const buf = await fetch(m[1]).then((r) => r.arrayBuffer());
+          let bin = "";
+          const bytes = new Uint8Array(buf);
+          for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+          done.push(b.replace(m[1], `data:font/woff2;base64,${btoa(bin)}`).replace(/\/\*[^*]*\*\//g, ""));
+        }
+        return done.join("\n");
+      })().catch((e) => {
+        console.warn("[Layout Composer] embed font", fam, e);
+        GF.embedded.delete(fam);
+        return "";
+      }));
+    }
+    out.push(await GF.embedded.get(fam));
+  }
+  return out.filter(Boolean).join("\n");
+}
+
+// ---- font picker (searchable; Google Fonts + installed fonts)
+function fontPicker(current, onPick, { cls = "" } = {}) {
+  const btn = el("button", { type: "button", class: `${NS}-input ${NS}-fontbtn ${cls}`, title: `Font: ${current}` },
+    el("span", { style: { fontFamily: `"${current}", Arial, sans-serif` } }, current),
+    el("span", { class: `${NS}-fontcaret`, html: icon("chevron", 12) }),
+  );
+  btn.addEventListener("click", () => openFontPicker(btn, current, onPick));
+  return btn;
+}
+function openFontPicker(anchor, current, onPick) {
+  S.fontTab = S.fontTab || "all";
+  S.fontCat = S.fontCat || "";
+  const search = el("input", { type: "search", class: `${NS}-input`, placeholder: "Search fonts…" });
+  const tabs = el("div", { class: `${NS}-seg ${NS}-segfull` });
+  const cats = el("div", { class: `${NS}-chips ${NS}-fontcats` });
+  const list = el("div", { class: `${NS}-fontlist` });
+  const note = el("div", { class: `${NS}-muted ${NS}-fontnote` });
+  const io = "IntersectionObserver" in window
+    ? new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const fam = e.target.dataset.family;
+          io.unobserve(e.target);
+          if (isGoogleFont(fam) && !GF.loaded.has(fam) && !GF.preview.has(fam)) {
+            GF.preview.add(fam);
+            // only the letters of the name: a few hundred bytes per preview
+            addStylesheet(`${GF_CSS}?family=${encodeURIComponent(fam).replace(/%20/g, "+")}&text=${encodeURIComponent(fam)}&display=swap`);
+          }
+        }
+      }, { root: list, rootMargin: "120px" })
+    : null;
+  const installed = () => knownFonts();
+  let limit = 120;
+  const draw = () => {
+    for (const b of tabs.children) b.classList.toggle("active", b.dataset.v === S.fontTab);
+    cats.style.display = S.fontTab === "installed" ? "none" : "";
+    for (const c of cats.children) c.classList.toggle("active", c.dataset.v === S.fontCat);
+    list.innerHTML = "";
+    const q = search.value.trim().toLowerCase();
+    let rows = [];
+    if (S.fontTab !== "google") rows.push(...installed().map((f) => ({ family: f, tag: "Installed" })));
+    if (S.fontTab !== "installed" && GF.list) rows.push(...GF.list.filter((f) => !S.fontCat || f.category === S.fontCat).map((f) => ({ family: f.family, tag: GF_CATEGORIES.find(([k]) => k === f.category)?.[1] || f.category })));
+    if (S.fontTab === "all" && S.fontCat) rows = rows.filter((r) => r.tag !== "Installed");
+    const seen = new Set();
+    rows = rows.filter((r) => !seen.has(r.family) && seen.add(r.family) && (!q || r.family.toLowerCase().includes(q)));
+    note.textContent = !GF.list && S.fontTab !== "installed" ? "Loading Google Fonts…" : `${rows.length.toLocaleString("en-US")} font${rows.length === 1 ? "" : "s"}${S.fontTab !== "installed" ? " · Google Fonts are open source (OFL / Apache)" : ""}`;
+    for (const r of rows.slice(0, limit)) {
+      const b = el("button", { type: "button", class: `${NS}-fontitem ${r.family === current ? "active" : ""}`, "data-family": r.family },
+        el("span", { class: `${NS}-fontname`, style: { fontFamily: `"${r.family}", Arial, sans-serif` } }, r.family),
+        el("small", {}, r.tag),
+      );
+      b.addEventListener("click", async () => {
+        closePopover();
+        await ensureFont(r.family);
+        onPick(r.family);
+      });
+      list.appendChild(b);
+      io?.observe(b);
+    }
+    if (rows.length > limit) {
+      const more = el("button", { type: "button", class: `${NS}-catmore` }, `Show more (${(rows.length - limit).toLocaleString("en-US")} left)`);
+      more.addEventListener("click", () => {
+        limit += 200;
+        draw();
+      });
+      list.appendChild(more);
+    }
+  };
+  for (const [v, label] of [["all", "All"], ["google", "Google Fonts"], ["installed", "Installed"]]) {
+    const b = el("button", { type: "button", "data-v": v }, label);
+    b.addEventListener("click", () => {
+      S.fontTab = v;
+      limit = 120;
+      draw();
+    });
+    tabs.appendChild(b);
+  }
+  for (const [v, label] of GF_CATEGORIES) {
+    const c = el("button", { type: "button", class: `${NS}-chip`, "data-v": v }, label);
+    c.addEventListener("click", () => {
+      S.fontCat = v;
+      limit = 120;
+      draw();
+    });
+    cats.appendChild(c);
+  }
+  let t = 0;
+  search.addEventListener("input", () => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      limit = 120;
+      draw();
+    }, 120);
+  });
+  search.addEventListener("keydown", (e) => e.stopPropagation());
+  const loadLocal = el("button", { type: "button", class: `${NS}-catmore` }, "＋ Load installed fonts from this computer");
+  loadLocal.addEventListener("click", async () => {
+    await loadInstalledFonts();
+    S.fontTab = "installed";
+    draw();
+  });
+  draw();
+  if (!GF.list) loadGoogleFontList().then(draw);
+  const pop = popoverAt(anchor, el("div", { class: `${NS}-fontpick` }, search, tabs, cats, note, list, loadLocal), `${NS}-fontpop`);
+  const prevOff = pop._off;
+  pop._off = () => {
+    io?.disconnect();
+    prevOff?.();
+  };
+  setTimeout(() => search.focus(), 30);
+}
 // ---------------------------------------------------------------- property panel
 function refreshCanvas() {
   renderPageDecor();
@@ -6373,18 +7384,13 @@ function fSeg(obj, path, options, { after } = {}) {
 }
 function fFont(obj, path, { after } = {}) {
   const f = getPath(obj, path);
-  const fam = el("select", { class: `${NS}-input ${NS}-fam` });
-  const all = knownFonts();
-  const fams = all.includes(f.family) ? all : [f.family, ...all];
-  for (const n of fams) fam.appendChild(el("option", { value: n, selected: n === f.family, style: { fontFamily: `"${n}"` } }, n));
-  fam.appendChild(el("option", { value: "__load" }, "＋ Load installed fonts…"));
-  fam.addEventListener("change", () => {
-    if (fam.value === "__load") {
-      fam.value = f.family;
-      return loadInstalledFonts();
-    }
-    liveSet(obj, `${path}.family`, fam.value, after);
-  });
+  const fam = fontPicker(f.family, (n) =>
+    liveSet(obj, `${path}.family`, n, () => {
+      if (after) after();
+      else refreshCanvas();
+      renderProps();
+      renderQuickBar();
+    }), { cls: `${NS}-fam` });
   const size = el("input", { type: "number", class: `${NS}-input ${NS}-fsize`, value: f.size, min: 2, max: 400, step: 0.5, title: "Size (pt)" });
   size.addEventListener("input", () => {
     const v = parseFloat(size.value);
@@ -6448,6 +7454,95 @@ function mapFrameShapeRows(item) {
   }
   if (shape !== "rect" && shape !== "rounded") rows.push(el("p", { class: `${NS}-muted` }, "Grid frame ticks and labels are drawn only on rectangular frames."));
   return rows;
+}
+
+// ---------------------------------------------------------------- typography (Figma-like detail)
+const WEIGHT_NAMES = { 100: "Thin", 200: "Extra Light", 300: "Light", 400: "Regular", 500: "Medium", 600: "Semi Bold", 700: "Bold", 800: "Extra Bold", 900: "Black" };
+const ALIGN_ICONS = {
+  left: "M4 6h16M4 10h10M4 14h16M4 18h10",
+  center: "M4 6h16M7 10h10M4 14h16M7 18h10",
+  right: "M4 6h16M10 10h10M4 14h16M10 18h10",
+  justify: "M4 6h16M4 10h16M4 14h16M4 18h16",
+  top: "M5 4h14M12 8v12M8 12l4-4 4 4",
+  middle: "M5 12h14M12 4v5M12 15v5M9 7l3 2 3-2M9 17l3-2 3 2",
+  bottom: "M5 20h14M12 4v12M8 12l4 4 4-4",
+};
+const segIcon = (d, title) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="${title}"><path d="${d}"/></svg>`;
+function typographyRows(item, path, { text = false } = {}) {
+  const f = getPath(item, path);
+  if (f.opacity == null) f.opacity = 1;
+  const p = item.props;
+  const redo = () => {
+    refreshCanvas();
+    renderProps();
+    renderQuickBar();
+  };
+  const set = (k, v) => liveSet(item, `${path}.${k}`, v, redo);
+  const gf = typeof GF !== "undefined" && GF.byFamily.get(f.family);
+  const weights = gf?.weights?.length ? gf.weights : [100, 200, 300, 400, 500, 600, 700, 800, 900];
+  const cur = fontWeight(f);
+  const wSel = el("select", { class: `${NS}-input` }, ...weights.map((w) => el("option", { value: w, selected: w === cur }, `${WEIGHT_NAMES[w] || w} ${w}`)));
+  wSel.addEventListener("change", () => {
+    const w = Number(wSel.value);
+    liveSet(item, `${path}.weight`, w, () => {
+      f.bold = w >= 600;
+      redo();
+    });
+  });
+  const size = el("input", { type: "number", class: `${NS}-input`, value: f.size, min: 1, max: 999, step: 0.5, title: "Size (pt)" });
+  size.addEventListener("input", () => {
+    const v = parseFloat(size.value);
+    if (v > 0) liveSet(item, `${path}.size`, v, () => refreshCanvas());
+  });
+  const tog = (key, html, title, on) => {
+    const b = el("button", { type: "button", class: `${NS}-tog ${on ? "active" : ""}`, title, html });
+    b.addEventListener("click", () => set(key, !getPath(item, `${path}.${key}`)));
+    return b;
+  };
+  const rows = [
+    row("Font", fontPicker(f.family, (n) => set("family", n))),
+    el("div", { class: `${NS}-grid2` },
+      row("Weight", wSel),
+      row("Size", el("span", { class: `${NS}-unitwrap` }, size, el("span", { class: `${NS}-unit` }, "pt"))),
+    ),
+    el("div", { class: `${NS}-grid2` },
+      row("Color", fColor(item, `${path}.color`, { after: () => refreshCanvas() })),
+      row("Opacity", fRange(item, `${path}.opacity`, 0, 1, 0.05, { after: () => refreshCanvas() })),
+    ),
+    row("Style", el("div", { class: `${NS}-togrow` },
+      tog("italic", "<i>I</i>", "Italic", f.italic),
+      tog("smallCaps", "<span style='font-variant:small-caps'>Sc</span>", "Small caps", f.smallCaps),
+      ...(text ? [
+        (() => {
+          const b = el("button", { type: "button", class: `${NS}-tog ${p.decoration === "underline" ? "active" : ""}`, title: "Underline", html: "<u>U</u>" });
+          b.addEventListener("click", () => liveSet(item, "props.decoration", p.decoration === "underline" ? "none" : "underline", redo));
+          return b;
+        })(),
+        (() => {
+          const b = el("button", { type: "button", class: `${NS}-tog ${p.decoration === "line-through" ? "active" : ""}`, title: "Strikethrough", html: "<s>S</s>" });
+          b.addEventListener("click", () => liveSet(item, "props.decoration", p.decoration === "line-through" ? "none" : "line-through", redo));
+          return b;
+        })(),
+      ] : []),
+    )),
+  ];
+  if (!text) return rows;
+  rows.push(
+    row("Case", fSelect(item, "props.textCase", [["none", "As typed"], ["upper", "UPPERCASE"], ["lower", "lowercase"], ["title", "Title Case"]])),
+    el("div", { class: `${NS}-grid2` },
+      row("Line height", el("span", { class: `${NS}-unitwrap` }, fNum(item, "props.lineHeight", { min: 0.5, max: 5, step: 0.05 }), el("span", { class: `${NS}-unit` }, "×"))),
+      row("Letter spacing", fNum(item, `${path}.spacing`, { min: -20, max: 100, step: 0.5, unit: "‰" })),
+    ),
+    el("div", { class: `${NS}-grid2` },
+      row("Paragraph gap", fNum(item, "props.paraSpacing", { min: 0, max: 50, step: 0.25, unit: "mm" })),
+      row("Padding", fNum(item, "props.padding", { min: 0, step: 0.25, unit: "mm" })),
+    ),
+    row("Align", fSeg(item, "props.align", ["left", "center", "right", "justify"].map((a) => [a, segIcon(ALIGN_ICONS[a], a), `Align ${a}`]))),
+    row("Vertical", fSeg(item, "props.valign", [["top", segIcon(ALIGN_ICONS.top, "top"), "Top"], ["middle", segIcon(ALIGN_ICONS.middle, "middle"), "Middle"], ["bottom", segIcon(ALIGN_ICONS.bottom, "bottom"), "Bottom"]])),
+    row("Resize", fSeg(item, "props.autoSize", [["fixed", "Fixed", "Fixed box"], ["height", "Auto H", "Height follows the text"], ["width", "Auto W", "Width and height follow the text (no wrapping)"]], { after: redo })),
+    (p.autoSize || "fixed") !== "width" ? fCheck(item, "props.wrap", "Wrap lines to the box width") : null,
+  );
+  return rows.filter(Boolean);
 }
 
 function btn(label, onClick, { primary = false, iconName, title } = {}) {
@@ -6529,7 +7624,7 @@ function renderProps() {
 // ---- property groups: the sections of an item are sorted into tabs
 // (Content · Style · Grid · Arrange) so long panels stay short and tidy.
 const PROP_GROUPS = [
-  ["content", "Content", /^(content|map view|data|text$|formula|table content|entries|legend|image|icon|symbols?|drawing|shape|latex|settings)/i],
+  ["content", "Content", /^(content|map view|layers|data|chart$|text$|formula|table content|entries|legend|image|icon|symbols?|drawing|shape|latex|settings)/i],
   ["style", "Style", /^(style|frame|fill|background|halo|bar$|ticks|title|table style|scale bar style|north arrow style|text effects|adjust|stroke|line|markers?)/i],
   ["grid", "Grid", /^(coordinate grid|grid|overview)/i],
   ["arrange", "Arrange", /^(position|effects)/i],
@@ -6539,7 +7634,7 @@ const SECTION_ICONS = [
   [/^overview/i, "map"], [/^position/i, "ruler"], [/^effects|text effects/i, "fx"], [/^text|^formula|^latex/i, "text"],
   [/^fill|^shape|^style/i, "shape"], [/^background|^halo/i, "layout"], [/^title/i, "title"], [/^ticks|^bar/i, "colorbar"],
   [/^entries|^legend/i, "list"], [/^image|^adjust/i, "image"], [/^icon|^symbol/i, "marker"], [/^table/i, "table"],
-  [/^drawing/i, "pen"], [/^scale bar/i, "scalebar"], [/^north/i, "north"], [/^settings/i, "vars"],
+  [/^drawing/i, "pen"], [/^layers/i, "layers"], [/^chart|^colors/i, "chart"], [/^scale bar/i, "scalebar"], [/^north/i, "north"], [/^settings/i, "vars"],
 ];
 function groupPropSections(host, item) {
   const secs = [...host.querySelectorAll(`:scope > details.${NS}-sec`)];
@@ -6606,7 +7701,7 @@ function emptyState() {
   return el("div", { class: `${NS}-emptycard` },
     el("div", { class: `${NS}-emptyicon`, html: icon("select", 22) }),
     el("b", {}, "Nothing selected"),
-    el("p", {}, "Add items from the top bar or the left toolbar; they appear in the middle of the view. Select an item to edit it here. Paper size, margins and guides are on the Page tab."),
+    el("p", {}, "Add items from the top bar; they appear in the middle of the view. Select an item to edit it here. Paper size, margins and guides are on the Page tab."),
     el("div", { class: `${NS}-keyshead` }, "Shortcuts"),
     el("ul", { class: `${NS}-keys` },
       tip("Double-click", "edit text, or pan a map's content"),
@@ -6617,6 +7712,111 @@ function emptyState() {
       tip("Ctrl + D", "duplicate"),
     ),
   );
+}
+
+// ---------------------------------------------------------------- precise position & size
+const LEN_UNITS = { mm: [1, 2], cm: [10, 3], in: [25.4, 3], pt: [25.4 / 72, 1], px: [25.4 / 96, 0] };
+const PREF_KEY = "glc:prefs:v1";
+function prefs() {
+  if (!S.prefs) {
+    try {
+      S.prefs = JSON.parse(localStorage.getItem(PREF_KEY) || "{}");
+    } catch {
+      S.prefs = {};
+    }
+    S.prefs = { unit: "mm", ref: "tl", ...S.prefs };
+  }
+  return S.prefs;
+}
+function savePrefs() {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify(S.prefs));
+  } catch {}
+}
+// Number field that shows a millimetre value in the preferred unit.
+function fLen(get, put, { min = -1e6, step } = {}) {
+  const [k, dec] = LEN_UNITS[prefs().unit] || LEN_UNITS.mm;
+  const input = el("input", { type: "number", class: `${NS}-input`, value: round(get() / k, dec), step: step ?? (dec ? 10 ** -Math.min(dec, 2) * 10 : 1) });
+  input.addEventListener("input", () => {
+    const v = parseFloat(input.value);
+    if (!Number.isFinite(v)) return;
+    put(Math.max(min, round(v * k, 4)));
+  });
+  return el("span", { class: `${NS}-unitwrap` }, input, el("span", { class: `${NS}-unit` }, prefs().unit));
+}
+const REF_POINTS = [["tl", 0, 0], ["tc", 0.5, 0], ["tr", 1, 0], ["ml", 0, 0.5], ["mc", 0.5, 0.5], ["mr", 1, 0.5], ["bl", 0, 1], ["bc", 0.5, 1], ["br", 1, 1]];
+function refPicker() {
+  const g = el("div", { class: `${NS}-refpick`, title: "Reference point for X and Y" });
+  for (const [id] of REF_POINTS) {
+    const b = el("button", { type: "button", class: id === prefs().ref ? "active" : "", "aria-label": `Reference ${id}` });
+    b.addEventListener("click", () => {
+      prefs().ref = id;
+      savePrefs();
+      renderProps();
+    });
+    g.appendChild(b);
+  }
+  return g;
+}
+function positionRows(item) {
+  const after = () => {
+    renderItemList();
+    refreshCanvas();
+    renderSelection();
+  };
+  const [, fx, fy] = REF_POINTS.find(([id]) => id === prefs().ref) || REF_POINTS[0];
+  const live = (fn) => (v) => liveSet(item, "_", null, () => {
+    delete item._;
+    fn(v);
+    after();
+  });
+  const unitSel = el("select", { class: `${NS}-input ${NS}-sm`, title: "Units for position and size" }, ...Object.keys(LEN_UNITS).map((u) => el("option", { value: u, selected: u === prefs().unit }, u)));
+  unitSel.addEventListener("change", () => {
+    prefs().unit = unitSel.value;
+    savePrefs();
+    renderProps();
+  });
+  const ratio = item.h ? item.w / item.h : 1;
+  const lockBtn = el("button", { type: "button", class: `${NS}-tog ${item.lockRatio ? "active" : ""}`, title: "Lock aspect ratio", html: icon(item.lockRatio ? "lock" : "unlock", 14) });
+  lockBtn.addEventListener("click", () => commit(() => (item.lockRatio = !item.lockRatio)));
+  return [
+    row("Name", fText(item, "name", { after: () => renderItemList() })),
+    el("div", { class: `${NS}-posgrid` },
+      refPicker(),
+      el("div", { class: `${NS}-grid2` },
+        row("X", fLen(() => item.x + item.w * fx, live((v) => (item.x = round(v - item.w * fx, 4))))),
+        row("Y", fLen(() => item.y + item.h * fy, live((v) => (item.y = round(v - item.h * fy, 4))))),
+      ),
+    ),
+    el("div", { class: `${NS}-whgrid` },
+      row("W", fLen(() => item.w, live((v) => {
+        const ax = item.x + item.w * fx;
+        const ay = item.y + item.h * fy;
+        item.w = Math.max(0.5, v);
+        if (item.lockRatio) item.h = round(item.w / ratio, 4);
+        item.x = round(ax - item.w * fx, 4);
+        item.y = round(ay - item.h * fy, 4);
+      }), { min: 0.5 })),
+      lockBtn,
+      row("H", fLen(() => item.h, live((v) => {
+        const ax = item.x + item.w * fx;
+        const ay = item.y + item.h * fy;
+        item.h = Math.max(0.5, v);
+        if (item.lockRatio) item.w = round(item.h * ratio, 4);
+        item.x = round(ax - item.w * fx, 4);
+        item.y = round(ay - item.h * fy, 4);
+      }), { min: 0.5 })),
+    ),
+    el("div", { class: `${NS}-grid2` },
+      row("Rotation", el("span", { class: `${NS}-rotrow` },
+        fNum(item, "rot", { min: -360, max: 360, step: 0.5, unit: "°", after }),
+        iconBtn("undo", "Rotate −90°", () => commit(() => (item.rot = (((item.rot || 0) - 90 + 540) % 360) - 180))),
+        iconBtn("redo", "Rotate +90°", () => commit(() => (item.rot = (((item.rot || 0) + 90 + 540) % 360) - 180))),
+      )),
+      row("Units", unitSel),
+    ),
+    row("Opacity", fRange(item, "opacity", 0, 1, 0.01, { after })),
+  ];
 }
 
 function commonProps(item) {
@@ -6639,10 +7839,7 @@ function commonProps(item) {
     fx.glass.on ? fCheck(fx, "glass.border", "Light edge", { after: refreshCanvas }) : null,
   ], fx.shadow.on || fx.glass.on);
   return [effects, section("Position & Size", [
-    row("Name", fText(item, "name", { after: () => renderItemList() })),
-    el("div", { class: `${NS}-grid2` }, row("X", fNum(item, "x", { unit: "mm", after })), row("Y", fNum(item, "y", { unit: "mm", after }))),
-    el("div", { class: `${NS}-grid2` }, row("Width", fNum(item, "w", { min: 1, unit: "mm", after })), row("Height", fNum(item, "h", { min: 1, unit: "mm", after }))),
-    el("div", { class: `${NS}-grid2` }, row("Rotation", fNum(item, "rot", { min: -360, max: 360, step: 1, unit: "°", after })), row("Opacity", fRange(item, "opacity", 0, 1, 0.05, { after }))),
+    ...positionRows(item),
     el("div", { class: `${NS}-btnrow` },
       btn("Flip H", () => commit(() => (item.flipX = !item.flipX)), { iconName: "flipH", title: "Flip horizontally" }),
       btn("Flip V", () => commit(() => (item.flipY = !item.flipY)), { iconName: "flipV", title: "Flip vertically" }),
@@ -6760,6 +7957,7 @@ function itemProps(item) {
             toast("Map layers reloaded");
           }, { iconName: "refresh", title: "Fetch the latest style & layers from GeoLibre" }),
         ]),
+        mapLayersSection(item),
         section("Frame", [
           ...mapFrameShapeRows(item),
           fCheck(item, P("frame.show"), "Show frame"),
@@ -6859,6 +8057,12 @@ function itemProps(item) {
       );
       break;
     }
+    case "attrtable":
+      out.push(...attrTableProps(item));
+      break;
+    case "chart":
+      out.push(...chartProps(item));
+      break;
     case "colorbar": {
       const sources = colorbarSourceOptions();
       const read = () =>
@@ -6957,7 +8161,10 @@ function itemProps(item) {
         section("Settings", [
           el("div", { class: `${NS}-grid2` }, row("Primary color", fColor(item, P("color1"))), row("Secondary color", fColor(item, P("color2")))),
           row("Letter", fSelect(item, P("label"), [["N", "N"], ["U", "U (Indonesian)"], ["", "No letter"]])),
-          row("Letter font", fSelect(item, P("fontFamily"), knownFonts().map((f) => [f, f]))),
+          row("Letter font", fontPicker(p.fontFamily || "Arial", (n) => liveSet(item, P("fontFamily"), n, () => {
+            refreshCanvas();
+            renderProps();
+          }))),
           fCheck(item, P("rotateWithMap"), "Follow map rotation"),
           row("Map", fSelect(item, P("linkedMap"), mapOptions(null))),
           row("Extra rotation", fNum(item, P("rotation"), { step: 1, unit: "°" })),
@@ -6975,13 +8182,7 @@ function itemProps(item) {
               el("button", { type: "button", class: `${NS}-chip`, onclick: () => commit(() => (p.text = `${p.text || ""}${v}`)) }, v),
             ),
           ),
-          row("Font", fFont(item, P("font"))),
-          row("Align", fSeg(item, P("align"), [["left", "Left"], ["center", "Center"], ["right", "Right"]])),
-          row("Vertical", fSeg(item, P("valign"), [["top", "Top"], ["middle", "Center"], ["bottom", "Bottom"]])),
-          row("Letter", fSelect(item, P("textCase"), [["none", "As typed"], ["upper", "UPPERCASE"], ["lower", "lowercase"], ["title", "Title Case"]])),
-          el("div", { class: `${NS}-grid2` }, row("Line spacing", fNum(item, P("lineHeight"), { min: 0.6, max: 4, step: 0.05 })), row("Padding", fNum(item, P("padding"), { min: 0, step: 0.5, unit: "mm" }))),
-          row("Letter spacing", fNum(item, P("font.spacing"), { min: -5, max: 50, step: 0.5 })),
-          fCheck(item, P("wrap"), "Wrap text automatically"),
+          ...typographyRows(item, "props.font", { text: true }),
           btn("Fit height to text", () => commit(() => {
             const pad = p.padding || 0;
             const lines = wrapText(applyCase(resolveVars(p.text, item), p.textCase), p.font, p.wrap ? item.w - pad * 2 : 0);
@@ -6993,7 +8194,6 @@ function itemProps(item) {
           row("Effect", fSelect(item, P("effect"), Object.entries(TEXT_EFFECTS), { after: () => { refreshCanvas(); renderProps(); } })),
           p.effect && p.effect !== "none" && p.effect !== "lift" && p.effect !== "hollow" ? row("Effect color", fColor(item, P("effectColor"))) : null,
           p.effect && p.effect !== "none" && p.effect !== "highlight" ? row("Strength", fRange(item, P("effectStrength"), 0, 100, 5)) : null,
-          row("Decoration", fSeg(item, P("decoration"), [["none", "None"], ["underline", "<u>U</u>"], ["line-through", "<s>S</s>"], ["overline", "<span style='text-decoration:overline'>O</span>"]])),
         ], !!(p.effect && p.effect !== "none")),
         section("Halo, Background & Border", [
           fCheck(item, P("halo"), "Text halo / outline"),
@@ -7233,17 +8433,95 @@ function pageProps() {
       el("div", { class: `${NS}-grid2` }, row("Color", fColor(pg, "border.color")), row("Width", fNum(pg, "border.width", { min: 0.05, step: 0.05, unit: "mm" }))),
       el("div", { class: `${NS}-grid2` }, row("Inset", fNum(pg, "border.inset", { min: 0, step: 0.5, unit: "mm" })), row("Double gap", fNum(pg, "border.gap", { min: 0.2, step: 0.1, unit: "mm" }))),
     ]),
-    section("Guides & Snapping", [
-      el("div", { class: `${NS}-grid2` }, row("Margin", fNum(pg, "margin", { min: 0, step: 1, unit: "mm" })), row("Grid", fNum(pg, "gridSize", { min: 0.5, step: 0.5, unit: "mm" }))),
-      fCheck(pg, "showMargin", "Show margin guides (not printed)"),
-      fCheck(pg, "showGrid", "Show canvas grid"),
-      fCheck(pg, "showGuides", "Show guides", { after: () => { renderGuides(); } }),
-      el("p", { class: `${NS}-muted` }, `Drag from a ruler to add a guide; drag it back onto the ruler to remove it. ${(pg.guides?.v.length || 0) + (pg.guides?.h.length || 0)} guide(s) on this page.`),
-      btn("Clear all guides", () => commit(() => (pg.guides = { v: [], h: [] })), { iconName: "trash" }),
+    ...gridDesignSections(pg),
+  ];
+}
+
+// ---------------------------------------------------------------- grid design (canvas grid, layout grid, guides, snapping)
+function gridDefaults(pg) {
+  pg.gridSize ??= 5;
+  pg.gridSub ??= 5;
+  pg.gridStyle ??= "lines";
+  pg.gridColor ??= "#0d99ff";
+  pg.gridOpacity ??= 0.14;
+  pg.snapTol ??= 6;
+  pg.nudge ??= 1;
+  pg.nudgeBig ??= 10;
+  pg.guideColor ??= "#00c2ff";
+  pg.layoutGrid ??= { show: false, cols: 12, colGutter: 5, rows: 0, rowGutter: 5, margin: null, color: "#ff3b6b", opacity: 0.1, snap: true };
+  pg.guides ??= { v: [], h: [] };
+}
+function gridDesignSections(pg) {
+  gridDefaults(pg);
+  const deco = () => {
+    renderPageDecor();
+    renderGuides?.();
+  };
+  const lg = pg.layoutGrid;
+  const gi = el("input", { type: "number", class: `${NS}-input`, step: 0.5, placeholder: "0" });
+  const gdir = el("select", { class: `${NS}-input ${NS}-sm` }, el("option", { value: "v" }, "Vertical at X"), el("option", { value: "h" }, "Horizontal at Y"));
+  const addGuide = btn("Add", () => {
+    const v = parseFloat(gi.value);
+    if (!Number.isFinite(v)) return toast("Type a position in mm", "warn");
+    commit(() => pg.guides[gdir.value].push(round(v, 3)));
+  }, { iconName: "plus" });
+  const guideList = el("div", { class: `${NS}-guidelist` });
+  for (const dir of ["v", "h"]) {
+    pg.guides[dir].forEach((v, i) => {
+      guideList.appendChild(el("span", { class: `${NS}-guidechip` }, `${dir === "v" ? "X" : "Y"} ${fmtNumber(v, 2)}`, iconBtn("close", "Remove guide", () => commit(() => pg.guides[dir].splice(i, 1)))));
+    });
+  }
+  return [
+    section("Canvas grid", [
+      fCheck(pg, "showGrid", "Show grid (not printed)", { after: deco }),
+      el("div", { class: `${NS}-grid2` },
+        row("Spacing", fNum(pg, "gridSize", { min: 0.5, step: 0.5, unit: "mm", after: deco })),
+        row("Major every", fNum(pg, "gridSub", { min: 1, max: 20, step: 1, after: deco })),
+      ),
+      el("div", { class: `${NS}-grid2` },
+        row("Style", fSelect(pg, "gridStyle", [["lines", "Lines"], ["dots", "Dots"]], { after: deco })),
+        row("Color", fColor(pg, "gridColor", { after: deco })),
+      ),
+      row("Opacity", fRange(pg, "gridOpacity", 0.03, 0.6, 0.01, { after: deco })),
       fCheck(pg, "snapGrid", "Snap to grid"),
-      fCheck(pg, "snapGuides", "Smart snap to item & page edges/centers"),
-      el("p", { class: `${NS}-muted` }, "Hold Alt while dragging to disable snapping temporarily. Shift = lock direction / keep proportions."),
     ]),
+    section("Layout grid", [
+      fCheck(lg, "show", "Show columns and rows (not printed)", { after: () => { deco(); renderProps(); } }),
+      el("div", { class: `${NS}-grid2` },
+        row("Columns", fNum(lg, "cols", { min: 0, max: 48, step: 1, after: deco })),
+        row("Gutter", fNum(lg, "colGutter", { min: 0, step: 0.5, unit: "mm", after: deco })),
+      ),
+      el("div", { class: `${NS}-grid2` },
+        row("Rows", fNum(lg, "rows", { min: 0, max: 48, step: 1, after: deco })),
+        row("Gutter", fNum(lg, "rowGutter", { min: 0, step: 0.5, unit: "mm", after: deco })),
+      ),
+      el("div", { class: `${NS}-grid2` },
+        row("Margin", fNum(lg, "margin", { min: 0, step: 0.5, unit: "mm", after: deco })),
+        row("Color", fColor(lg, "color", { after: deco })),
+      ),
+      el("p", { class: `${NS}-muted` }, "Margin empty or 0 uses the page margin. Items snap to column and row edges."),
+      fCheck(lg, "snap", "Snap to columns and rows"),
+    ], !!lg.show),
+    section("Guides", [
+      fCheck(pg, "showGuides", "Show guides", { after: () => renderGuides() }),
+      row("Guide color", fColor(pg, "guideColor", { after: () => renderGuides() })),
+      el("div", { class: `${NS}-addguide` }, gdir, el("span", { class: `${NS}-unitwrap` }, gi, el("span", { class: `${NS}-unit` }, "mm")), addGuide),
+      guideList.childElementCount ? guideList : el("p", { class: `${NS}-muted` }, "Drag from a ruler to add a guide, or type an exact position above."),
+      el("div", { class: `${NS}-grid2` },
+        row("Page margin", fNum(pg, "margin", { min: 0, step: 1, unit: "mm", after: deco })),
+        row("", fCheck(pg, "showMargin", "Show margin", { after: deco })),
+      ),
+      btn("Clear all guides", () => commit(() => (pg.guides = { v: [], h: [] })), { iconName: "trash" }),
+    ]),
+    section("Snapping & nudge", [
+      fCheck(pg, "snapGuides", "Smart snap to items, page, margins and guides"),
+      row("Snap distance", fNum(pg, "snapTol", { min: 1, max: 30, step: 1, unit: "px" })),
+      el("div", { class: `${NS}-grid2` },
+        row("Arrow keys", fNum(pg, "nudge", { min: 0.01, step: 0.1, unit: "mm" })),
+        row("Shift + arrows", fNum(pg, "nudgeBig", { min: 0.1, step: 1, unit: "mm" })),
+      ),
+      el("p", { class: `${NS}-muted` }, "Alt + arrows moves 0.1 mm. Hold Alt while dragging to turn snapping off; Shift keeps the direction or the proportions."),
+    ], false),
   ];
 }
 
@@ -7461,14 +8739,7 @@ function renderQuickBar() {
     renderQuickBar();
   };
   const f = getPath(item, fp);
-  const fam = el("select", { class: `${NS}-input ${NS}-qfam`, title: "Font" });
-  const all = knownFonts();
-  for (const n of all.includes(f.family) ? all : [f.family, ...all]) fam.appendChild(el("option", { value: n, selected: n === f.family, style: { fontFamily: `"${n}"` } }, n));
-  fam.appendChild(el("option", { value: "__load" }, "＋ Load installed fonts…"));
-  fam.addEventListener("change", () => {
-    if (fam.value === "__load") return loadInstalledFonts().then(renderQuickBar);
-    liveSet(item, `${fp}.family`, fam.value, rerender);
-  });
+  const fam = fontPicker(f.family, (n) => liveSet(item, `${fp}.family`, n, rerender), { cls: `${NS}-qfam` });
   const size = el("input", { type: "number", class: `${NS}-input ${NS}-qsize`, value: f.size, min: 2, max: 400, step: 0.5, title: "Font size (pt)" });
   size.addEventListener("input", () => {
     const v = parseFloat(size.value);
@@ -7742,10 +9013,181 @@ function openPaperCatalog(anchor, after) {
   popoverAt(anchor, el("div", { class: `${NS}-catalog` }, el("div", { class: `${NS}-ptitle` }, "Page size"), search, body), `${NS}-catpop`);
   setTimeout(() => search.focus(), 30);
 }
+// ---------------------------------------------------------------- panels for data items and map layers
+const SORT_OPTS = [["value-desc", "Largest first"], ["value-asc", "Smallest first"], ["label", "A to Z"], ["none", "Data order"]];
+const LOCALE_OPTS = [["en-US", "1,234.56"], ["id-ID", "1.234,56"], ["fr-FR", "1 234,56"]];
+
+function fieldOptions(layerId, { numeric = false, empty = "" } = {}) {
+  const opts = empty ? [["", empty]] : [];
+  for (const f of layerFields(layerId)) if (!numeric || f.numeric) opts.push([f.name, f.name]);
+  return opts;
+}
+// Data source rows shared by tables and charts.
+function dataSourceSection(item, { forChart = false } = {}) {
+  const p = item.props;
+  const P = (k) => `props.${k}`;
+  const redo = () => {
+    refreshCanvas();
+    renderProps();
+  };
+  if (!p.filter) p.filter = { field: "", op: "=", value: "" };
+  const layers = dataLayerOptions();
+  const rows = [
+    row("Layer", fSelect(item, P("layer"), layers, {
+      after: () => {
+        autoGroupField(p);
+        redo();
+      },
+    })),
+  ];
+  if (layers.length < 2) rows.push(el("p", { class: `${NS}-muted` }, "No vector layer in the GeoLibre project yet."));
+  if (p.layer) {
+    const isRows = !forChart && p.mode === "rows";
+    if (!isRows) rows.push(row(forChart ? "Category" : "Group by", fSelect(item, P("group"), fieldOptions(p.layer, { empty: forChart ? "— choose a field —" : "No grouping (one total)" }), { after: redo })));
+    rows.push(row("Value", fSelect(item, P("valueMode"), isRows ? [["none", "No computed column"], ...VALUE_MODES.filter(([k]) => /area|length/.test(k))] : VALUE_MODES, { after: redo })));
+    if (!isRows && (p.valueMode === "sum" || p.valueMode === "mean")) rows.push(row("Field", fSelect(item, P("valueField"), fieldOptions(p.layer, { numeric: true, empty: "— numeric field —" }), { after: redo })));
+    rows.push(
+      el("div", { class: `${NS}-grid3` },
+        row("Filter", fSelect(item, P("filter.field"), fieldOptions(p.layer, { empty: "No filter" }), { after: redo })),
+        row("", fSelect(item, P("filter.op"), FILTER_OPS)),
+        row("", fText(item, P("filter.value"), { placeholder: "value" })),
+      ),
+    );
+    rows.push(row("Sort", fSelect(item, P("sort"), SORT_OPTS)));
+    if (!isRows) rows.push(el("div", { class: `${NS}-grid2` }, row("Show top", fNum(item, P("topN"), { min: 0, max: 50, step: 1 })), row("Rest as", fText(item, P("otherLabel")))));
+    rows.push(el("div", { class: `${NS}-grid2` }, row("Decimals", fNum(item, P("decimals"), { min: 0, max: 6, step: 1 })), row("Number format", fSelect(item, P("locale"), LOCALE_OPTS))));
+    const agg = aggregate(p);
+    rows.push(el("p", { class: `${NS}-muted` }, `${agg.featureCount} feature${agg.featureCount === 1 ? "" : "s"} used${p.valueMode !== "count" && !isRows ? `, total ${fmtData(agg.total, p)}${VALUE_UNITS[p.valueMode] ? ` ${VALUE_UNITS[p.valueMode]}` : ""}` : ""}. Area and length are measured on the ellipsoid.`));
+    rows.push(btn("Refresh from layer", () => refreshCanvas(), { iconName: "sync" }));
+  }
+  return section("Data", rows);
+}
+
+function attrTableProps(item) {
+  const p = item.props;
+  const P = (k) => `props.${k}`;
+  const redo = () => {
+    refreshCanvas();
+    renderProps();
+  };
+  const content = [
+    row("Show", fSeg(item, P("mode"), [["summary", "Summary"], ["rows", "Feature list"]], { after: redo })),
+  ];
+  if (p.mode === "rows") {
+    const cols = new Set(p.columns || []);
+    const box = el("div", { class: `${NS}-checklist` });
+    for (const f of layerFields(p.layer)) {
+      const c = el("input", { type: "checkbox", checked: cols.has(f.name) });
+      c.addEventListener("change", () => commit(() => {
+        const set = new Set(p.columns || []);
+        if (c.checked) set.add(f.name);
+        else set.delete(f.name);
+        // keep the layer's field order
+        p.columns = layerFields(p.layer).map((x) => x.name).filter((n) => set.has(n));
+      }));
+      box.appendChild(el("label", { class: `${NS}-check` }, c, el("span", {}, f.name)));
+    }
+    content.push(el("div", { class: `${NS}-plabel` }, "Columns (none = first four)"), box);
+    content.push(row("Max rows", fNum(item, P("maxRows"), { min: 1, max: 500, step: 1 })));
+    content.push(row("Value header", fText(item, P("valueHeader"), { placeholder: "automatic" })));
+  } else {
+    content.push(
+      el("div", { class: `${NS}-grid2` },
+        row("Class header", fText(item, P("groupHeader"), { placeholder: p.group || "Class" })),
+        row("Value header", fText(item, P("valueHeader"), { placeholder: "automatic" })),
+      ),
+      fCheck(item, P("showCount"), "Count column"),
+      fCheck(item, P("showPercent"), "Percent column"),
+    );
+  }
+  content.push(fCheck(item, P("showTotal"), "Total row"), fCheck(item, P("header"), "Header row"), fCheck(item, P("autoHeight"), "Fit height to rows"));
+  return [
+    dataSourceSection(item),
+    section("Table Content", content),
+    section("Table Style", [
+      row("Text", fFont(item, P("font"))),
+      row("Header", fFont(item, P("headerFont"))),
+      el("div", { class: `${NS}-grid2` }, row("Header fill", fColor(item, P("headerBg"), { allowNone: true })), row("Total fill", fColor(item, P("footerBg"), { allowNone: true }))),
+      fCheck(item, P("zebra"), "Striped rows"),
+      p.zebra ? row("Stripe color", fColor(item, P("zebraColor"))) : null,
+      el("div", { class: `${NS}-grid2` }, row("Lines", fColor(item, P("borderColor"))), row("Width", fNum(item, P("borderWidth"), { min: 0, step: 0.05, unit: "mm" }))),
+      fCheck(item, P("innerBorder"), "Inner lines"),
+      fCheck(item, P("outerBorder"), "Outer border"),
+      el("div", { class: `${NS}-grid2` }, row("Padding", fNum(item, P("padding"), { min: 0, step: 0.2, unit: "mm" })), row("Background", fColor(item, P("background"), { allowNone: true }))),
+      row("Column widths", fText(item, P("colWidths"), { placeholder: "e.g. 50,25,25" })),
+    ], false),
+  ];
+}
+
+function chartProps(item) {
+  const p = item.props;
+  const P = (k) => `props.${k}`;
+  const redo = () => {
+    refreshCanvas();
+    renderProps();
+  };
+  const round_ = p.kind === "pie" || p.kind === "donut";
+  return [
+    dataSourceSection(item, { forChart: true }),
+    section("Chart", [
+      row("Type", fSeg(item, P("kind"), CHART_KINDS, { after: redo })),
+      row("Title", fText(item, P("title"), { placeholder: "optional, e.g. Area by function (ha)" })),
+      row("Labels", fSelect(item, P("labels"), [["percent", "Percent"], ["value", "Value"], ["label", "Class name"], ["none", "None"]])),
+      round_ ? fCheck(item, P("showLegend"), "Legend beside the chart", { after: redo }) : null,
+      round_ && p.showLegend ? row("Legend values", fSelect(item, P("legendValues"), [["value", "Value"], ["percent", "Percent"], ["none", "None"]])) : null,
+      p.kind === "donut" ? row("Hole", fRange(item, P("hole"), 0.2, 0.85, 0.05)) : null,
+      p.kind === "donut" ? row("Center", fSelect(item, P("centerText"), [["total", "Total"], ["none", "Empty"]])) : null,
+      !round_ ? fCheck(item, P("gridlines"), "Grid lines") : null,
+    ]),
+    section("Colors", [
+      row("Colors", fSeg(item, P("colorMode"), [["layer", "Layer", "Use the layer's class colors from GeoLibre"], ["palette", "Palette"], ["single", "One color"]], { after: redo })),
+      p.colorMode === "palette" ? row("Palette", fSelect(item, P("palette"), Object.entries(COLORMAP_LABELS))) : null,
+      p.colorMode === "palette" ? fCheck(item, P("paletteReverse"), "Reverse") : null,
+      p.colorMode === "single" ? row("Color", fColor(item, P("color"))) : null,
+      round_ ? row("Slice outline", fColor(item, P("sliceStroke"), { allowNone: true })) : null,
+    ]),
+    section("Style", [
+      row("Text", fFont(item, P("font"))),
+      row("Title", fFont(item, P("titleFont"))),
+      el("div", { class: `${NS}-grid2` }, row("Background", fColor(item, P("background"), { allowNone: true })), row("Padding", fNum(item, P("padding"), { min: 0, step: 0.5, unit: "mm" }))),
+      fCheck(item, P("border.show"), "Border"),
+    ], false),
+  ];
+}
+
+// Which GeoLibre layers a map frame shows.
+function mapLayersSection(item) {
+  const p = item.props;
+  const hidden = new Set(p.hiddenLayers || []);
+  const list = el("div", { class: `${NS}-checklist` });
+  const layers = glLayers();
+  for (const l of layers) {
+    const c = el("input", { type: "checkbox", checked: !hidden.has(l.id) });
+    c.addEventListener("change", () => commit(() => {
+      const h = new Set(p.hiddenLayers || []);
+      if (c.checked) h.delete(l.id);
+      else h.add(l.id);
+      p.hiddenLayers = [...h];
+      // legends linked to this map follow its layers
+      for (const lg of S.doc.items) if (lg.type === "legend" && linkedMapOf(lg)?.id === item.id) syncLegendEntries(lg);
+    }));
+    list.appendChild(el("label", { class: `${NS}-check` }, c, el("span", {}, l.name || l.id), l.visible === false ? el("small", { class: `${NS}-muted` }, " hidden in GeoLibre") : null));
+  }
+  return section("Layers", [
+    layers.length ? list : el("p", { class: `${NS}-muted` }, "No layers in the GeoLibre project."),
+    el("div", { class: `${NS}-grid2` },
+      btn("Show all", () => commit(() => (p.hiddenLayers = [])), {}),
+      btn("Hide all", () => commit(() => (p.hiddenLayers = layers.map((l) => l.id))), {}),
+    ),
+    el("p", { class: `${NS}-muted` }, "Each map frame can show its own set of layers, e.g. an inset with only the boundary. Linked legends follow."),
+  ], (p.hiddenLayers || []).length > 0);
+}
 // ---------------------------------------------------------------- export
-function composePageSVG(mapImages, { background = "page" } = {}) {
+function composePageSVG(mapImages, { background = "page", fontCss = "" } = {}) {
   const pg = S.doc.page;
   let s = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${pg.width}mm" height="${pg.height}mm" viewBox="0 0 ${pg.width} ${pg.height}">`;
+  // web fonts (Google Fonts) inlined, so an SVG drawn as an image keeps them
+  if (fontCss) s += `<defs><style>${fontCss}</style></defs>`;
   s += pageDecorSVG(true, background);
   S.doc.items.forEach((item, index) => {
     if (item.hidden) return;
@@ -7811,16 +9253,62 @@ function loadJsPDF() {
   return jsPdfPromise;
 }
 
-function progressModal(text) {
-  const m = el("div", { class: `${NS}-modal` }, el("div", { class: `${NS}-modalcard` }, el("div", { class: `${NS}-spinner` }), el("div", { class: `${NS}-modaltext` }, text)));
-  S.ui.root.appendChild(m);
+// Export progress: a bar that fills from left to right, the current step and a
+// checklist of steps. set(text, fraction 0..1, stepKey).
+function progressView(title, { sub = "", iconName = "download", steps = [] } = {}) {
+  const fill = el("div", { class: `${NS}-progfill` });
+  const pct = el("span", { class: `${NS}-progpct` }, "0%");
+  const step = el("div", { class: `${NS}-progstep` }, "Preparing…");
+  const list = el("ol", { class: `${NS}-progsteps` }, ...steps.map(([k, label]) => el("li", { "data-k": k }, el("span", { class: `${NS}-stepdot` }), el("span", {}, label))));
+  const bar = el("div", { class: `${NS}-progbar`, role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": "0" }, fill);
+  const node = el("div", { class: `${NS}-prog` },
+    el("div", { class: `${NS}-proghead` },
+      el("span", { class: `${NS}-progicon`, html: icon(iconName, 18) }),
+      el("div", { class: `${NS}-progtitle` }, el("b", {}, title), sub ? el("small", {}, sub) : null),
+      pct,
+    ),
+    bar,
+    step,
+    steps.length ? list : null,
+  );
+  let last = 0;
+  let active = null;
   return {
-    set: (t) => (m.querySelector(`.${NS}-modaltext`).textContent = t),
-    close: () => m.remove(),
+    el: node,
+    set(text, frac, key) {
+      if (text) step.textContent = text;
+      if (key && key !== active) {
+        active = key;
+        let seen = false;
+        for (const li of list.children) {
+          const isA = li.dataset.k === key;
+          if (isA) seen = true;
+          li.classList.toggle("active", isA);
+          li.classList.toggle("done", !seen && !isA);
+        }
+      }
+      if (frac != null) {
+        last = Math.max(last, clamp(frac, 0, 1));
+        fill.style.width = `${(last * 100).toFixed(1)}%`;
+        pct.textContent = `${Math.round(last * 100)}%`;
+        bar.setAttribute("aria-valuenow", String(Math.round(last * 100)));
+        if (last >= 1) {
+          node.classList.add("done");
+          for (const li of list.children) li.classList.replace("active", "done") || li.classList.add("done");
+        }
+      }
+    },
+    close() {},
   };
 }
+function progressModal(text) {
+  const v = progressView(text);
+  const m = el("div", { class: `${NS}-modal` }, el("div", { class: `${NS}-dlg ${NS}-dlgsmall` }, el("div", { class: `${NS}-dlgbody` }, v.el)));
+  S.ui.root.appendChild(m);
+  return { el: v.el, set: v.set, close: () => m.remove() };
+}
 
-async function exportLayout(fmt) {
+async function exportLayout(fmt, progIn) {
   if (!S.doc) return;
   exitContentMode();
   const dpi = S.exportDpi || 300;
@@ -7830,34 +9318,43 @@ async function exportLayout(fmt) {
     if (!confirm(`${pg.size} at ${dpi} dpi is very large (${Math.round(px / 1e6)} megapixels) and may fail. Continue?`)) return;
   }
   const maps = S.doc.items.filter((i) => i.type === "map" && !i.hidden && i.props.source !== "snapshot");
-  const prog = progressModal("Preparing export…");
+  const prog = progIn || progressModal("Exporting");
+  prog.set("Preparing…", 0.03, "maps");
   const bg = S.exportBg || "page";
   try {
     const mapImages = new Map();
     let n = 0;
     for (const m of maps) {
       n += 1;
-      prog.set(`Rendering map ${n}/${maps.length} (${m.name}) at ${fmt === "svg" ? 200 : dpi} dpi…`);
+      prog.set(`Rendering map ${n} of ${maps.length} (${m.name}) at ${fmt === "svg" ? 200 : dpi} dpi…`, 0.05 + (0.6 * (n - 1)) / maps.length, "maps");
       const img = await renderMapImage(m, fmt === "svg" ? 200 : dpi);
+      prog.set(null, 0.05 + (0.6 * n) / maps.length);
       if (img) mapImages.set(m.id, img);
       else toast(`Map "${m.name}" failed to render`, "warn");
     }
     if (S.doc.items.some((i) => !i.hidden && (i.type === "latex" || JSON.stringify(i.props).includes("$")))) {
-      prog.set("Typesetting formulas…");
+      prog.set("Typesetting formulas…", 0.68);
       await loadMathJax().catch(() => {});
     }
-    prog.set("Composing page…");
-    const svg = composePageSVG(mapImages, { background: bg });
+    const gfams = docFontFamilies().filter(isGoogleFont);
+    let fontCss = "";
+    if (gfams.length && fmt !== "vpdf") {
+      prog.set(`Embedding ${gfams.length} Google font${gfams.length > 1 ? "s" : ""}…`, 0.7, "fonts");
+      fontCss = await embeddedFontCss(gfams);
+    }
+    prog.set("Composing page…", 0.72, "compose");
+    const svg = composePageSVG(mapImages, { background: bg, fontCss });
     const base = safeName(S.exportName || S.doc.name);
     if (fmt === "vpdf") {
-      prog.set("Building vector PDF…");
+      prog.set("Building vector PDF…", 0.8, "save");
       await saveVectorPdf(svg, base);
     } else if (fmt === "svg") {
       downloadBlob(new Blob([svg], { type: "image/svg+xml" }), `${base}.svg`);
     } else {
+      prog.set("Drawing the page…", 0.78, "compose");
       const canvas = await rasterize(svg, dpi, fmt === "png" && bg === "transparent" ? null : "#ffffff");
       if (fmt === "geopdf") {
-        prog.set("Georeferencing PDF…");
+        prog.set("Georeferencing PDF…", 0.9, "save");
         const JsPDF = await loadJsPDF();
         const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
         pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
@@ -7866,25 +9363,30 @@ async function exportLayout(fmt) {
         if (!frames.length) throw new Error("GeoPDF needs at least one visible, unrotated map frame");
         downloadBlob(new Blob([geoRegister(pdf.output("arraybuffer"), frames)], { type: "application/pdf" }), `${base}_geo.pdf`);
       } else if (fmt === "pdf") {
-        prog.set("Creating PDF…");
+        prog.set("Creating PDF…", 0.9, "save");
         const JsPDF = await loadJsPDF();
         const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
         pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pg.width, pg.height, undefined, "FAST");
         pdf.save(`${base}.pdf`);
       } else {
-        prog.set("Saving image…");
+        prog.set("Saving image…", 0.92, "save");
         const blob = await new Promise((r) => canvas.toBlob(r, fmt === "jpg" ? "image/jpeg" : "image/png", 0.95));
         if (!blob) throw new Error("Canvas too large for this browser — lower the DPI");
         downloadBlob(blob, `${base}.${fmt}`);
       }
     }
+    prog.set("Saved", 1);
     toast(`${{ vpdf: "Vector PDF", geopdf: "GeoPDF" }[fmt] || fmt.toUpperCase()} export finished`);
+    return true;
   } catch (e) {
     console.error("[Layout Composer] export failed", e);
+    prog.set(`Export failed: ${e.message}`);
+    prog.el?.classList.add("failed");
     toast(`Export failed: ${e.message}`, "warn");
+    return false;
   } finally {
-    prog.close();
+    if (!progIn) setTimeout(() => prog.close(), 600);
   }
 }
 
@@ -8005,6 +9507,499 @@ function geoRegister(buf, frames) {
   out.set(ascii(xref), u8.length + obj.length);
   return out;
 }
+// ---------------------------------------------------------------- QGIS layout templates (.qpt)
+// Export writes a QGIS print layout template: labels, maps (extent in
+// EPSG:3857), pictures, shapes, scale bars and legends become native QGIS
+// items; everything QGIS has no equivalent for (color bars, charts, LaTeX,
+// north arrows, icons, drawings, tables) is embedded as an SVG picture so the
+// page looks the same. Import reads the same item types back.
+
+const QGIS_TYPES = { page: 65638, map: 65639, picture: 65640, label: 65641, legend: 65642, shape: 65643, polygon: 65644, polyline: 65645, scalebar: 65646 };
+const MERC_R = 6378137;
+
+const xmlEsc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
+function qColor(hex, alpha = 255) {
+  const [r, g, b] = hexToRgb(hex || "#000000");
+  return `${r},${g},${b},${Math.round(alpha)}`;
+}
+function qColorEl(tag, hex, alpha = 255) {
+  const [r, g, b] = hexToRgb(hex || "#000000");
+  return `<${tag} red="${r}" green="${g}" blue="${b}" alpha="${Math.round(alpha)}"/>`;
+}
+// CRS element QGIS can read without a lookup (authid + proj4).
+function qCrs(code) {
+  let proj4;
+  let desc;
+  if (code === 3857) {
+    proj4 = "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs";
+    desc = "WGS 84 / Pseudo-Mercator";
+  } else if (code === 4326) {
+    proj4 = "+proj=longlat +datum=WGS84 +no_defs";
+    desc = "WGS 84";
+  } else {
+    const zone = code % 100;
+    const south = code > 32700;
+    proj4 = `+proj=utm +zone=${zone}${south ? " +south" : ""} +datum=WGS84 +units=m +no_defs`;
+    desc = `WGS 84 / UTM zone ${zone}${south ? "S" : "N"}`;
+  }
+  return `<crs>${qSrs(code, proj4, desc)}</crs>`;
+}
+function qSrs(code, proj4, desc) {
+  if (!proj4) {
+    const c = qCrs(code);
+    return c.slice(5, -6);
+  }
+  return `<spatialrefsys nativeFormat="Wkt"><wkt></wkt><proj4>${proj4}</proj4><srid>${code}</srid><authid>EPSG:${code}</authid><description>${desc}</description><projectionacronym>${code === 4326 ? "longlat" : code === 3857 ? "merc" : "utm"}</projectionacronym><ellipsoidacronym>EPSG:7030</ellipsoidacronym><geographicflag>${code === 4326 ? "true" : "false"}</geographicflag></spatialrefsys>`;
+}
+function qUuid() {
+  return `{${crypto.randomUUID ? crypto.randomUUID() : uid("q")}}`;
+}
+function qFontDesc(f) {
+  // Qt font description: family,pointSize,pixelSize,styleHint,weight,italic,…
+  return `${f.family},${f.size},-1,5,${f.bold ? 75 : 50},${f.italic ? 1 : 0},0,0,0,0`;
+}
+function qTextStyle(f) {
+  return `<text_style fontFamily="${xmlEsc(f.family)}" fontSize="${f.size}" fontSizeUnit="Point" fontWeight="${f.bold ? 75 : 50}" fontItalic="${f.italic ? 1 : 0}" textColor="${qColor(f.color)}" textOpacity="1" fontLetterSpacing="0" fontWordSpacing="0" multilineHeight="1" multilineHeightUnit="Percentage" namedStyle="" blendMode="0" allowHtml="0" capitalization="0" previewBkgrdColor="255,255,255,255"><text-buffer bufferDraw="0" bufferSize="1" bufferColor="255,255,255,255" bufferSizeUnits="MM"/></text_style>`;
+}
+function qFillSymbol(fill, stroke, strokeW, fillAlpha = 255) {
+  const noFill = !fill;
+  const noStroke = !stroke || !(strokeW > 0);
+  return `<symbol type="fill" name="" alpha="1" clip_to_extent="1" force_rhr="0"><layer class="SimpleFill" enabled="1" locked="0" pass="0"><Option type="Map">` +
+    `<Option name="color" value="${noFill ? "0,0,0,0" : qColor(fill, fillAlpha)}" type="QString"/>` +
+    `<Option name="style" value="${noFill ? "no" : "solid"}" type="QString"/>` +
+    `<Option name="outline_color" value="${noStroke ? "0,0,0,0" : qColor(stroke)}" type="QString"/>` +
+    `<Option name="outline_style" value="${noStroke ? "no" : "solid"}" type="QString"/>` +
+    `<Option name="outline_width" value="${noStroke ? 0 : strokeW}" type="QString"/>` +
+    `<Option name="outline_width_unit" value="MM" type="QString"/>` +
+    `<Option name="joinstyle" value="miter" type="QString"/></Option></layer></symbol>`;
+}
+// Common LayoutItem attributes.
+function qItemAttrs(item, z, { frame = false, frameColor = "#000000", frameW = 0.3, bg = null, uuid = qUuid() } = {}) {
+  // QGIS links items in a template by templateUuid, so it must equal uuid
+  return {
+    attrs: `uuid="${uuid}" id="${xmlEsc(item.name || item.type)}" position="${round(item.x, 4)},${round(item.y, 4)},mm" positionOnPage="${round(item.x, 4)},${round(item.y, 4)},mm" size="${round(item.w, 4)},${round(item.h, 4)},mm" referencePoint="0" itemRotation="${round(item.rot || 0, 3)}" zValue="${z}" visibility="${item.hidden ? 0 : 1}" positionLock="${item.locked ? "true" : "false"}" opacity="${item.opacity ?? 1}" frame="${frame ? "true" : "false"}" frameJoinStyle="miter" outlineWidthM="${frameW},mm" background="${bg ? "true" : "false"}" blendMode="0" excludeFromExports="0" groupUuid="" templateUuid="${uuid}"`,
+    children: qColorEl("FrameColor", frameColor) + qColorEl("BackgroundColor", bg || "#ffffff", bg ? 255 : 0),
+  };
+}
+// Map frame extent in EPSG:3857 metres (unrotated, as QGIS stores it).
+function mercExtent(item) {
+  const v = item.props.view;
+  const cx = (v.center[0] * Math.PI * MERC_R) / 180;
+  const phi = (clamp(v.center[1], -85.0511, 85.0511) * Math.PI) / 180;
+  const cy = MERC_R * Math.log(Math.tan(Math.PI / 4 + phi / 2));
+  const mPerPx = (2 * Math.PI * MERC_R) / (WORLD * 2 ** v.zoom);
+  const hw = (item.w * PX96 * mPerPx) / 2;
+  const hh = (item.h * PX96 * mPerPx) / 2;
+  return { xmin: cx - hw, ymin: cy - hh, xmax: cx + hw, ymax: cy + hh };
+}
+// An item as a standalone SVG (used for items QGIS cannot draw natively).
+function itemAsSvg(item, mapImages) {
+  const body = renderItem(item, { export: true, mapImages });
+  return qtSafeSvg(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${item.w}mm" height="${item.h}mm" viewBox="0 0 ${item.w} ${item.h}">${body}</svg>`);
+}
+// QGIS draws SVG pictures with QtSvg (SVG Tiny 1.2): no nested <svg>, no
+// dominant-baseline, no x/y on <tspan>, no rgba(). Rewrite those.
+function qtSafeSvg(src) {
+  const dom = new DOMParser().parseFromString(src, "image/svg+xml");
+  const root = dom.documentElement;
+  if (root.nodeName === "parsererror" || dom.querySelector("parsererror")) return src;
+  const NSS = "http://www.w3.org/2000/svg";
+  // nested <svg> → <g transform>
+  for (const sv of [...root.querySelectorAll("svg")].reverse()) {
+    const x = Number(sv.getAttribute("x") || 0);
+    const y = Number(sv.getAttribute("y") || 0);
+    const w = Number(sv.getAttribute("width") || 0);
+    const h = Number(sv.getAttribute("height") || 0);
+    let t = `translate(${x} ${y})`;
+    const vb = (sv.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+    if (vb.length === 4 && vb[2] > 0 && vb[3] > 0 && w > 0 && h > 0) {
+      const par = sv.getAttribute("preserveAspectRatio") || "xMidYMid meet";
+      let sx = w / vb[2];
+      let sy = h / vb[3];
+      let dx = 0;
+      let dy = 0;
+      if (!/none/.test(par)) {
+        const k = /slice/.test(par) ? Math.max(sx, sy) : Math.min(sx, sy);
+        if (/xMid/.test(par)) dx = (w - vb[2] * k) / 2;
+        else if (/xMax/.test(par)) dx = w - vb[2] * k;
+        if (/YMid/.test(par)) dy = (h - vb[3] * k) / 2;
+        else if (/YMax/.test(par)) dy = h - vb[3] * k;
+        sx = sy = k;
+      }
+      t += ` translate(${dx} ${dy}) scale(${sx} ${sy}) translate(${-vb[0]} ${-vb[1]})`;
+    }
+    const g = dom.createElementNS(NSS, "g");
+    g.setAttribute("transform", t);
+    while (sv.firstChild) g.appendChild(sv.firstChild);
+    sv.replaceWith(g);
+  }
+  const fsOf = (n) => {
+    for (let e = n; e && e.getAttribute; e = e.parentNode) {
+      const v = parseFloat(e.getAttribute("font-size"));
+      if (v > 0) return v;
+    }
+    return 3;
+  };
+  const shiftFor = (n, fs) => {
+    const db = n.getAttribute("dominant-baseline");
+    n.removeAttribute("dominant-baseline");
+    return db === "central" || db === "middle" ? fs * 0.35 : db === "hanging" ? fs * 0.8 : 0;
+  };
+  for (const tx of [...root.querySelectorAll("text")]) {
+    const fs = fsOf(tx);
+    const shift = shiftFor(tx, fs);
+    if (shift && tx.hasAttribute("y")) tx.setAttribute("y", Number(tx.getAttribute("y")) + shift);
+    else if (shift) tx.setAttribute("transform", `${tx.getAttribute("transform") || ""} translate(0 ${shift})`.trim());
+    // <tspan x y> lines → one <text> per line
+    const lines = [...tx.children].filter((c) => c.nodeName === "tspan" && (c.hasAttribute("x") || c.hasAttribute("y")));
+    if (lines.length) {
+      for (const ts of lines) {
+        const nt = tx.cloneNode(false);
+        nt.removeAttribute("transform");
+        if (tx.getAttribute("transform")) nt.setAttribute("transform", tx.getAttribute("transform"));
+        nt.setAttribute("x", ts.getAttribute("x") ?? tx.getAttribute("x") ?? 0);
+        nt.setAttribute("y", Number(ts.getAttribute("y") ?? tx.getAttribute("y") ?? 0) + (ts.hasAttribute("y") ? shift : 0));
+        for (const a of ["fill", "font-weight", "font-style", "font-size"]) if (ts.getAttribute(a)) nt.setAttribute(a, ts.getAttribute(a));
+        nt.textContent = ts.textContent;
+        tx.parentNode.insertBefore(nt, tx);
+      }
+      tx.remove();
+    }
+  }
+  // mixed runs (<text>name<tspan fill>value</tspan></text>): QtSvg drops the
+  // space between them, so place each run as its own <text>
+  const ctx2 = document.createElement("canvas").getContext("2d");
+  const widthOf = (str, el) => {
+    const fs = fsOf(el);
+    const fam = el.getAttribute("font-family") || "Arial";
+    const fw = el.getAttribute("font-weight") || "normal";
+    const fst = el.getAttribute("font-style") || "normal";
+    ctx2.font = `${fst} ${fw} 100px ${fam}`;
+    return (ctx2.measureText(str).width * fs) / 100;
+  };
+  for (const tx of [...root.querySelectorAll("text")]) {
+    const kids = [...tx.childNodes];
+    if (!kids.some((k) => k.nodeName === "tspan") || (tx.getAttribute("text-anchor") || "start") !== "start") continue;
+    let x = Number(tx.getAttribute("x") || 0);
+    for (const k of kids) {
+      const str = k.textContent;
+      if (!str) continue;
+      const nt = tx.cloneNode(false);
+      nt.setAttribute("x", x);
+      if (k.nodeName === "tspan") for (const a of ["fill", "font-weight", "font-style", "font-size"]) if (k.getAttribute(a)) nt.setAttribute(a, k.getAttribute(a));
+      nt.textContent = str.replace(/^ +/, "");
+      x += widthOf(str.startsWith(" ") ? str : str, nt);
+      tx.parentNode.insertBefore(nt, tx);
+    }
+    tx.remove();
+  }
+  // rgba() → rgb + opacity
+  for (const n of root.querySelectorAll("*")) {
+    for (const a of ["fill", "stroke"]) {
+      const m = /^rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)$/i.exec(n.getAttribute(a) || "");
+      if (m) {
+        n.setAttribute(a, `rgb(${m[1]},${m[2]},${m[3]})`);
+        n.setAttribute(`${a}-opacity`, m[4]);
+      }
+    }
+    n.removeAttribute("paint-order");
+    if (n.getAttribute("overflow")) n.removeAttribute("overflow");
+  }
+  return new XMLSerializer().serializeToString(root);
+}
+const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+
+function layoutToQpt(doc) {
+  const pg = doc.page;
+  const maps = new Map();
+  let out = `<!DOCTYPE qgis-layout>\n<Layout name="${xmlEsc(doc.name)}" units="mm" printResolution="300" worldFileMap="">\n`;
+  out += `<Snapper tolerance="5" snapToGrid="0" snapToGuides="1" snapToItems="1"/>\n<Grid resUnits="mm" resolution="10" offsetX="0" offsetY="0" offsetUnits="mm"/>\n`;
+  out += `<PageCollection>\n<symbol type="fill" name="" alpha="1"><layer class="SimpleFill" enabled="1"><Option type="Map"><Option name="color" value="${qColor(pg.background || "#ffffff")}" type="QString"/><Option name="style" value="solid" type="QString"/><Option name="outline_style" value="no" type="QString"/></Option></layer></symbol>\n`;
+  out += `<LayoutItem type="${QGIS_TYPES.page}" size="${pg.width},${pg.height},mm" position="0,0,mm" positionOnPage="0,0,mm" referencePoint="0" uuid="${qUuid()}" id="" zValue="0" visibility="1" frame="false" background="true"/>\n</PageCollection>\n`;
+  // uuids of map frames first, so legends and scale bars can point at them
+  for (const it of doc.items) if (it.type === "map") maps.set(it.id, qUuid());
+  let z = 1;
+  let embedded = 0;
+  for (const it of doc.items) {
+    const p = it.props || {};
+    z += 1;
+    if (it.type === "text" && !hasMath(p.text || "")) {
+      const a = qItemAttrs(it, z, { frame: !!p.border?.show, frameColor: p.border?.color, frameW: p.border?.width || 0.3, bg: p.background || null });
+      const halign = p.align === "center" ? 4 : p.align === "right" ? 2 : p.align === "justify" ? 8 : 1;
+      const valign = p.valign === "middle" ? 128 : p.valign === "bottom" ? 64 : 32;
+      let text = p.text || "";
+      if (p.textCase === "upper") text = text.toUpperCase();
+      text = text.replace(/\{(\w+)\}/g, (m, k) => (k === "date" ? "[% format_date(now(), 'dd MMMM yyyy') %]" : k === "title" ? "[% @layout_name %]" : resolveVars(m, it)));
+      out += `<LayoutItem type="${QGIS_TYPES.label}" ${a.attrs} labelText="${xmlEsc(text)}" htmlState="0" marginX="${p.padding || 0}" marginY="${p.padding || 0}" halign="${halign}" valign="${valign}">${a.children}<LabelFont description="${xmlEsc(qFontDesc(p.font))}" style=""/>${qColorEl("FontColor", p.font.color)}${qTextStyle(p.font)}</LayoutItem>\n`;
+      continue;
+    }
+    if (it.type === "map") {
+      const e = mercExtent(it);
+      const a = qItemAttrs(it, z, { frame: !!p.frame?.show, frameColor: p.frame?.color, frameW: p.frame?.width || 0.3, bg: p.background || "#ffffff", uuid: maps.get(it.id) });
+      out += `<LayoutItem type="${QGIS_TYPES.map}" ${a.attrs} keepLayerSet="false" followPreset="false" followPresetName="" mapRotation="${round(-(p.view.bearing || 0), 4)}" drawCanvasItems="true" isTemporal="0" labelMargin="0,mm" mapFlags="03">${a.children}`;
+      out += `<Extent xmin="${round(e.xmin, 3)}" ymin="${round(e.ymin, 3)}" xmax="${round(e.xmax, 3)}" ymax="${round(e.ymax, 3)}"/>`;
+      out += `${qCrs(3857)}<LayerSet/>`;
+      if (p.grid?.show) {
+        const g = p.grid;
+        const dms = g.type !== "utm";
+        const bnd = mapGeom(it).bounds();
+        const iv = g.interval > 0 ? g.interval : g.type === "utm" ? niceStep((bnd.east - bnd.west) * 111320 * Math.cos((p.view.center[1] * Math.PI) / 180), 4) : niceDegStep((bnd.east - bnd.west) / 4);
+        out += `<ComposerMapGrid uuid="${qUuid()}" name="Grid 1" show="1" position="3" gridStyle="${g.style === "lines" ? 0 : 1}" intervalX="${iv}" intervalY="${iv}" offsetX="0" offsetY="0" crossLength="3" gridFrameStyle="${{ zebra: 1, "ticks-in": 2, "ticks-out": 3, "ticks-cross": 4, line: 5 }[g.frameStyle] ?? 0}" gridFrameSideFlags="15" gridFrameWidth="${g.zebraWidth || 1.5}" gridFrameMargin="0" gridFramePenThickness="0.2" gridFramePenColor="${qColor(g.zebraColor || "#000000")}" frameFillColor1="255,255,255,255" frameFillColor2="${qColor(g.zebraColor || "#000000")}" showAnnotation="1" annotationFormat="${g.type === "utm" ? 0 : g.type === "dd" ? 3 : 2}" annotationPrecision="${g.type === "dd" ? g.decimals ?? 2 : 0}" minimumIntervalWidth="50" maximumIntervalWidth="100" topFrameDivisions="0" bottomFrameDivisions="0" leftFrameDivisions="0" rightFrameDivisions="0" leftAnnotationDisplay="${g.labels?.left === false ? 3 : 0}" rightAnnotationDisplay="${g.labels?.right === false ? 3 : 0}" topAnnotationDisplay="${g.labels?.top === false ? 3 : 0}" bottomAnnotationDisplay="${g.labels?.bottom === false ? 3 : 0}" leftAnnotationPosition="1" rightAnnotationPosition="1" topAnnotationPosition="1" bottomAnnotationPosition="1" leftAnnotationDirection="${g.rotateSide ? 1 : 0}" rightAnnotationDirection="${g.rotateSide ? 1 : 0}" topAnnotationDirection="0" bottomAnnotationDirection="0" frameAnnotationDistance="1" unit="0" blendMode="0"><lineStyle><symbol type="line" name="" alpha="1"><layer class="SimpleLine" enabled="1"><Option type="Map"><Option name="line_color" value="${qColor(g.color || "#000000")}" type="QString"/><Option name="line_width" value="${g.width || 0.2}" type="QString"/><Option name="line_style" value="solid" type="QString"/><Option name="capstyle" value="flat" type="QString"/><Option name="line_width_unit" value="MM" type="QString"/></Option></layer></symbol></lineStyle>${qSrs(g.type === "utm" ? (p.view.center[1] < 0 ? 32700 : 32600) + (g.zone || UTM.zoneOf(p.view.center[0])) : 4326)}<text-style fontFamily="${xmlEsc(g.font?.family || "Arial")}" fontSize="${g.font?.size || 6}" fontSizeUnit="Point" fontWeight="${g.font?.bold ? 75 : 50}" fontItalic="0" textColor="${qColor(g.font?.color || "#222222")}" textOpacity="1" multilineHeight="1" multilineHeightUnit="Percentage" namedStyle="" blendMode="0" allowHtml="0" capitalization="0"/></ComposerMapGrid>`;
+      }
+      out += `<AtlasMap atlasDriven="0" scalingMode="2" margin="0.1"/><labelBlockingItems/></LayoutItem>\n`;
+      continue;
+    }
+    if (it.type === "image" && p.src) {
+      const a = qItemAttrs(it, z, { frame: !!p.border?.show, frameColor: p.border?.color, frameW: p.border?.width || 0.3 });
+      const data = String(p.src).replace(/^data:[^;]+;base64,/, "");
+      out += `<LayoutItem type="${QGIS_TYPES.picture}" ${a.attrs} file="base64:${data}" pictureWidth="${it.w}" pictureHeight="${it.h}" resizeMode="${p.fit === "fill" ? 1 : p.fit === "cover" ? 4 : 0}" anchorPoint="4" svgFillColor="255,255,255,255" svgBorderColor="0,0,0,255" svgBorderWidth="0.2" mode="1" pictureRotation="0" northMode="0" northOffset="0">${a.children}</LayoutItem>\n`;
+      continue;
+    }
+    if (it.type === "shape" && ["rect", "rounded", "ellipse", "circle", "triangle"].includes(p.shape)) {
+      const a = qItemAttrs(it, z);
+      const st = p.shape === "ellipse" || p.shape === "circle" ? 0 : p.shape === "triangle" ? 2 : 1;
+      const fill = p.fillType && p.fillType !== "solid" ? p.fill : p.fill;
+      out += `<LayoutItem type="${QGIS_TYPES.shape}" ${a.attrs} shapeType="${st}" cornerRadiusMeasure="${p.shape === "rounded" ? p.radius || 2 : 0},mm">${a.children}${qFillSymbol(fill, p.stroke, p.strokeWidth, 255 * (p.fillOpacity ?? 1))}</LayoutItem>\n`;
+      continue;
+    }
+    if (it.type === "scalebar" && p.style !== "dual") {
+      const a = qItemAttrs(it, z);
+      const m = linkedMapOf(it);
+      const style = p.style === "numeric" ? "Numeric" : /line/.test(p.style || "") ? "Line Ticks Middle" : p.style === "double" ? "Double Box" : "Single Box";
+      let unit = p.units === "m" ? "m" : p.units === "km" ? "km" : "";
+      let segVal = p.segmentValue || 0;
+      if (m && !segVal) {
+        const mPerMm = metersPerMm(m);
+        const avail = Math.max(5, it.w - textWidthMm("00000 km", p.font) * 0.75);
+        const rawM = (avail * mPerMm) / ((p.segments || 4) + (p.leftSegments ? 1 : 0));
+        if (!unit) unit = rawM >= 500 ? "km" : "m";
+        segVal = niceFloor(rawM / (unit === "km" ? 1000 : 1));
+      }
+      if (!unit) unit = "km";
+      out += `<LayoutItem type="${QGIS_TYPES.scalebar}" ${a.attrs} mapUuid="${m ? maps.get(m.id) : ""}" style="${style}" unitType="${unit}" unitLabel="${xmlEsc(p.unitLabel || unit)}" numSegments="${p.segments || 4}" numSegmentsLeft="${p.leftSegments ? 1 : 0}" numUnitsPerSegment="${segVal}" segmentSizeMode="0" minBarWidth="10" maxBarWidth="${it.w}" numMapUnitsPerScaleBarUnit="1" height="${p.barHeight || 2}" labelBarSpace="1" boxContentSpace="0.5" alignment="0">${a.children}${qTextStyle(p.font)}</LayoutItem>\n`;
+      continue;
+    }
+    if (it.type === "legend") {
+      const a = qItemAttrs(it, z, { frame: !!p.border?.show, frameColor: p.border?.color, bg: p.background || null });
+      const m = linkedMapOf(it);
+      out += `<LayoutItem type="${QGIS_TYPES.legend}" ${a.attrs} title="${xmlEsc(p.title || "")}" map_uuid="${m ? maps.get(m.id) : ""}" columnCount="${p.columns || 1}" splitLayer="0" equalColumnWidth="0" symbolWidth="${p.patchW || 7}" symbolHeight="${p.patchH || 4}" wmsLegendWidth="50" wmsLegendHeight="25" wrapChar="" fontColor="#000000" legendFilterByAtlas="0" resizeToContents="1" titleAlignment="1">${a.children}</LayoutItem>\n`;
+      continue;
+    }
+    // anything else: an embedded SVG picture that looks exactly like the composer item
+    const a = qItemAttrs(it, z);
+    out += `<LayoutItem type="${QGIS_TYPES.picture}" ${a.attrs} file="base64:${b64(itemAsSvg(it))}" pictureWidth="${it.w}" pictureHeight="${it.h}" resizeMode="1" anchorPoint="0" svgFillColor="255,255,255,255" svgBorderColor="0,0,0,255" svgBorderWidth="0" mode="0" pictureRotation="0" northMode="0" northOffset="0">${a.children}</LayoutItem>\n`;
+    embedded += 1;
+  }
+  out += `<customproperties/>\n</Layout>\n`;
+  return { xml: out, embedded };
+}
+function exportQpt() {
+  const { xml, embedded } = layoutToQpt(S.doc);
+  downloadBlob(new Blob([xml], { type: "application/xml" }), `${safeName(S.doc.name)}.qpt`);
+  toast(`QGIS template saved${embedded ? `; ${embedded} item${embedded > 1 ? "s" : ""} without a QGIS equivalent embedded as SVG pictures` : ""}.`);
+}
+
+// ---- import
+const UNIT_MM = { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8, pt: 25.4 / 72, pica: 25.4 / 6, px: 25.4 / 96 };
+function qMeasure(s) {
+  const [a, b, u = "mm"] = String(s || "").split(",");
+  const k = UNIT_MM[u] || 1;
+  return [Number(a) * k, Number(b) * k];
+}
+function qLen(s, dflt) {
+  if (s == null || s === "") return dflt;
+  const [v, u = "mm"] = String(s).split(",");
+  return Number(v) * (UNIT_MM[u] || 1);
+}
+function qHex(node) {
+  if (!node) return null;
+  const c = [node.getAttribute("red"), node.getAttribute("green"), node.getAttribute("blue")].map(Number);
+  return rgbToHex(c);
+}
+function qHexStr(s) {
+  const c = String(s || "").split(",").map(Number);
+  return c.length >= 3 && c.every(Number.isFinite) ? rgbToHex(c) : null;
+}
+function qFont(node) {
+  const ts = node.querySelector(":scope > text_style");
+  if (ts) {
+    return font({
+      family: ts.getAttribute("fontFamily") || "Arial",
+      size: Number(ts.getAttribute("fontSize")) || 10,
+      bold: Number(ts.getAttribute("fontWeight")) >= 63,
+      italic: ts.getAttribute("fontItalic") === "1",
+      color: qHexStr(ts.getAttribute("textColor")) || "#000000",
+    });
+  }
+  const lf = node.querySelector(":scope > LabelFont");
+  const d = (lf?.getAttribute("description") || "Arial,10").split(",");
+  return font({ family: d[0] || "Arial", size: Number(d[1]) > 0 ? Number(d[1]) : 10, bold: Number(d[4]) >= 63, italic: d[5] === "1", color: qHex(node.querySelector(":scope > FontColor")) || "#000000" });
+}
+// Map extent to {center, zoom} for a frame w × h mm.
+function qExtentToView(ext, authid, w, h) {
+  const n = (k) => Number(ext.getAttribute(k));
+  const [x0, y0, x1, y1] = [n("xmin"), n("ymin"), n("xmax"), n("ymax")];
+  const code = Number(String(authid || "").replace(/^EPSG:/i, ""));
+  let toLL;
+  if (code === 3857 || code === 900913) toLL = (x, y) => [(x / MERC_R) * (180 / Math.PI), (2 * Math.atan(Math.exp(y / MERC_R)) - Math.PI / 2) * (180 / Math.PI)];
+  else if ((code > 32600 && code <= 32660) || (code > 32700 && code <= 32760)) toLL = (x, y) => UTM.inverse(x, y, code % 100, code > 32700);
+  else if (code >= 23830 && code <= 23845) toLL = (x, y) => UTM.inverse(x, y, code - 23830 + 46 - (code >= 23838 ? 8 : 0), code >= 23838); // DGN95 / UTM
+  else toLL = (x, y) => [x, y]; // EPSG:4326 and geographic CRSs
+  const sw = toLL(x0, y0);
+  const ne = toLL(x1, y1);
+  const b = { west: sw[0], south: sw[1], east: ne[0], north: ne[1] };
+  if (![b.west, b.south, b.east, b.north].every(Number.isFinite)) return null;
+  const c = toLL((x0 + x1) / 2, (y0 + y1) / 2);
+  return { center: [c[0], c[1]], zoom: zoomForBounds(b, w, h) };
+}
+function qptToLayout(xmlText, fileName) {
+  const dom = new DOMParser().parseFromString(xmlText, "application/xml");
+  if (dom.querySelector("parsererror")) throw new Error("not a valid XML file");
+  const root = dom.querySelector("Layout") || dom.querySelector("Composer");
+  if (!root) throw new Error("no <Layout> element (QGIS 3 template expected)");
+  const doc = newDoc(root.getAttribute("name") || String(fileName || "QGIS layout").replace(/\.qpt$/i, ""));
+  const page = root.querySelector(`PageCollection > LayoutItem[type="${QGIS_TYPES.page}"]`);
+  if (page) {
+    const [w, h] = qMeasure(page.getAttribute("size"));
+    if (w > 0 && h > 0) Object.assign(doc.page, { size: "Custom", orientation: w >= h ? "landscape" : "portrait", width: round(w, 2), height: round(h, 2) });
+    const bg = qHexStr(page.querySelector("Option[name=color]")?.getAttribute("value"));
+    if (bg) doc.page.background = bg;
+  }
+  const pageH = doc.page.height;
+  const uuidToId = new Map();
+  const counts = {};
+  const later = [];
+  let skipped = 0;
+  const nodes = [...root.querySelectorAll(":scope > LayoutItem")].sort((a, b) => Number(a.getAttribute("zValue") || 0) - Number(b.getAttribute("zValue") || 0));
+  for (const n of nodes) {
+    const type = Number(n.getAttribute("type"));
+    let [x, y] = qMeasure(n.getAttribute("position"));
+    const [w, h] = qMeasure(n.getAttribute("size"));
+    const ref = Number(n.getAttribute("referencePoint") || 0);
+    x -= (w * (ref % 3)) / 2;
+    y -= (h * Math.floor(ref / 3)) / 2;
+    if (y >= pageH + 5) {
+      skipped += 1; // items on later pages
+      continue;
+    }
+    const base = (t) => {
+      const it = newItem(t, round(x, 2), round(y, 2));
+      Object.assign(it, { w: round(Math.max(w, 1), 2), h: round(Math.max(h, 1), 2), rot: Number(n.getAttribute("itemRotation") || 0), hidden: n.getAttribute("visibility") === "0" });
+      const name = n.getAttribute("id");
+      counts[t] = (counts[t] || 0) + 1;
+      it.name = name || `${ITEM_TYPES[t].label} ${counts[t]}`;
+      return it;
+    };
+    const frameOn = n.getAttribute("frame") === "true";
+    const frameColor = qHex(n.querySelector(":scope > FrameColor")) || "#000000";
+    const frameW = qLen(n.getAttribute("outlineWidthM"), 0.3);
+    const bgOn = n.getAttribute("background") === "true";
+    const bgColor = qHex(n.querySelector(":scope > BackgroundColor"));
+    let it = null;
+    if (type === QGIS_TYPES.label) {
+      it = base("text");
+      const p = it.props;
+      p.text = (n.getAttribute("labelText") || "").replace(/\[%\s*@layout_name\s*%\]/g, "{title}").replace(/\[%[^%]*format_date[^%]*%\]/g, "{date}");
+      p.font = qFont(n);
+      const ha = Number(n.getAttribute("halign") || 1);
+      p.align = ha & 4 ? "center" : ha & 2 ? "right" : ha & 8 ? "justify" : "left";
+      const va = Number(n.getAttribute("valign") || 32);
+      p.valign = va & 128 ? "middle" : va & 64 ? "bottom" : "top";
+      p.padding = qLen(n.getAttribute("marginX"), 0);
+      p.wrap = true;
+      p.background = bgOn && bgColor ? bgColor : "";
+      if (p.border) Object.assign(p.border, { show: frameOn, color: frameColor, width: frameW });
+    } else if (type === QGIS_TYPES.map) {
+      it = base("map");
+      const ext = n.querySelector(":scope > Extent");
+      const crs = n.querySelector(":scope > crs authid")?.textContent;
+      const v = ext && qExtentToView(ext, crs || "EPSG:3857", it.w, it.h);
+      if (v) it.props.view = { center: v.center, zoom: v.zoom, bearing: -Number(n.getAttribute("mapRotation") || 0) };
+      else viewFromGeoLibre(it);
+      Object.assign(it.props.frame, { show: frameOn, color: frameColor, width: frameW });
+      if (bgColor) it.props.background = bgColor;
+      if (n.querySelector(":scope > ComposerMapGrid[show='1']")) it.props.grid.show = true;
+      uuidToId.set(n.getAttribute("uuid"), it.id);
+    } else if (type === QGIS_TYPES.picture) {
+      const file = n.getAttribute("file") || "";
+      it = base("image");
+      if (/^base64:/.test(file)) {
+        const data = file.slice(7);
+        const isSvg = /^PD94|^PHN2/.test(data);
+        it.props.src = `data:${isSvg ? "image/svg+xml" : "image/png"};base64,${data}`;
+      } else if (/^data:/.test(file)) it.props.src = file;
+      else if (/north|arrow/i.test(file)) {
+        it = base("north");
+      } else it.name = `${it.name} (${file.split(/[\\/]/).pop() || "picture"} — replace the image)`;
+      if (it.type === "image") it.props.fit = "contain";
+    } else if (type === QGIS_TYPES.shape) {
+      it = base("shape");
+      const st = Number(n.getAttribute("shapeType") || 1);
+      const radius = qLen(n.getAttribute("cornerRadiusMeasure"), 0);
+      it.props.shape = st === 0 ? "ellipse" : st === 2 ? "triangle" : radius > 0 ? "rounded" : "rect";
+      const fill = n.querySelector("symbol Option[name=color]")?.getAttribute("value");
+      const fstyle = n.querySelector("symbol Option[name=style]")?.getAttribute("value");
+      const oc = n.querySelector("symbol Option[name=outline_color]")?.getAttribute("value");
+      const ow = n.querySelector("symbol Option[name=outline_width]")?.getAttribute("value");
+      const ostyle = n.querySelector("symbol Option[name=outline_style]")?.getAttribute("value");
+      it.props.fill = fstyle === "no" ? "" : qHexStr(fill) || it.props.fill;
+      it.props.stroke = qHexStr(oc) || it.props.stroke;
+      it.props.strokeWidth = ostyle === "no" ? 0 : Number(ow) || it.props.strokeWidth;
+    } else if (type === QGIS_TYPES.scalebar) {
+      it = base("scalebar");
+      const style = n.getAttribute("style") || "";
+      it.props.style = /numeric/i.test(style) ? "numeric" : /double/i.test(style) ? "double" : /line/i.test(style) ? "line-up" : "single";
+      if (!SCALEBAR_STYLES.some((s) => s.id === it.props.style)) it.props.style = SCALEBAR_STYLES[0].id;
+      it.props.segments = Number(n.getAttribute("numSegments")) || it.props.segments;
+      it.props.leftSegments = Number(n.getAttribute("numSegmentsLeft")) > 0;
+      it.props.units = n.getAttribute("unitType") === "m" ? "m" : "km";
+      it.props.unitLabel = n.getAttribute("unitLabel") || "";
+      it.props.font = qFont(n);
+      later.push(() => (it.props.linkedMap = uuidToId.get(n.getAttribute("mapUuid")) || ""));
+    } else if (type === QGIS_TYPES.legend) {
+      it = base("legend");
+      it.props.title = n.getAttribute("title") ?? "Legend";
+      // QGIS sizes legends to their content; give ours a usable box
+      if (it.w < 20) it.w = 55;
+      if (it.h < 20) it.h = 60;
+      it.props.autoHeight = true;
+      it.props.columns = Number(n.getAttribute("columnCount")) || 1;
+      if (it.props.border) Object.assign(it.props.border, { show: frameOn, color: frameColor, width: frameW });
+      it.props.background = bgOn && bgColor ? bgColor : "";
+      later.push(() => (it.props.linkedMap = uuidToId.get(n.getAttribute("map_uuid")) || ""));
+    } else if (type === QGIS_TYPES.polygon || type === QGIS_TYPES.polyline) {
+      const pts = [...n.querySelectorAll(":scope > nodes > node")].map((nd) => [Number(nd.getAttribute("x")), Number(nd.getAttribute("y"))]);
+      if (pts.length >= 2 && ITEM_TYPES.path) {
+        it = base("path");
+        it.props.points = pts.map(([px, py]) => [round(px / it.w, 4), round(py / it.h, 4)]);
+        it.props.closed = type === QGIS_TYPES.polygon;
+      } else skipped += 1;
+    } else {
+      skipped += 1; // HTML frames, attribute tables (multi frames), 3D maps, elevation profiles…
+    }
+    if (it) doc.items.push(it);
+  }
+  later.forEach((f) => f());
+  const multi = root.querySelectorAll(":scope > LayoutMultiFrame").length;
+  return { doc, skipped: skipped + multi };
+}
+function importQpt() {
+  const input = el("input", { type: "file", accept: ".qpt,application/xml,text/xml" });
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const { doc, skipped } = qptToLayout(await file.text(), file.name);
+      newLayout(doc);
+      for (const lg of doc.items) if (lg.type === "legend") syncLegendEntries(lg);
+      renderAll();
+      toast(`QGIS template imported: ${doc.items.length} item${doc.items.length === 1 ? "" : "s"}${skipped ? `, ${skipped} not supported (tables, HTML, 3D or extra pages)` : ""}.`);
+    } catch (e) {
+      toast(`Could not import the QGIS template: ${e.message}`, "warn");
+    }
+  });
+  input.click();
+}
 // ---------------------------------------------------------------- open / close
 function ensureLibrary() {
   if (S.library) return;
@@ -8067,6 +10062,7 @@ function openComposer() {
   applyDocks();
   setTool("select");
   renderAll();
+  ensureDocFonts();
   requestAnimationFrame(() => fitPage());
   S.root.focus({ preventScroll: true });
 }
@@ -8126,7 +10122,7 @@ export const plugin = {
       ],
     });
     if (typeof dispose === "function") S.disposers.push(dispose);
-    window.GeoLibreLayoutComposer = { open: openComposer, close: closeComposer, version: PLUGIN_VERSION, _state: S, _debug: { legendFromMap, glLayers, mainMap, composePageSVG, renderMapImage, rasterize, addItemFromTool, select, renderAll, loadMathJax, geoFrames, geoRegister, saveVectorPdf, findItem } };
+    window.GeoLibreLayoutComposer = { open: openComposer, close: closeComposer, version: PLUGIN_VERSION, _state: S, _debug: { embeddedFontCss, docFontFamilies, ensureFont, layoutToQpt, qptToLayout, aggregate, legendFromMap, glLayers, mainMap, composePageSVG, renderMapImage, rasterize, addItemFromTool, select, renderAll, loadMathJax, geoFrames, geoRegister, saveVectorPdf, findItem } };
   },
   deactivate(app) {
     closeComposer();
