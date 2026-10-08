@@ -6464,10 +6464,69 @@ function renderProps() {
     if (!items.length) host.append(emptyState());
     else if (items.length > 1) {
       host.append(el("div", { class: `${NS}-emptycard` }, el("b", {}, `${items.length} items selected`), el("p", {}, "Move them together, or use Arrange and Align in the left panel.")));
-    } else host.append(...itemProps(items[0]));
+    } else {
+      host.append(...itemProps(items[0]));
+      groupPropSections(host, items[0]);
+    }
   }
   host.scrollTop = scrollTop;
   renderQuickBar();
+}
+
+// ---- property groups: the sections of an item are sorted into tabs
+// (Content · Style · Grid · Arrange) so long panels stay short and tidy.
+const PROP_GROUPS = [
+  ["content", "Content", /^(content|map view|data|text$|formula|table content|entries|legend|image|icon|symbols?|drawing|shape|latex|settings)/i],
+  ["style", "Style", /^(style|frame|fill|background|halo|bar$|ticks|title|table style|scale bar style|north arrow style|text effects|adjust|stroke|line|markers?)/i],
+  ["grid", "Grid", /^(coordinate grid|grid|overview)/i],
+  ["arrange", "Arrange", /^(position|effects)/i],
+];
+const SECTION_ICONS = [
+  [/^content|^data/i, "sync"], [/^map view/i, "zin"], [/^frame/i, "inset"], [/^coordinate grid|^grid/i, "table"],
+  [/^overview/i, "map"], [/^position/i, "ruler"], [/^effects|text effects/i, "fx"], [/^text|^formula|^latex/i, "text"],
+  [/^fill|^shape|^style/i, "shape"], [/^background|^halo/i, "layout"], [/^title/i, "title"], [/^ticks|^bar/i, "colorbar"],
+  [/^entries|^legend/i, "list"], [/^image|^adjust/i, "image"], [/^icon|^symbol/i, "marker"], [/^table/i, "table"],
+  [/^drawing/i, "pen"], [/^scale bar/i, "scalebar"], [/^north/i, "north"], [/^settings/i, "vars"],
+];
+function groupPropSections(host, item) {
+  const secs = [...host.querySelectorAll(`:scope > details.${NS}-sec`)];
+  const groupOf = (title) => (PROP_GROUPS.find(([, , re]) => re.test(title)) || ["style"])[0];
+  for (const d of secs) {
+    const sum = d.querySelector("summary");
+    const title = sum.textContent.trim();
+    d.dataset.group = groupOf(title);
+    const ic = SECTION_ICONS.find(([re]) => re.test(title));
+    if (ic && !sum.querySelector("svg")) sum.insertAdjacentHTML("afterbegin", icon(ic[1], 14));
+  }
+  const present = PROP_GROUPS.filter(([id]) => secs.some((d) => d.dataset.group === id));
+  if (present.length < 2) return;
+  S.ui.propGroup = S.ui.propGroup || {};
+  let cur = S.ui.propGroup[item.type];
+  if (cur !== "all" && !present.some(([id]) => id === cur)) cur = present[0][0];
+  const bar = el("div", { class: `${NS}-ptabs`, role: "tablist" });
+  const apply = () => {
+    for (const d of secs) d.hidden = cur !== "all" && d.dataset.group !== cur;
+    for (const b of bar.children) b.classList.toggle("active", b.dataset.g === cur);
+  };
+  for (const [id, label] of [...present, ["all", "All"]]) {
+    const n = id === "all" ? secs.length : secs.filter((d) => d.dataset.group === id).length;
+    bar.appendChild(el("button", {
+      type: "button", role: "tab", "data-g": id, title: `${label} (${n})`,
+      onclick: () => {
+        cur = S.ui.propGroup[item.type] = id;
+        apply();
+        host.scrollTop = 0;
+      },
+    }, label));
+  }
+  const head = host.querySelector(`:scope > .${NS}-ptype`);
+  const top = el("div", { class: `${NS}-propshead` });
+  if (head) {
+    head.replaceWith(top);
+    top.appendChild(head);
+  } else host.prepend(top);
+  top.appendChild(bar);
+  apply();
 }
 
 function imageAdjustSection(item) {
@@ -6579,7 +6638,7 @@ function itemProps(item) {
         }
       };
       const contentSec = section("Content", [
-        row("Source", fSeg(item, P("source"), [["live", "Live map"], ["snapshot", "GeoLibre capture"]], {
+        row("Source", fSeg(item, P("source"), [["live", "Live map", "Live MapLibre map, redrawn at print resolution"], ["snapshot", "Capture", "Capture of what GeoLibre draws now (includes COG / raster layers)"]], {
           after: () => {
             if (p.source === "snapshot" && !p.snapshot?.src) return capture();
             refreshCanvas();
@@ -6761,7 +6820,7 @@ function itemProps(item) {
           ),
           row("Colormap", colormapPicker(item)),
           p.colormap === "custom" ? row("Colors", fArea(item, P("customColors"), { rows: 2 })) : null,
-          p.colormap === "custom" ? el("p", { class: `${NS}-muted` }, "Low → high, separated by commas, e.g. #2c7bb6, #ffffbf, #d7191c") : null,
+          p.colormap === "custom" ? el("p", { class: `${NS}-muted` }, "Colors from low to high, separated by commas, e.g. #2c7bb6, #ffffbf, #d7191c") : null,
           el("div", { class: `${NS}-grid2` },
             row("Classes", fNum(item, P("bins"), { min: 0, max: 50, step: 1 })),
             row("", fCheck(item, P("reverse"), "Reverse")),

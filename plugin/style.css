@@ -2149,3 +2149,82 @@ html.dark .glc-root .glc-toast,
     margin-right: auto;
   }
 }
+
+/* ---- property groups (Content · Style · Grid · Arrange) */
+.glc-propshead {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--glc-bg);
+  border-bottom: 1px solid var(--glc-border);
+  padding-bottom: 8px;
+}
+.glc-propshead .glc-ptype {
+  padding-bottom: 8px;
+}
+.glc-ptabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 12px;
+  padding: 2px;
+  border-radius: var(--glc-radius);
+  background: var(--glc-muted);
+}
+.glc-ptabs button {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--glc-muted-fg);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 4px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background var(--glc-ease), color var(--glc-ease), box-shadow var(--glc-ease);
+}
+.glc-ptabs button:hover {
+  color: var(--glc-fg);
+}
+.glc-ptabs button.active {
+  background: var(--glc-bg);
+  color: var(--glc-fg);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), 0 0 0 0.5px rgb(0 0 0 / 0.06);
+}
+.glc-sec[hidden] {
+  display: none;
+}
+.glc-sec > summary > svg {
+  flex: none;
+  color: var(--glc-muted-fg);
+}
+.glc-sec[open] > summary > svg {
+  color: var(--glc-sel);
+}
+.glc-sec > summary {
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+/* no clipping in narrow panels */
+.glc-seg {
+  min-width: 0;
+}
+.glc-seg button {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glc-pctl > select.glc-sm {
+  flex: 0 0 74px;
+  width: 74px;
+}
+.glc-pctl > .glc-input[type="number"] {
+  min-width: 0;
+}

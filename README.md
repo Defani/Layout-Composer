@@ -56,7 +56,7 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 | **Drawing** | Polyline, polygon, Bézier pen (click = corner, drag = curve), freehand (simplified + smoothed), arrow line; 33 shapes; fills: solid, gradient, hatch patterns (/ \ × − \| + ·); 6 dash styles. |
 | **Symbols** | Point markers with labels (12 symbols); **icon catalog** with Maki (215) and Temaki (557) icons grouped by type (water, terrain, vegetation, transport, public services, health, education, religion, tourism, sports, utilities, hazards…). |
 | **Effects** | Drop shadow and frosted glass (blurs the map behind; reproduced in exports) on any item. |
-| **Editing** | Top-bar insert menus (Text, Draw, Shape, Image, Symbols, Scale bar), floating contextual toolbar for text and shapes, map navigation in the map panel (zoom in/out, fit layers, zoom to layer, previous/next extent), Move-content tool, collapsible left/right docks, item search, Figma-style selection (handles, rotation knob, size badge), hover outlines, multi-select, groups, align/distribute, lock/hide, rename, context menu, undo/redo, copy/paste, layers list. Round color wheel with brightness, hex, eyedropper, palette and recent colors. Light theme and soft neutral dark theme that follow GeoLibre. |
+| **Editing** | Item properties grouped into Content, Style, Grid and Arrange tabs (or All); top-bar insert menus (Text, Draw, Shape, Image, Symbols, Scale bar), floating contextual toolbar for text and shapes, map navigation in the map panel (zoom in/out, fit layers, zoom to layer, previous/next extent), Move-content tool, collapsible left/right docks, item search, Figma-style selection (handles, rotation knob, size badge), hover outlines, multi-select, groups, align/distribute, lock/hide, rename, context menu, undo/redo, copy/paste, layers list. Round color wheel with brightness, hex, eyedropper, palette and recent colors. Light theme and soft neutral dark theme that follow GeoLibre. |
 | **Layouts & templates** | Several layouts per project, autosave, save/open `.layout.json`, **save your own templates** and start new layouts from them (maps re-framed on the current GeoLibre view). |
 | **Export** | PNG/JPG (75–600 dpi, page/white/transparent background), raster PDF, **vector PDF**, **GeoPDF** (every map frame georeferenced, WGS 84), SVG. |
 
@@ -88,15 +88,15 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 ## Install
 
 1. Download `geolibre-layout-composer.zip` 
-2. GeoLibre Desktop: copy the zip into `%APPDATA%\org.geolibre.desktop\plugins` (Windows) and restart GeoLibre — or install it from **Settings → Manage Plugins** once it is in the registry.
-3. Enable **Layout Composer** in the **Plugins** menu, then open it from **Layout → Open Layout Composer** or the layout button at the top right of the map.
+2. GeoLibre Desktop: copy the zip into `%APPDATA%\org.geolibre.desktop\plugins` (Windows) and restart GeoLibre — or install it from **Manage Plugins** in Settings once it is in the registry.
+3. Enable **Layout Composer** in the **Plugins** menu, then open it with **Open Layout Composer** in the Layout menu or the layout button at the top right of the map.
 
 ## Quick start
 
 1. Pick a **page size** on the *Page* tab (catalog button).
 2. Choose **Map** in the tool rail and drag a frame on the page; set the scale or double-click to pan its content.
 3. Add **Legend**, **Color bar** and **North** from the left rail, and **Text, Draw, Shape, Image, Symbols, Scale bar** from the top bar — each item's settings appear on the right.
-4. **Export** (top right) → PNG, PDF, Vector PDF, GeoPDF or SVG.
+4. Click **Export** at the top right and choose PNG, PDF, Vector PDF, GeoPDF or SVG.
 
 ## Architecture
 
@@ -109,7 +109,7 @@ flowchart LR
   subgraph Plugin["Layout Composer (one ES module)"]
     Core[Core state<br/>layouts · undo · autosave]
     UI[Editor UI<br/>tool rail · canvas · rulers · panels]
-    Items[Item renderers → SVG in mm<br/>map · legend · color bar · scale · north · text · LaTeX · shapes · paths · markers · icons · tables]
+    Items[Item renderers, drawn as SVG in mm<br/>map · legend · color bar · scale · north · text · LaTeX · shapes · paths · markers · icons · tables]
     Maps[Live map frames<br/>copied MapLibre style]
     Cat[Catalogs<br/>Maki · Temaki · paper sizes · colormaps]
     Exp[Export<br/>PNG · JPG · PDF · Vector PDF · GeoPDF · SVG]
@@ -174,13 +174,13 @@ The example layout follows **Keputusan Menteri LHK No. 399 Tahun 2024** (Spesifi
 | Element | Rule (SK 399/2024) | In Layout Composer |
 |---|---|---|
 | Layout | Map face left, margin information right | Example layout |
-| Grid | DMS, lines R190 G232 B255 or black "+" marks; ≥ 2 lat and 2 lon labels | Grid → DMS, color #BEE8FF, labels Arial |
+| Grid | DMS, lines R190 G232 B255 or black "+" marks; ≥ 2 lat and 2 lon labels | Grid style DMS, color #BEE8FF, Arial labels |
 | Fonts | Arial, black; title Arial Bold capitals centered; notes Arial Italic in a box | Text items + quick text bar |
 | Scale | Numeric and bar; key map numeric only | Scale bar + `Scale {scale}` text |
 | North arrow | Arrow pointing up with "U" | North arrow, letter U |
 | Projection note | System, coordinates, datum (WGS 1984/SRGI) | Text block |
 | Forest functions | KSA/KPA 173 63 255 · HL 2 173 0 · HPT 138 242 0 · HP 255 255 0 · HPK 255 94 255 · APL 255 255 255 | Layer colors in the example; legend built automatically |
-| Paper size | Minimum sizes per scale (Table 1) | Page size catalog → Indonesia |
+| Paper size | Minimum sizes per scale (Table 1) | Indonesia group in the page size catalog |
 
 For official topographic (Rupabumi) symbology follow **SNI 8743:2019**.
 
@@ -237,7 +237,7 @@ Builds `plugin/index.js` and `geolibre-layout-composer.zip`. To test without Geo
 | Component | Used for | Source | License |
 |---|---|---|---|
 | MapLibre GL JS | Map rendering (provided by the GeoLibre host, not bundled) | [maplibre.org](https://maplibre.org) | BSD-3-Clause |
-| MathJax 3.2.2 | LaTeX → SVG (loaded on first use) | [mathjax.org](https://www.mathjax.org), jsDelivr | Apache-2.0 |
+| MathJax 3.2.2 | Renders LaTeX as SVG (loaded on first use) | [mathjax.org](https://www.mathjax.org), jsDelivr | Apache-2.0 |
 | jsPDF 2.5.1 | PDF / GeoPDF output (loaded on export) | [github.com/parallax/jsPDF](https://github.com/parallax/jsPDF), cdnjs | MIT |
 | svg2pdf.js 2.2.4 | Vector PDF (loaded on export) | [github.com/yWorks/svg2pdf.js](https://github.com/yWorks/svg2pdf.js), jsDelivr | MIT |
 | Maki 8.2.0 icons | Icon catalog | [github.com/mapbox/maki](https://github.com/mapbox/maki) | CC0-1.0 |
