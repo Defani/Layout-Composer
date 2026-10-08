@@ -1,11 +1,11 @@
-#Layout Composer
+# Layout Composer
 
 **Cartographic layout designer for [GeoLibre](https://plugins.geolibre.app)**. Design publication-ready maps with map frames, coordinate grids, legends, matplotlib-style color bars, attribute tables and charts from your layers, LaTeX formulas, icon catalogs, GeoPDF export and QGIS template exchange, without leaving GeoLibre.
 
-![Version](https://img.shields.io/badge/version-1.8.0-0d99ff)
+![Version](https://img.shields.io/badge/version-1.8.1-0d99ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![GeoLibre plugin](https://img.shields.io/badge/GeoLibre-plugin-4e8a2e)
-![Tag: cartography](https://img.shields.io/badge/tag-cartography-6a3d9a)
+![Category: Cartography](https://img.shields.io/badge/category-Cartography-6a3d9a)
 ![ES module](https://img.shields.io/badge/JavaScript-ES%20module-f7df1e?logo=javascript&logoColor=black)
 ![MapLibre GL JS](https://img.shields.io/badge/MapLibre%20GL%20JS-host%20engine-396CB2?logo=maplibre&logoColor=white)
 ![MathJax](https://img.shields.io/badge/MathJax-3.2.2-1B3E6F)
@@ -18,7 +18,7 @@
 ![KLHK layout](https://img.shields.io/badge/layout-SK%20MENLHK%20399%2F2024-02ad00)
 ![QGIS templates](https://img.shields.io/badge/QGIS-.qpt%20import%20%2F%20export-589632?logo=qgis&logoColor=white)
 
-Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani/Geolibre-Laout-Composer>
+Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani/Layout-Composer>
 
 ![Layout Composer editor](docs/img/ui-overview.png)
 
@@ -102,7 +102,7 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 
 ## Install
 
-1. Download `geolibre-layout-composer.zip` 
+1. Download `layout-composer-1.8.1.zip` from [Releases](https://github.com/Defani/Layout-Composer/releases) (or build it with `sh build.sh`).
 2. GeoLibre Desktop: copy the zip into `%APPDATA%\org.geolibre.desktop\plugins` (Windows) and restart GeoLibre — or install it from **Manage Plugins** in Settings once it is in the registry.
 3. Enable **Layout Composer** in the **Plugins** menu, then open it with **Open Layout Composer** in the Layout menu or the layout button at the top right of the map.
 
@@ -236,8 +236,6 @@ The example layout follows **Keputusan Menteri LHK No. 399 Tahun 2024** (Spesifi
 | Forest functions | KSA/KPA 173 63 255 · HL 2 173 0 · HPT 138 242 0 · HP 255 255 0 · HPK 255 94 255 · APL 255 255 255 | Layer colors in the example; legend built automatically |
 | Paper size | Minimum sizes per scale (Table 1) | Indonesia group in the page size catalog |
 
-For official topographic (Rupabumi) symbology follow **SNI 8743:2019**.
-
 ![KLHK forest-area map exported from Layout Composer](docs/img/klhk-kawasan-hutan-aceh.png)
 
 ## Keyboard shortcuts
@@ -286,7 +284,7 @@ examples/       sample layouts
 sh build.sh
 ```
 
-Builds `plugin/index.js` and `geolibre-layout-composer.zip`. To test without GeoLibre, serve the folder (`python -m http.server`) and open `test/index.html`.
+Builds `plugin/index.js` and `layout-composer.zip`. To test without GeoLibre, serve the folder (`python -m http.server`) and open `test/index.html`.
 
 ## Licenses and third-party notices
 

@@ -276,7 +276,7 @@ function deleteTemplate(id) {
 function exportTemplateFile(id) {
   const t = loadTemplates()[id];
   if (!t) return;
-  downloadBlob(new Blob([JSON.stringify({ format: "geolibre-layout-template", version: 1, name: t.name, layout: t.doc }, null, 2)], { type: "application/json" }), `${safeName(t.name)}.layout-template.json`);
+  downloadBlob(new Blob([JSON.stringify({ format: "layout-composer-template", version: 1, name: t.name, layout: t.doc }, null, 2)], { type: "application/json" }), `${safeName(t.name)}.layout-template.json`);
 }
 function importTemplateFile() {
   const input = el("input", { type: "file", accept: ".json,application/json" });

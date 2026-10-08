@@ -119,9 +119,9 @@ async function run() {
   if (klhk) await loadExample();
   else localStorage.removeItem("glc:layouts:v1");
   localStorage.setItem("glc:docks", JSON.stringify({ left: true, right: true }));
-  await waitFor(() => window.__app && window.GeoLibreLayoutComposer && window.__app.getMap().isStyleLoaded());
+  await waitFor(() => window.__app && window.LayoutComposer && window.__app.getMap().isStyleLoaded());
   await sleep(1500);
-  const G = window.GeoLibreLayoutComposer;
+  const G = window.LayoutComposer;
   const S = G._state;
   const D = G._debug;
   G.open();

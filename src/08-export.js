@@ -173,7 +173,7 @@ async function exportLayout(fmt, progIn) {
         prog.set("Georeferencing PDF…", 0.9, "save");
         const JsPDF = await loadJsPDF();
         const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
-        pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
+        pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "Layout Composer" });
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pg.width, pg.height, undefined, "FAST");
         const frames = geoFrames();
         if (!frames.length) throw new Error("GeoPDF needs at least one visible, unrotated map frame");
@@ -182,7 +182,7 @@ async function exportLayout(fmt, progIn) {
         prog.set("Creating PDF…", 0.9, "save");
         const JsPDF = await loadJsPDF();
         const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
-        pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
+        pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "Layout Composer" });
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pg.width, pg.height, undefined, "FAST");
         pdf.save(`${base}.pdf`);
       } else {
@@ -242,7 +242,7 @@ async function saveVectorPdf(svgText, base) {
   const svg2pdf = await loadSvg2pdf();
   const JsPDF = await loadJsPDF();
   const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
-  pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
+  pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "Layout Composer" });
   // svg2pdf measures text with the live DOM, so mount the page off-screen
   const holder = el("div", { style: { position: "fixed", left: "-30000px", top: "0" } });
   holder.innerHTML = svgText;

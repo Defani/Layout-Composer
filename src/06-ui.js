@@ -1762,7 +1762,7 @@ function deleteLayout() {
   switchLayout(Object.keys(S.library.layouts)[0]);
 }
 function exportJSON() {
-  const blob = new Blob([JSON.stringify({ format: "geolibre-layout", version: 1, layout: S.doc }, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify({ format: "layout-composer", version: 1, layout: S.doc }, null, 2)], { type: "application/json" });
   downloadBlob(blob, `${safeName(S.doc.name)}.layout.json`);
   toast("Layout saved to a .json file");
 }

@@ -1,4 +1,4 @@
-// GeoLibre Layout Composer — a QGIS-style print layout designer for GeoLibre.
+// Layout Composer — a QGIS-style print layout designer for GeoLibre.
 // Built from src/*.js by build.sh into one self-contained ES module.
 //
 // Every layout item is described in millimetres on the page and rendered to an
@@ -6,9 +6,9 @@
 // SVG drives the on-screen preview and the PNG/PDF/SVG export, so what you see
 // is what gets printed.
 
-const PLUGIN_ID = "geolibre-layout-composer";
+const PLUGIN_ID = "layout-composer";
 const PLUGIN_NAME = "Layout Composer";
-const PLUGIN_VERSION = "1.8.0";
+const PLUGIN_VERSION = "1.8.1";
 const NS = "glc"; // CSS class prefix
 const STORE_KEY = "glc:layouts:v1";
 const PX96 = 96 / 25.4; // CSS px per mm at 96 dpi

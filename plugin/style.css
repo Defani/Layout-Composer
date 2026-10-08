@@ -1,4 +1,4 @@
-/* GeoLibre Layout Composer — every selector is prefixed with .glc- so nothing
+/* Layout Composer — every selector is prefixed with .glc- so nothing
    leaks into the host. Colors follow GeoLibre's design tokens (light/dark);
    the look is a calm, Figma-like editor: flat panels, quiet borders, blue focus. */
 .glc-root {

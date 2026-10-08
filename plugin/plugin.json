@@ -1,13 +1,26 @@
 {
-  "id": "geolibre-layout-composer",
+  "id": "layout-composer",
   "name": "Layout Composer",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "entry": "index.js",
   "style": "style.css",
   "author": "Defani Arman Alfitriansyah",
   "license": "MIT",
-  "homepage": "https://github.com/Defani/Geolibre-Laout-Composer",
-  "tags": ["cartography", "layout", "print", "export", "pdf", "geopdf", "legend", "colorbar", "latex"],
-  "description": "QGIS-style print layout designer: page-size catalog (ISO, US, KLHK, posters, presentation, social media) in mm/cm/in/pt/px, live map frames with locked scale and GeoLibre capture, DMS/DD/UTM grids, inset maps, auto legends, matplotlib-style color bars (pointed/square ends, tick control, raster ranges), dual-unit scale bars, 26 north arrows, LaTeX formulas, drawing tools (polyline, polygon, Bézier, freehand), shapes with gradient/hatch fills, drop shadow and frosted glass, icon catalog (Maki and Temaki icons), user templates, and PNG/JPG/PDF/vector PDF/GeoPDF/SVG export.",
-  "engines": ["maplibre"]
+  "homepage": "https://github.com/Defani/Layout-Composer",
+  "tags": [
+    "cartography",
+    "layout",
+    "print",
+    "export",
+    "pdf",
+    "geopdf",
+    "legend",
+    "colorbar",
+    "charts",
+    "qgis"
+  ],
+  "description": "Cartographic print layout designer for GeoLibre: page-size catalog in mm/cm/in/pt/px, live map frames with locked scale, custom shapes and per-frame layers, DMS/DD/UTM grids, inset maps, legends for vector, raster and tile layers, attribute tables and charts from layer data, matplotlib-style color bars, dual-unit scale bars, 26 north arrows, LaTeX, drawing tools, Google Fonts and Material Symbols, Maki and Temaki icons, layout grids and precise editing, QGIS .qpt import/export, user templates, and PNG/JPG/PDF/vector PDF/GeoPDF/SVG export.",
+  "engines": [
+    "maplibre"
+  ]
 }

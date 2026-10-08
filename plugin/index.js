@@ -1,4 +1,4 @@
-// GeoLibre Layout Composer — a QGIS-style print layout designer for GeoLibre.
+// Layout Composer — a QGIS-style print layout designer for GeoLibre.
 // Built from src/*.js by build.sh into one self-contained ES module.
 //
 // Every layout item is described in millimetres on the page and rendered to an
@@ -6,9 +6,9 @@
 // SVG drives the on-screen preview and the PNG/PDF/SVG export, so what you see
 // is what gets printed.
 
-const PLUGIN_ID = "geolibre-layout-composer";
+const PLUGIN_ID = "layout-composer";
 const PLUGIN_NAME = "Layout Composer";
-const PLUGIN_VERSION = "1.8.0";
+const PLUGIN_VERSION = "1.8.1";
 const NS = "glc"; // CSS class prefix
 const STORE_KEY = "glc:layouts:v1";
 const PX96 = 96 / 25.4; // CSS px per mm at 96 dpi
@@ -6167,7 +6167,7 @@ function deleteLayout() {
   switchLayout(Object.keys(S.library.layouts)[0]);
 }
 function exportJSON() {
-  const blob = new Blob([JSON.stringify({ format: "geolibre-layout", version: 1, layout: S.doc }, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify({ format: "layout-composer", version: 1, layout: S.doc }, null, 2)], { type: "application/json" });
   downloadBlob(blob, `${safeName(S.doc.name)}.layout.json`);
   toast("Layout saved to a .json file");
 }
@@ -6467,7 +6467,7 @@ function deleteTemplate(id) {
 function exportTemplateFile(id) {
   const t = loadTemplates()[id];
   if (!t) return;
-  downloadBlob(new Blob([JSON.stringify({ format: "geolibre-layout-template", version: 1, name: t.name, layout: t.doc }, null, 2)], { type: "application/json" }), `${safeName(t.name)}.layout-template.json`);
+  downloadBlob(new Blob([JSON.stringify({ format: "layout-composer-template", version: 1, name: t.name, layout: t.doc }, null, 2)], { type: "application/json" }), `${safeName(t.name)}.layout-template.json`);
 }
 function importTemplateFile() {
   const input = el("input", { type: "file", accept: ".json,application/json" });
@@ -9357,7 +9357,7 @@ async function exportLayout(fmt, progIn) {
         prog.set("Georeferencing PDF…", 0.9, "save");
         const JsPDF = await loadJsPDF();
         const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
-        pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
+        pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "Layout Composer" });
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pg.width, pg.height, undefined, "FAST");
         const frames = geoFrames();
         if (!frames.length) throw new Error("GeoPDF needs at least one visible, unrotated map frame");
@@ -9366,7 +9366,7 @@ async function exportLayout(fmt, progIn) {
         prog.set("Creating PDF…", 0.9, "save");
         const JsPDF = await loadJsPDF();
         const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
-        pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
+        pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "Layout Composer" });
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pg.width, pg.height, undefined, "FAST");
         pdf.save(`${base}.pdf`);
       } else {
@@ -9426,7 +9426,7 @@ async function saveVectorPdf(svgText, base) {
   const svg2pdf = await loadSvg2pdf();
   const JsPDF = await loadJsPDF();
   const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
-  pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "GeoLibre Layout Composer" });
+  pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "Layout Composer" });
   // svg2pdf measures text with the live DOM, so mount the page off-screen
   const holder = el("div", { style: { position: "fixed", left: "-30000px", top: "0" } });
   holder.innerHTML = svgText;
@@ -10122,7 +10122,7 @@ export const plugin = {
       ],
     });
     if (typeof dispose === "function") S.disposers.push(dispose);
-    window.GeoLibreLayoutComposer = { open: openComposer, close: closeComposer, version: PLUGIN_VERSION, _state: S, _debug: { embeddedFontCss, docFontFamilies, ensureFont, layoutToQpt, qptToLayout, aggregate, legendFromMap, glLayers, mainMap, composePageSVG, renderMapImage, rasterize, addItemFromTool, select, renderAll, loadMathJax, geoFrames, geoRegister, saveVectorPdf, findItem } };
+    window.LayoutComposer = window.GeoLibreLayoutComposer = { open: openComposer, close: closeComposer, version: PLUGIN_VERSION, _state: S, _debug: { embeddedFontCss, docFontFamilies, ensureFont, layoutToQpt, qptToLayout, aggregate, legendFromMap, glLayers, mainMap, composePageSVG, renderMapImage, rasterize, addItemFromTool, select, renderAll, loadMathJax, geoFrames, geoRegister, saveVectorPdf, findItem } };
   },
   deactivate(app) {
     closeComposer();
@@ -10139,6 +10139,7 @@ export const plugin = {
     S.root = null;
     S.ui = {};
     S.app = null;
+    delete window.LayoutComposer;
     delete window.GeoLibreLayoutComposer;
   },
 };

@@ -66,7 +66,7 @@
   const mod = await import("../plugin/index.js?v=" + Date.now());
   mod.plugin.activate(app);
   window.__app = app;
-  document.getElementById("open").onclick = () => window.GeoLibreLayoutComposer.open();
+  document.getElementById("open").onclick = () => window.LayoutComposer.open();
   document.getElementById("dark").onclick = () => document.documentElement.classList.toggle("dark");
 </script>
 <script type="module" src="shots.js"></script>
