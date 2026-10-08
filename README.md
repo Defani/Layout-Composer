@@ -1,4 +1,4 @@
-# GeoLibre Layout Composer
+#Layout Composer
 
 **Cartographic layout designer for [GeoLibre](https://plugins.geolibre.app)**. Design publication-ready maps with map frames, coordinate grids, legends, matplotlib-style color bars, attribute tables and charts from your layers, LaTeX formulas, icon catalogs, GeoPDF export and QGIS template exchange, without leaving GeoLibre.
 
