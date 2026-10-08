@@ -3,3 +3,4 @@ _lines.txt
 _strings.txt
 __pycache__/
 .claude/
+dist/
