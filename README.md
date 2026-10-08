@@ -2,7 +2,7 @@
 
 **Cartographic layout designer for [GeoLibre](https://plugins.geolibre.app)** — design publication-ready maps with map frames, coordinate grids, legends, matplotlib-style color bars, LaTeX formulas, icon catalogs and GeoPDF export, without leaving GeoLibre.
 
-![Version](https://img.shields.io/badge/version-1.5.0-0d99ff)
+![Version](https://img.shields.io/badge/version-1.6.0-0d99ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![GeoLibre plugin](https://img.shields.io/badge/GeoLibre-plugin-4e8a2e)
 ![Tag: cartography](https://img.shields.io/badge/tag-cartography-6a3d9a)
@@ -56,7 +56,7 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 | **Drawing** | Polyline, polygon, Bézier pen (click = corner, drag = curve), freehand (simplified + smoothed), arrow line; 33 shapes; fills: solid, gradient, hatch patterns (/ \ × − \| + ·); 6 dash styles. |
 | **Symbols** | Point markers with labels (12 symbols); **icon catalog** with Maki (215) and Temaki (557) icons grouped by type (water, terrain, vegetation, transport, public services, health, education, religion, tourism, sports, utilities, hazards…). |
 | **Effects** | Drop shadow and frosted glass (blurs the map behind; reproduced in exports) on any item. |
-| **Editing** | Item properties grouped into Content, Style, Grid and Arrange tabs (or All); top-bar insert menus (Text, Draw, Shape, Image, Symbols, Scale bar), floating contextual toolbar for text and shapes, map navigation in the map panel (zoom in/out, fit layers, zoom to layer, previous/next extent), Move-content tool, collapsible left/right docks, item search, Figma-style selection (handles, rotation knob, size badge), hover outlines, multi-select, groups, align/distribute, lock/hide, rename, context menu, undo/redo, copy/paste, layers list. Round color wheel with brightness, hex, eyedropper, palette and recent colors. Light theme and soft neutral dark theme that follow GeoLibre. |
+| **Editing** | Desktop-style workspace: main menu, layout picker, centred insert toolbar, zoom control and Export in a three-zone header; full-height Layers panel; align, distribute and order bar at the top of the properties panel. Item properties grouped into Content, Style, Grid and Arrange tabs (or All); top-bar insert menus (Text, Draw, Shape, Image, Symbols, Scale bar), floating contextual toolbar for text and shapes, map navigation in the map panel (zoom in/out, fit layers, zoom to layer, previous/next extent), Move-content tool, collapsible left/right docks, item search, Figma-style selection (handles, rotation knob, size badge), hover outlines, multi-select, groups, align/distribute, lock/hide, rename, context menu, undo/redo, copy/paste, layers list. Round color wheel with brightness, hex, eyedropper, palette and recent colors. Light theme and soft neutral dark theme that follow GeoLibre. |
 | **Layouts & templates** | Several layouts per project, autosave, save/open `.layout.json`, **save your own templates** and start new layouts from them (maps re-framed on the current GeoLibre view). |
 | **Export** | PNG/JPG (75–600 dpi, page/white/transparent background), raster PDF, **vector PDF**, **GeoPDF** (every map frame georeferenced, WGS 84), SVG. |
 

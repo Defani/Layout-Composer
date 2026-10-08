@@ -1,7 +1,7 @@
 {
   "id": "geolibre-layout-composer",
   "name": "Layout Composer",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "entry": "index.js",
   "style": "style.css",
   "author": "Defani Arman Alfitriansyah",

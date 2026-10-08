@@ -64,6 +64,9 @@ const ICON_PATHS = {
   fx: "M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z",
   camera: "M3 8h4l2-3h6l2 3h4v12H3zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
   sync: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5",
+  menu: "M4 7h16M4 12h16M4 17h16",
+  chevron: "M7 10l5 5 5-5",
+  layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5",
 };
 // Two-tone item icons: a soft tinted body (currentColor at low opacity) under a crisp outline,
 // so they follow the theme and turn blue as a whole when the tool is active.
@@ -203,37 +206,40 @@ function buildShell() {
   const top = el("header", { class: `${NS}-top` });
   const layoutSel = el("select", { class: `${NS}-layoutsel`, title: "Active layout", onchange: (e) => switchLayout(e.target.value) });
   S.ui.layoutSel = layoutSel;
-  const zoomLbl = el("button", { type: "button", class: `${NS}-zoomlbl`, title: "Zoom to 100% (actual size)", onclick: () => setZoom(PX96, null) }, "100%");
+  const zoomLbl = el("button", { type: "button", class: `${NS}-zoomlbl`, title: "Zoom options", onclick: (e) => openZoomMenu(e.currentTarget) }, "100%");
   S.ui.zoomLbl = zoomLbl;
   S.exportFmt = S.exportFmt || "png";
   S.exportDpi = S.exportDpi || 300;
+  // three zones like a desktop design app: file & history | insert | view & export
+  const vsep = () => el("span", { class: `${NS}-vsep` });
   top.append(
-    iconBtn("dockleft", "Show / hide the Items panel", () => toggleDock("left"), `${NS}-docktog`),
-    el("div", { class: `${NS}-brand`, title: "Layout Composer", html: `${icon("layout", 18)}<span>Layout Composer</span>` }),
-    el("div", { class: `${NS}-grp` },
-      layoutSel,
-      iconBtn("plus", "New layout / templates", (e) => openNewMenu(e.currentTarget)),
-      iconBtn("template", "Save as template…", () => saveAsTemplate()),
-      iconBtn("rename", "Rename layout", () => renameLayout()),
-      iconBtn("trash", "Delete layout", () => deleteLayout()),
+    el("div", { class: `${NS}-topl` },
+      el("div", { class: `${NS}-brand`, title: "Layout Composer", html: `${icon("layout", 16)}` }),
+      iconBtn("menu", "Main menu", (e) => openMainMenu(e.currentTarget), `${NS}-mainmenu`),
+      iconBtn("dockleft", "Show / hide the Layers panel", () => toggleDock("left"), `${NS}-docktog`),
+      vsep(),
+      el("div", { class: `${NS}-layoutpick` },
+        layoutSel,
+        iconBtn("plus", "New layout / templates", (e) => openNewMenu(e.currentTarget)),
+      ),
+      vsep(),
+      iconBtn("undo", "Undo (Ctrl+Z)", undo),
+      iconBtn("redo", "Redo (Ctrl+Y)", redo),
     ),
-    el("div", { class: `${NS}-grp` }, iconBtn("undo", "Undo (Ctrl+Z)", undo), iconBtn("redo", "Redo (Ctrl+Y)", redo)),
-    buildInsertBar(),
-    el("div", { class: `${NS}-grp` },
-      iconBtn("zout", "Zoom out (Ctrl+−)", () => setZoom(S.zoom / 1.2)),
-      zoomLbl,
-      iconBtn("zin", "Zoom in (Ctrl++)", () => setZoom(S.zoom * 1.2)),
+    el("div", { class: `${NS}-topc` }, buildInsertBar()),
+    el("div", { class: `${NS}-topr` },
+      el("div", { class: `${NS}-zoompill` },
+        iconBtn("zout", "Zoom out (Ctrl+−)", () => setZoom(S.zoom / 1.2)),
+        zoomLbl,
+        iconBtn("zin", "Zoom in (Ctrl++)", () => setZoom(S.zoom * 1.2)),
+      ),
       iconBtn("fit", "Fit page (Ctrl+0)", () => fitPage()),
-      iconBtn("fitsel", "Zoom to selection (Shift+2)", () => zoomToSelection()),
-    ),
-    el("div", { class: `${NS}-spacer` }),
-    el("div", { class: `${NS}-grp` },
-      iconBtn("open", "Open layout file (.json)", () => importJSON()),
+      vsep(),
       iconBtn("save", "Save layout file (.json)", () => exportJSON()),
+      el("button", { type: "button", class: `${NS}-btn ${NS}-primary`, title: "Export", html: `${icon("download")}<span>Export</span>`, onclick: (e) => openExportMenu(e.currentTarget) }),
+      iconBtn("dockright", "Show / hide the Properties panel", () => toggleDock("right"), `${NS}-docktog`),
+      iconBtn("close", "Close Layout Composer", () => closeComposer(), `${NS}-closebtn`),
     ),
-    el("button", { type: "button", class: `${NS}-btn ${NS}-primary`, html: `${icon("download")}<span>Export</span>`, onclick: (e) => openExportMenu(e.currentTarget) }),
-    iconBtn("dockright", "Show / hide the Properties panel", () => toggleDock("right"), `${NS}-docktog`),
-    iconBtn("close", "Close Layout Composer", () => closeComposer(), `${NS}-closebtn`),
   );
 
   const tools = el("nav", { class: `${NS}-tools` });
@@ -253,33 +259,9 @@ function buildShell() {
   }
 
   const left = el("aside", { class: `${NS}-left` },
-    el("div", { class: `${NS}-phead` }, el("span", {}, "Items"), el("span", { class: `${NS}-count` })),
-    el("div", { class: `${NS}-itemsearch` }, el("input", { type: "search", class: `${NS}-input`, placeholder: "Search items…", oninput: (e) => { S.itemFilter = e.target.value; renderItemList(); } })),
+    el("div", { class: `${NS}-phead` }, el("span", { class: `${NS}-pheadt`, html: `${icon("layers", 14)}<span>Layers</span>` }), el("span", { class: `${NS}-count` })),
+    el("div", { class: `${NS}-itemsearch` }, el("input", { type: "search", class: `${NS}-input`, placeholder: "Search layers…", oninput: (e) => { S.itemFilter = e.target.value; renderItemList(); } })),
     el("div", { class: `${NS}-itemlist` }),
-    el("div", { class: `${NS}-arrange` },
-      el("div", { class: `${NS}-sub` }, "Arrange"),
-      el("div", { class: `${NS}-btngrid` },
-        iconBtn("top", "Bring to front", () => arrange("top")),
-        iconBtn("up", "Bring forward", () => arrange("up")),
-        iconBtn("down", "Send backward", () => arrange("down")),
-        iconBtn("bottom", "Send to back", () => arrange("bottom")),
-        iconBtn("copy", "Duplicate (Ctrl+D)", () => duplicateSelection()),
-        iconBtn("trash", "Delete (Del)", () => deleteSelection()),
-      ),
-      el("div", { class: `${NS}-sub` }, "Align", el("small", {}, "to page when one item is selected")),
-      el("div", { class: `${NS}-btngrid` },
-        iconBtn("alL", "Align left", () => align("left")),
-        iconBtn("alC", "Center horizontally", () => align("hcenter")),
-        iconBtn("alR", "Align right", () => align("right")),
-        iconBtn("alT", "Align top", () => align("top")),
-        iconBtn("alM", "Center vertically", () => align("vcenter")),
-        iconBtn("alB", "Align bottom", () => align("bottom")),
-        iconBtn("disH", "Distribute horizontally (3+ items)", () => align("distH")),
-        iconBtn("disV", "Distribute vertically (3+ items)", () => align("distV")),
-        iconBtn("sameW", "Match width of the first selected item", () => align("sameW")),
-        iconBtn("sameH", "Match height of the first selected item", () => align("sameH")),
-      ),
-    ),
   );
 
   const stage = el("main", { class: `${NS}-stage` },
@@ -299,7 +281,7 @@ function buildShell() {
     el("div", { class: `${NS}-props` }),
   );
 
-  const status = el("footer", { class: `${NS}-status` }, el("span", { class: `${NS}-pos` }, "x –  y –"), el("span", { class: `${NS}-selinfo` }), el("span", { class: `${NS}-hint` }), el("span", { class: `${NS}-viewtoggles` }, viewToggle("grid", "Canvas grid"), viewToggle("guides", "Guides"), viewToggle("snap", "Snap")), el("span", { class: `${NS}-zoomwrap` }, iconBtn("zout", "Zoom out", () => setZoom(S.zoom / 1.2)), buildZoomSlider(), iconBtn("zin", "Zoom in", () => setZoom(S.zoom * 1.2))));
+  const status = el("footer", { class: `${NS}-status` }, el("span", { class: `${NS}-pos` }, "x –  y –"), el("span", { class: `${NS}-selinfo` }), el("span", { class: `${NS}-hint` }), el("span", { class: `${NS}-viewtoggles` }, viewToggle("grid", "Canvas grid"), viewToggle("guides", "Guides"), viewToggle("snap", "Snap")), el("span", { class: `${NS}-zoomwrap` }, buildZoomSlider()));
   root.append(top, el("div", { class: `${NS}-body` }, tools, left, stage, right), status, el("div", { class: `${NS}-toasts` }));
 
   S.ui.root = root;
@@ -342,6 +324,71 @@ function buildShell() {
   ro.observe(stage);
   S.disposers.push(() => ro.disconnect());
   return root;
+}
+
+// Main menu: layouts, files, panels.
+function openMainMenu(anchor) {
+  const m = el("div", { class: `${NS}-menu` });
+  const sep = () => el("div", { class: `${NS}-msep` });
+  m.append(
+    menuItem("New layout or template…", () => openNewMenu(anchor), { iconName: "plus" }),
+    menuItem("Duplicate layout", () => duplicateLayout(), { iconName: "copy" }),
+    menuItem("Rename layout…", () => renameLayout(), { iconName: "rename" }),
+    menuItem("Save as template…", () => saveAsTemplate(), { iconName: "template" }),
+    menuItem("Delete layout", () => deleteLayout(), { iconName: "trash", danger: true }),
+    sep(),
+    menuItem("Open layout file…", () => importJSON(), { iconName: "open" }),
+    menuItem("Save layout file", () => exportJSON(), { iconName: "save" }),
+    menuItem("Export…", () => openExportMenu(anchor), { iconName: "download" }),
+    sep(),
+    menuItem("Layers panel", () => toggleDock("left"), { iconName: "dockleft" }),
+    menuItem("Properties panel", () => toggleDock("right"), { iconName: "dockright" }),
+    sep(),
+    menuItem("Close Layout Composer", () => closeComposer(), { iconName: "close" }),
+  );
+  popoverAt(anchor, m);
+}
+function openZoomMenu(anchor) {
+  const m = el("div", { class: `${NS}-menu` });
+  const pct = (p) => menuItem(`${p}%`, () => setZoom((PX96 * p) / 100));
+  m.append(
+    menuItem("Zoom in", () => setZoom(S.zoom * 1.2), { iconName: "zin", kbd: "Ctrl +" }),
+    menuItem("Zoom out", () => setZoom(S.zoom / 1.2), { iconName: "zout", kbd: "Ctrl −" }),
+    el("div", { class: `${NS}-msep` }),
+    menuItem("Fit page", () => fitPage(), { iconName: "fit", kbd: "Ctrl 0" }),
+    menuItem("Zoom to selection", () => zoomToSelection(), { iconName: "fitsel", kbd: "Shift 2" }),
+    el("div", { class: `${NS}-msep` }),
+    pct(50), pct(100), pct(200), pct(400),
+  );
+  popoverAt(anchor, m);
+}
+
+// Arrange & align bar at the top of the properties panel (acts on the selection).
+function selectionBar(n) {
+  const b = (name, title, fn) => iconBtn(name, title, fn);
+  const one = n < 2 ? " (to the page)" : "";
+  return el("div", { class: `${NS}-selbar` },
+    el("div", { class: `${NS}-selrow` },
+      b("alL", `Align left${one}`, () => align("left")),
+      b("alC", `Center horizontally${one}`, () => align("hcenter")),
+      b("alR", `Align right${one}`, () => align("right")),
+      b("alT", `Align top${one}`, () => align("top")),
+      b("alM", `Center vertically${one}`, () => align("vcenter")),
+      b("alB", `Align bottom${one}`, () => align("bottom")),
+      b("disH", "Distribute horizontally (3+ items)", () => align("distH")),
+      b("disV", "Distribute vertically (3+ items)", () => align("distV")),
+    ),
+    el("div", { class: `${NS}-selrow` },
+      b("top", "Bring to front", () => arrange("top")),
+      b("up", "Bring forward", () => arrange("up")),
+      b("down", "Send backward", () => arrange("down")),
+      b("bottom", "Send to back", () => arrange("bottom")),
+      b("sameW", "Match width of the first selected item", () => align("sameW")),
+      b("sameH", "Match height of the first selected item", () => align("sameH")),
+      b("copy", "Duplicate (Ctrl+D)", () => duplicateSelection()),
+      b("trash", "Delete (Del)", () => deleteSelection()),
+    ),
+  );
 }
 
 function openExportMenu(anchor) {

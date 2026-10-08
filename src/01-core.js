@@ -8,7 +8,7 @@
 
 const PLUGIN_ID = "geolibre-layout-composer";
 const PLUGIN_NAME = "Layout Composer";
-const PLUGIN_VERSION = "1.5.0";
+const PLUGIN_VERSION = "1.6.0";
 const NS = "glc"; // CSS class prefix
 const STORE_KEY = "glc:layouts:v1";
 const PX96 = 96 / 25.4; // CSS px per mm at 96 dpi

@@ -2228,3 +2228,243 @@ html.dark .glc-root .glc-toast,
 .glc-pctl > .glc-input[type="number"] {
   min-width: 0;
 }
+
+/* ================================================================ professional shell (v1.6) */
+.glc-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 10px;
+  overflow: visible;
+}
+.glc-topl,
+.glc-topr {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.glc-topr {
+  justify-content: flex-end;
+}
+.glc-topc {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.glc-vsep {
+  width: 1px;
+  height: 20px;
+  background: var(--glc-border);
+  margin: 0 6px;
+  flex: none;
+}
+.glc-top .glc-brand {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin: 0 4px 0 0;
+  border: 0;
+  border-radius: 7px;
+  justify-content: center;
+  background: linear-gradient(135deg, #0d99ff, #6e56ff);
+  color: #fff;
+  flex: none;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+}
+.glc-top .glc-brand span {
+  display: none;
+}
+.glc-layoutpick {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  height: 30px;
+  padding: 0 2px 0 0;
+  border-radius: 8px;
+  background: var(--glc-muted);
+}
+.glc-layoutpick .glc-layoutsel {
+  height: 30px;
+  min-width: 80px;
+  max-width: 190px;
+  border: 0;
+  background-color: transparent;
+  font-weight: 600;
+}
+.glc-layoutpick .glc-ibtn {
+  width: 26px;
+  height: 26px;
+}
+/* insert tools: a centred pill */
+.glc-top .glc-grp {
+  border-right: 0;
+  height: auto;
+  padding: 0;
+}
+.glc-top .glc-insert {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--glc-muted);
+}
+.glc-top .glc-ins {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--glc-fg);
+}
+.glc-top .glc-ins:hover {
+  background: var(--glc-bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), 0 0 0 0.5px rgb(0 0 0 / 0.06);
+}
+.glc-top .glc-ins.active {
+  background: var(--glc-bg);
+  color: var(--glc-sel);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+}
+@media (max-width: 1500px) {
+  .glc-ins span {
+    display: inline;
+  }
+}
+@media (max-width: 1360px) {
+  .glc-top .glc-ins span {
+    display: none;
+  }
+  .glc-top .glc-ins {
+    padding: 0 8px;
+  }
+}
+.glc-zoompill {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 2px;
+  border-radius: 8px;
+  background: var(--glc-muted);
+}
+.glc-zoompill .glc-ibtn {
+  width: 26px;
+  height: 26px;
+}
+.glc-zoompill .glc-zoomlbl {
+  min-width: 50px;
+  height: 26px;
+  font-weight: 600;
+}
+.glc-zoompill .glc-zoomlbl:hover {
+  background: var(--glc-bg);
+}
+.glc-top .glc-primary {
+  height: 30px;
+  padding: 0 14px;
+  margin: 0 4px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+/* left panel: a full-height layers list */
+.glc-left .glc-phead {
+  padding: 12px 12px 8px;
+  font-size: 11.5px;
+}
+.glc-pheadt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.glc-pheadt svg {
+  color: var(--glc-muted-fg);
+}
+.glc-itemsearch {
+  padding: 0 10px 8px;
+}
+.glc-itemsearch .glc-input {
+  width: 100%;
+  height: 28px;
+  background: var(--glc-muted);
+}
+.glc-li {
+  height: 28px;
+  margin-bottom: 1px;
+}
+.glc-li.sel {
+  background: var(--glc-sel-soft);
+  box-shadow: inset 2px 0 0 var(--glc-sel);
+}
+/* right panel tabs: full width, quiet underline */
+.glc-tabs {
+  padding: 0 8px;
+  height: 40px;
+  align-items: flex-end;
+}
+.glc-tab {
+  flex: 1;
+  text-align: center;
+}
+.glc-tab.active {
+  border-bottom-color: var(--glc-sel);
+}
+/* selection bar (align, distribute, order) */
+.glc-selbar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 12px 8px;
+}
+.glc-selrow {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--glc-radius);
+  background: var(--glc-muted);
+}
+.glc-selrow .glc-ibtn {
+  width: 100%;
+  height: 26px;
+  color: var(--glc-muted-fg);
+}
+.glc-selrow .glc-ibtn:hover {
+  background: var(--glc-bg);
+  color: var(--glc-fg);
+}
+.glc-propshead {
+  padding-top: 2px;
+}
+.glc-propshead .glc-ptype {
+  padding: 12px 12px 8px;
+}
+.glc-propshead .glc-ptabs {
+  margin-top: 2px;
+}
+/* status bar */
+.glc-status {
+  height: 28px;
+}
+.glc-zoomwrap .glc-zoomslider {
+  width: 110px;
+}
+.glc-emptyicon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: var(--glc-sel-soft);
+  color: var(--glc-sel);
+}
+.glc-keyshead {
+  margin: 14px 0 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--glc-muted-fg);
+}

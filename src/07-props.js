@@ -290,7 +290,13 @@ function renderProps() {
     const items = selectedItems();
     if (!items.length) host.append(emptyState());
     else if (items.length > 1) {
-      host.append(el("div", { class: `${NS}-emptycard` }, el("b", {}, `${items.length} items selected`), el("p", {}, "Move them together, or use Arrange and Align in the left panel.")));
+      host.append(
+        el("div", { class: `${NS}-propshead` },
+          el("div", { class: `${NS}-ptype`, html: `${icon("select", 15)}<span>${items.length} items selected</span>` }),
+          selectionBar(items.length),
+        ),
+        el("div", { class: `${NS}-emptycard` }, el("p", {}, "Drag to move them together. Align, distribute and match sizes with the bar above; group them from the right-click menu.")),
+      );
     } else {
       host.append(...itemProps(items[0]));
       groupPropSections(host, items[0]);
@@ -326,6 +332,13 @@ function groupPropSections(host, item) {
     if (ic && !sum.querySelector("svg")) sum.insertAdjacentHTML("afterbegin", icon(ic[1], 14));
   }
   const present = PROP_GROUPS.filter(([id]) => secs.some((d) => d.dataset.group === id));
+  const top = el("div", { class: `${NS}-propshead` });
+  const head = host.querySelector(`:scope > .${NS}-ptype`);
+  if (head) {
+    head.replaceWith(top);
+    top.appendChild(head);
+  } else host.prepend(top);
+  top.appendChild(selectionBar(1));
   if (present.length < 2) return;
   S.ui.propGroup = S.ui.propGroup || {};
   let cur = S.ui.propGroup[item.type];
@@ -346,12 +359,6 @@ function groupPropSections(host, item) {
       },
     }, label));
   }
-  const head = host.querySelector(`:scope > .${NS}-ptype`);
-  const top = el("div", { class: `${NS}-propshead` });
-  if (head) {
-    head.replaceWith(top);
-    top.appendChild(head);
-  } else host.prepend(top);
   top.appendChild(bar);
   apply();
 }
@@ -377,10 +384,12 @@ function imageAdjustSection(item) {
 function emptyState() {
   const tip = (k, t) => el("li", {}, el("kbd", {}, k), el("span", {}, t));
   return el("div", { class: `${NS}-emptycard` },
+    el("div", { class: `${NS}-emptyicon`, html: icon("select", 22) }),
     el("b", {}, "Nothing selected"),
-    el("p", {}, "Pick a tool on the left and drag on the page to place it. Click an item to edit it here; paper size and guides are on the Page tab."),
+    el("p", {}, "Add items from the top bar or the left toolbar; they appear in the middle of the view. Select an item to edit it here. Paper size, margins and guides are on the Page tab."),
+    el("div", { class: `${NS}-keyshead` }, "Shortcuts"),
     el("ul", { class: `${NS}-keys` },
-      tip("Double-click", "a map to pan / zoom its content"),
+      tip("Double-click", "edit text, or pan a map's content"),
       tip("Ctrl + scroll", "zoom the canvas"),
       tip("Space + drag", "pan the canvas"),
       tip("Arrows", "nudge 1 mm (Shift 10 mm)"),
