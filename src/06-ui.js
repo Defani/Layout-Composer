@@ -49,6 +49,8 @@ const ICON_PATHS = {
   fitsel: "M3 7V3h4M21 7V3h-4M3 17v4h4M21 17v4h-4M8 8h8v8H8z",
   dockleft: "M3 4h18v16H3zM9 4v16M5 8h2M5 11h2",
   dockright: "M3 4h18v16H3zM15 4v16M17 8h2M17 11h2",
+  flipH: "M12 3v18M8 7L3 12l5 5zM16 7l5 5-5 5z",
+  flipV: "M3 12h18M7 8l5-5 5 5zM7 16l5 5 5-5z",
   layout: "M3 3h18v18H3zM6 6h9v8H6zM18 7v4M6 17h5M14 17h4",
   rename: "M4 20h4L19 9l-4-4L4 16zM13 7l4 4",
   colorbar: "M3 9h18v6H3zM3 9l-2 3 2 3M21 9l2 3-2 3M7 18v2M12 18v2M17 18v2",
@@ -63,7 +65,45 @@ const ICON_PATHS = {
   camera: "M3 8h4l2-3h6l2 3h4v12H3zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
   sync: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5",
 };
+// Two-tone item icons: a soft tinted body (currentColor at low opacity) under a crisp outline,
+// so they follow the theme and turn blue as a whole when the tool is active.
+const tt = (fill, line, extra = "") =>
+  `<path d="${fill}" fill="currentColor" opacity=".2" stroke="none"/>` +
+  `<path d="${line}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>${extra}`;
 const ICON_SVG = {
+  select: tt("M5.5 3.5l13 7.4-5.6 1.5-2.9 5.6z", "M5.5 3.5l13 7.4-5.6 1.5-2.9 5.6zM12.9 12.4l4.6 4.6"),
+  pan: tt(
+    "M8 11V5.5a1.5 1.5 0 0 1 3 0V10V4a1.5 1.5 0 0 1 3 0v6V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.6-2.2L3 15.6a1.6 1.6 0 0 1 2.4-2.1L8 15z",
+    "M8 11V5.5a1.5 1.5 0 0 1 3 0V10V4a1.5 1.5 0 0 1 3 0v6V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.6-2.2L3 15.6a1.6 1.6 0 0 1 2.4-2.1L8 15z",
+  ),
+  movecontent: tt(
+    "M3 3h18v18H3z",
+    "M3 3h18v18H3zM12 7.5v9M7.5 12h9M10.3 9.2L12 7.5l1.7 1.7M10.3 14.8L12 16.5l1.7-1.7M9.2 10.3L7.5 12l1.7 1.7M14.8 10.3l1.7 1.7-1.7 1.7",
+  ),
+  map: tt("M9 3.5l6 3v14l-6-3z", "M3 6.5l6-3 6 3 6-3v14l-6 3-6-3-6 3zM9 3.5v14M15 6.5v14"),
+  inset: tt("M12.5 11.5h7v7h-7z", "M3 4h18v16H3zM12.5 11.5h7v7h-7zM6 8l3 2.5 2-1.5", '<circle cx="16" cy="15" r="1" fill="currentColor"/>'),
+  list: tt(
+    "M3.5 5h4v3.5h-4zM3.5 15.5h4V19h-4z",
+    "M3.5 5h4v3.5h-4zM3.5 15.5h4V19h-4zM3.5 12h4M11 6.8h9.5M11 12h9.5M11 17.2h9.5",
+  ),
+  colorbar:
+    '<path d="M5 8h4.7v6H5z" fill="currentColor" opacity=".12"/><path d="M9.7 8h4.6v6H9.7z" fill="currentColor" opacity=".38"/><path d="M14.3 8H19v6h-4.7z" fill="currentColor" opacity=".7"/>' +
+    '<path d="M5 8h14l3 3-3 3H5l-3-3zM6 17.5v2M12 17.5v2M18 17.5v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  north:
+    '<path d="M12 3l5.5 15L12 14.6z" fill="currentColor"/>' +
+    '<path d="M12 3L6.5 18 12 14.6 17.5 18z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>' +
+    '<path d="M10 22v-3.2l4 3.2v-3.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>',
+  text: tt("M4 4h16v3.5H4z", "M4 7.5V4h16v3.5M12 4v16M9 20h6"),
+  title: tt("M5 4h4v16H5zM15 4h4v16h-4z", "M7 4v16M17 4v16M7 12h10M5 4h4M5 20h4M15 4h4M15 20h4"),
+  image: tt("M3.5 4.5h17v15h-17z", "M3.5 4.5h17v15h-17zM3.5 17l5.5-5.5 4 4 2.5-2.5 5 5", '<circle cx="15.5" cy="9" r="1.7" fill="currentColor"/>'),
+  shape: tt("M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", "M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", '<circle cx="7.5" cy="16.5" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="7" r="3.8" fill="currentColor" opacity=".55"/>'),
+  table: tt("M3.5 4.5h17v5h-17z", "M3.5 4.5h17v15h-17zM3.5 9.5h17M3.5 14.5h17M10 9.5v10"),
+  pen: tt("M12.5 19.5l7-7 2.5 2.5-7 7z", "M12.5 19.5l7-7 2.5 2.5-7 7zM18 13l-1.5-7.5L3 2.5l3 13.5 7 1.5zM3 2.5l7.5 7.5", '<circle cx="11.5" cy="11" r="1.6" fill="currentColor"/>'),
+  marker: tt("M12 21.5s7-6.4 7-11.8a7 7 0 1 0-14 0c0 5.4 7 11.8 7 11.8z", "M12 21.5s7-6.4 7-11.8a7 7 0 1 0-14 0c0 5.4 7 11.8 7 11.8z", '<circle cx="12" cy="9.7" r="2.6" fill="currentColor"/>'),
+  sigma: tt("M6 4h12v3H6z", "M18 7V4H6l6 8-6 8h12v-3"),
+  template: tt("M3 3h8v8H3zM13 13h8v8h-8z", "M3 3h8v8H3zM13 3h8v6h-8zM13 13h8v8h-8zM3 15h8v6H3z"),
+  page: tt("M6 2.5h9l4.5 4.5v14.5H6z", "M6 2.5h9l4.5 4.5v14.5H6zM15 2.5V7h4.5"),
+  layout: tt("M6 6h9v8H6z", "M3 3h18v18H3zM6 6h9v8H6zM18 7v4M6 17h5M14 17h4"),
   scalebar:
     '<rect x="2" y="9" width="20" height="5" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
     '<rect x="2" y="9" width="5" height="5" fill="currentColor"/><rect x="12" y="9" width="5" height="5" fill="currentColor"/>' +
@@ -95,8 +135,13 @@ const INSERT_MENUS = [
   {
     id: "text", icon: "text", label: "Text", tools: ["title", "text", "table", "latex"],
     items: [
-      ["title", "title", "Title", "Large centered heading"],
-      ["text", "text", "Text box", "Paragraph with variables and $…$ math"],
+      ["heading", "title", "Heading", "26 pt bold"],
+      ["subheading", "title", "Subheading", "15 pt bold"],
+      ["body", "text", "Body text", "Wrapped paragraph"],
+      ["caption", "text", "Caption", "Small italic note"],
+      ["maplabel", "text", "Map label", "Spaced capitals with halo"],
+      ["callout", "text", "Callout", "Text on a colored box"],
+      ["title", "title", "Map title", "Uses the {title} variable"],
       ["table", "table", "Table / info box", "Rows and columns, e.g. a title block"],
       ["latex", "sigma", "Formula (LaTeX)", "MathJax formula"],
     ],
@@ -112,7 +157,7 @@ function buildInsertBar() {
   for (const m of INSERT_MENUS) {
     const b = el("button", { type: "button", class: `${NS}-ins`, "data-tools": m.tools.join(" "), title: m.label, html: `${icon(m.icon, 16)}<span>${esc(m.label)}</span>${m.tool === "image" ? "" : '<svg class="glc-caret" width="8" height="8" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>'}` });
     b.addEventListener("click", () => {
-      if (m.tool === "image") return setTool("image");
+      if (m.tool === "image") return addAtCenter("image");
       if (m.gallery) return openToolGallery({ id: m.tool, gallery: m.gallery }, b);
       if (m.symbols) return openSymbolsMenu(b);
       const list = el("div", { class: `${NS}-menu` });
@@ -120,7 +165,7 @@ function buildInsertBar() {
         const it = el("button", { type: "button", class: `${NS}-menuitem`, html: `${icon(ic, 15)}<span>${esc(name)}</span><small>${esc(hint)}</small>` });
         it.addEventListener("click", () => {
           closePopover();
-          setTool(tool);
+          addAtCenter(tool);
         });
         list.appendChild(it);
       }
@@ -135,7 +180,7 @@ function openSymbolsMenu(anchor) {
     el("div", { class: `${NS}-ptitle` }, "Point markers"),
     galleryGrid("marker", null, (id) => {
       closePopover();
-      setTool("marker", id);
+      addAtCenter("marker", id);
     }),
     el("div", { class: `${NS}-msep` }),
   );
@@ -201,6 +246,7 @@ function buildShell() {
     b.addEventListener("click", () => {
       if (t.action) t.action(b);
       else if (t.gallery) openToolGallery(t, b);
+      else if (["map", "inset", "legend", "colorbar"].includes(t.id)) addAtCenter(t.id);
       else setTool(t.id);
     });
     tools.appendChild(b);
@@ -464,7 +510,9 @@ function openToolGallery(tool, anchor) {
   const titles = { north: "Choose a north arrow style", shape: "Choose a shape", scalebar: "Choose a scale bar style", draw: "Draw", marker: "Choose a marker symbol" };
   const pop = popoverAt(anchor, el("div", {}, el("div", { class: `${NS}-ptitle` }, titles[tool.gallery]), galleryGrid(tool.gallery, null, (id) => {
     closePopover();
-    setTool(tool.id, id);
+    // drawing needs the pointer; everything else drops straight onto the page
+    if (tool.id === "pen") setTool("pen", id);
+    else addAtCenter(tool.id, id);
   })), `${NS}-galpop`);
   return pop;
 }
@@ -688,7 +736,7 @@ function renderPaper(onlyIds) {
       width: `${item.w * Z}px`,
       height: `${item.h * Z}px`,
       zIndex: String(idx + 1),
-      transform: item.rot ? `rotate(${item.rot}deg)` : "",
+      transform: `${item.rot ? `rotate(${item.rot}deg)` : ""}${item.flipX || item.flipY ? ` scale(${item.flipX ? -1 : 1}, ${item.flipY ? -1 : 1})` : ""}`,
       opacity: String(item.opacity ?? 1),
       display: item.hidden ? "none" : "",
     });
@@ -933,6 +981,8 @@ function snapPoint(x, y, exclude, { edgesX = [0], edgesY = [0] } = {}) {
 }
 
 function onPointerDown(e) {
+  if (S.inline && !e.target.closest(`.${NS}-inline`)) finishInlineEdit();
+  if (e.target.closest(`.${NS}-inline`)) return;
   if (e.button === 2) return;
   closePopover();
   const target = e.target;
@@ -1276,7 +1326,10 @@ function onDblClick(e) {
   const item = node && findItem(node.dataset.id);
   if (!item) return;
   if (item.type === "map") enterContentMode(item.id);
-  else if (item.type === "text" || item.type === "table") {
+  else if (item.type === "text") {
+    select([item.id]);
+    startInlineEdit(item);
+  } else if (item.type === "table") {
     select([item.id]);
     setTimeout(() => S.ui.props.querySelector("textarea")?.focus(), 30);
   } else if (item.type === "image") pickImage(item);
@@ -1339,6 +1392,7 @@ function onKey(e) {
   else if (e.shiftKey && (k === "2" || k === "@")) zoomToSelection();
   else if (e.shiftKey && (k === "1" || k === "!")) fitPage();
   else if (ctrl && k === "s") exportJSON();
+  else if (k === "enter" && selectedItems().length === 1 && selectedItems()[0].type === "text") startInlineEdit(selectedItems()[0]);
   else if (k === "delete" || k === "backspace") deleteSelection();
   else if (k === "v") setTool("select");
   else if (k === "h") setTool("pan");

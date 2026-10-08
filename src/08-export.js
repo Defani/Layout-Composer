@@ -8,7 +8,8 @@ function composePageSVG(mapImages, { background = "page" } = {}) {
     const fx = fxExportParts(item, index, mapImages);
     if (fx.defs) s += `<defs>${fx.defs}</defs>`;
     s += fx.backdrop;
-    const t = `translate(${item.x} ${item.y})${item.rot ? ` rotate(${item.rot} ${item.w / 2} ${item.h / 2})` : ""}`;
+    const flip = item.flipX || item.flipY ? ` translate(${item.flipX ? item.w : 0} ${item.flipY ? item.h : 0}) scale(${item.flipX ? -1 : 1} ${item.flipY ? -1 : 1})` : "";
+    const t = `translate(${item.x} ${item.y})${item.rot ? ` rotate(${item.rot} ${item.w / 2} ${item.h / 2})` : ""}${flip}`;
     s += `<g${fx.filterAttr} opacity="${item.opacity ?? 1}"><g transform="${t}"><svg x="0" y="0" width="${item.w}" height="${item.h}" viewBox="0 0 ${item.w} ${item.h}" overflow="visible">`;
     s += renderItem(item, { export: true, mapImages });
     s += `</svg></g></g>`;

@@ -142,6 +142,17 @@ function placeLiveMap(item, rec) {
   c.style.width = `${W}px`;
   c.style.height = `${H}px`;
   c.style.transform = `scale(${k * (item.w * PX96) / W}, ${k * (item.h * PX96) / H})`;
+  // frame shape: clip in the container's own (unscaled 96-dpi) pixels
+  const p = item.props;
+  const d = mapFramePath(p, W, H);
+  c.style.clipPath = d && !mapFrameIsImage(p) ? `path("${d}")` : "";
+  const mk = mapFrameIsImage(p) ? `url("${p.frameImage}")` : "";
+  if (c._mask !== mk) {
+    c._mask = mk;
+    for (const k2 of ["maskImage", "webkitMaskImage"]) c.style[k2] = mk;
+    for (const k2 of ["maskSize", "webkitMaskSize"]) c.style[k2] = mk ? "100% 100%" : "";
+    for (const k2 of ["maskRepeat", "webkitMaskRepeat"]) c.style[k2] = mk ? "no-repeat" : "";
+  }
   const ratio = (window.devicePixelRatio || 1) * clamp(k, 0.5, 3);
   if (rec.map && rec.ratio !== ratio && typeof rec.map.setPixelRatio === "function") {
     rec.ratio = ratio;
@@ -392,20 +403,82 @@ function describeCond(c) {
 }
 const num = (v, d) => (typeof v === "number" ? v : d);
 
+// ---------------------------------------------------------------- tile thumbnails for legends
+// URL of the tile under the main map centre (XYZ templates and WMS GetMap URLs).
+function tileSampleUrl(l) {
+  const src = l?.source || {};
+  let tpl = (Array.isArray(src.tiles) && src.tiles[0]) || src.url || l?.url || "";
+  if (!tpl || !/\{z\}|\{bbox|bbox=|\{x\}/i.test(tpl)) return "";
+  const m = mainMap();
+  const c = m?.getCenter?.() || { lng: 0, lat: 0 };
+  const z = clamp(Math.round((m?.getZoom?.() ?? 3) - 1), 0, 18);
+  const n = 2 ** z;
+  const x = clamp(Math.floor(((c.lng + 180) / 360) * n), 0, n - 1);
+  const latR = (clamp(c.lat, -85, 85) * Math.PI) / 180;
+  const y = clamp(Math.floor(((1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2) * n), 0, n - 1);
+  const R = 6378137 * Math.PI;
+  const size = (2 * R) / n;
+  const bbox = [-R + x * size, R - (y + 1) * size, -R + (x + 1) * size, R - y * size].map((v) => v.toFixed(2)).join(",");
+  return tpl
+    .replace(/\{s\}/g, "a")
+    .replace(/\{z\}/g, z)
+    .replace(/\{x\}/g, x)
+    .replace(/\{y\}/g, y)
+    .replace(/\{-y\}/g, n - 1 - y)
+    .replace(/\{bbox-epsg-3857\}/gi, bbox)
+    .replace(/\{ratio\}|\{r\}/g, "");
+}
+// Tile images are fetched once and kept as data URLs so they survive SVG → canvas export.
+const TILE_THUMBS = new Map();
+function tileThumb(url) {
+  if (!url) return null;
+  const hit = TILE_THUMBS.get(url);
+  if (hit) return hit === "pending" || hit === "error" ? null : hit;
+  TILE_THUMBS.set(url, "pending");
+  fetch(url, { mode: "cors" })
+    .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(r.status))))
+    .then((b) => new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = rej;
+      fr.readAsDataURL(b);
+    }))
+    .then((d) => {
+      TILE_THUMBS.set(url, d);
+      clearTimeout(tileThumb.t);
+      tileThumb.t = setTimeout(() => S.ui && refreshCanvas(), 60);
+    })
+    .catch(() => TILE_THUMBS.set(url, "error"));
+  return null;
+}
+
 function legendFromMap() {
   const m = mainMap();
   if (!m) return [];
   const style = m.getStyle();
   const entries = [];
-  const layers = glLayers().filter((l) => l.visible !== false);
-  const snap = new Map(projectLayers().map((l) => [l.id, l]));
+  const layers = allProjectLayers().filter((l) => l.visible !== false);
   for (const gl of layers) {
-    const rs = snap.get(gl.id)?.metadata?.rasterState;
-    if (rs) {
+    if (isDataRaster(gl)) {
       // COG rasters are drawn by deck.gl, outside the MapLibre style
-      const cm = String(rs.colormap || "").toLowerCase().replace(/_r$/, "");
-      const colors = COLORMAPS[cm] ? colorbarColors({ colormap: cm, reverse: /_r$/i.test(String(rs.colormap || "")) }) : null;
-      entries.push({ key: `${gl.id}`, kind: "item", label: gl.name || gl.id, layerId: gl.id, patch: colors ? { type: "gradient", colors } : { type: "raster", fill: "#94a3b8" } });
+      const rs = gl.metadata?.rasterState || {};
+      const cm = rasterColormap(rs.colormap);
+      const rgb = Array.isArray(rs.bands) && rs.bands.length >= 3 && !rs.colormap;
+      const colors = cm ? colorbarColors({ colormap: cm.name, reverse: cm.reverse }) : rgb ? null : ["#000000", "#ffffff"];
+      const r = rasterRange(gl);
+      entries.push({
+        key: `${gl.id}`,
+        kind: "item",
+        label: gl.name || gl.id,
+        layerId: gl.id,
+        patch: colors ? { type: "gradient", colors } : { type: "tile", url: tileSampleUrl(gl) },
+        ...(r && colors ? { note: `${fmtNumber(Math.min(...r), 2)} – ${fmtNumber(Math.max(...r), 2)}` } : {}),
+      });
+      continue;
+    }
+    if (isTileLayer(gl)) {
+      // basemap / XYZ / WMS tiles: a thumbnail of one tile under the map centre
+      entries.push({ key: `${gl.id}`, kind: "item", label: gl.name || gl.id, layerId: gl.id, patch: { type: "tile", url: tileSampleUrl(gl) } });
       continue;
     }
     const sls = styleLayersFor(style, gl.id).filter((l) => (l.layout?.visibility ?? "visible") !== "none");

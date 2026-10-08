@@ -35,8 +35,17 @@
     { id: "tutupan-lahan", name: "Tutupan Lahan 2024", type: "geojson", visible: true },
     { id: "sungai", name: "Sungai Utama", type: "geojson", visible: true },
     { id: "titik-sampel", name: "Titik Sampel", type: "geojson", visible: true },
+    { id: "osm-hot", name: "OpenStreetMap HOT", type: "xyz", visible: true },
+  ];
+  // snapshot-only layers, as GeoLibre reports them (the COG is drawn by deck.gl, not in listLayers)
+  const snapLayers = [
+    { id: "dem-srtm", name: "DEM SRTM (m)", type: "cog", visible: true, source: { url: "https://example.org/dem.tif" }, metadata: { rasterState: { bands: [1], colormap: "terrain", rescale: "12.5, 2875" } } },
+    { id: "ndvi", name: "NDVI 2024", type: "raster", visible: true, metadata: { rasterState: { bands: [1], colormap: "RdYlGn", stats: [{ min: -0.2, max: 0.9 }] } } },
+    { id: "osm-hot", name: "OpenStreetMap HOT", type: "xyz", source: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256 }, metadata: { sourceKind: "xyz-url" } },
   ];
   map.once("style.load", () => {
+    map.addSource("osm-hot", { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256 });
+    map.addLayer({ id: "osm-hot", type: "raster", source: "osm-hot", paint: { "raster-opacity": 0.6 } });
     map.addSource("tutupan-lahan", { type: "geojson", data: polys });
     map.addLayer({ id: "tutupan-lahan-fill", type: "fill", source: "tutupan-lahan", paint: { "fill-color": ["match", ["get", "kelas"], "Hutan", "#15803d", "Sawah", "#facc15", "Permukiman", "#dc2626", "Perkebunan", "#84cc16", "#999999"], "fill-opacity": 0.7 } });
     map.addLayer({ id: "tutupan-lahan-line", type: "line", source: "tutupan-lahan", paint: { "line-color": "#334155", "line-width": 0.8 } });
@@ -51,7 +60,7 @@
     addMapControl: (c, pos) => map.addControl(c, pos),
     removeMapControl: (c) => map.removeControl(c),
     registerToolbarMenu: (m) => { console.log("menu registered", m.label); return () => {}; },
-    getProjectSnapshot: () => ({ name: "Peta Tutupan Lahan Kabupaten Bogor" }),
+    getProjectSnapshot: () => ({ name: "Peta Tutupan Lahan Kabupaten Bogor", layers: snapLayers }),
   };
   const mod = await import("../plugin/index.js?v=" + Date.now());
   mod.plugin.activate(app);

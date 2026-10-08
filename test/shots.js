@@ -57,6 +57,38 @@ function buildFeatures(G) {
   return { cb, sh, map };
 }
 
+// Map frames in different shapes + a legend with raster / tile layers.
+function buildFrames(G) {
+  const D = G._debug;
+  const S = G._state;
+  const A = (k, x, y, w, h, v) => {
+    D.addItemFromTool(k, { x, y, w, h }, v);
+    return S.doc.items.at(-1);
+  };
+  const c = document.createElement("canvas");
+  c.width = c.height = 240;
+  const g = c.getContext("2d");
+  g.beginPath();
+  g.moveTo(120, 8); g.bezierCurveTo(215, 20, 235, 120, 175, 225); g.lineTo(40, 205); g.bezierCurveTo(-5, 120, 20, 30, 120, 8);
+  g.fill();
+  const m1 = A("map", 12, 14, 95, 95);
+  Object.assign(m1.props, { frameShape: "circle" });
+  m1.props.frame.width = 0.8;
+  const m2 = A("map", 115, 14, 95, 95);
+  Object.assign(m2.props, { frameShape: "hexagon" });
+  m2.props.frame.width = 0.8;
+  const m3 = A("map", 12, 118, 95, 80);
+  Object.assign(m3.props, { frameShape: "image", frameImage: c.toDataURL() });
+  const m4 = A("map", 115, 118, 95, 80);
+  Object.assign(m4.props, { frameShape: "triangle" });
+  m4.props.frame.width = 0.8;
+  A("legend", 220, 14, 68, 110);
+  const cb = A("colorbar", 220, 135, 68, 18);
+  Object.assign(cb.props, { source: "dem-srtm", vmin: 12.5, vmax: 2875, colormap: "terrain", extend: "max", tickMode: "nice", title: "DEM SRTM (m)" });
+  D.renderAll();
+  return { m1, cb };
+}
+
 async function run() {
   if (!shot) return;
   document.documentElement.classList.toggle("dark", shot.endsWith("-dark"));
@@ -72,7 +104,7 @@ async function run() {
   G.open();
   await sleep(1200);
   let staged = {};
-  if (!klhk) staged = buildFeatures(G);
+  if (!klhk) staged = shot.startsWith("frames") ? buildFrames(G) : buildFeatures(G);
   const q = (sel) => document.querySelector(sel);
   const byTitle = (t) => [...document.querySelectorAll("button")].find((b) => b.title === t);
   const name = shot.replace(/-dark$/, "");
@@ -107,6 +139,7 @@ async function run() {
     const r = n.getBoundingClientRect();
     n.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 2 }));
   }
+  if (name === "frames") D.select([staged.m1.id]);
   if (name === "templates") byTitle("New layout / templates").click();
   await sleep(2500);
   document.title = "READY";

@@ -1,7 +1,7 @@
 {
   "id": "geolibre-layout-composer",
   "name": "Layout Composer",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "description": "QGIS-style print layout designer with map frames, grids, legends, matplotlib-style color bars, LaTeX, drawing tools, KLHK symbology and GeoPDF export.",
   "author": "Defani Arman Alfitriansyah",
   "homepage": "https://github.com/Defani/Geolibre-Laout-Composer",

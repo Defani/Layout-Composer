@@ -2,7 +2,7 @@
 
 **Cartographic layout designer for [GeoLibre](https://plugins.geolibre.app)** — design publication-ready maps with map frames, coordinate grids, legends, matplotlib-style color bars, LaTeX formulas, icon catalogs and GeoPDF export, without leaving GeoLibre.
 
-![Version](https://img.shields.io/badge/version-1.3.0-0d99ff)
+![Version](https://img.shields.io/badge/version-1.5.0-0d99ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![GeoLibre plugin](https://img.shields.io/badge/GeoLibre-plugin-4e8a2e)
 ![Tag: cartography](https://img.shields.io/badge/tag-cartography-6a3d9a)
@@ -44,13 +44,14 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 | Area | What you get |
 |---|---|
 | **Page** | Size catalog grouped by type — ISO A0–A6, ISO B0–B5, Letter/Legal/Tabloid/ANSI/Arch, F4, KLHK minimum sizes (SK 399/2024 Table 1), posters, photo prints, presentation (16:9, 4:3, 16:10, 4K) and social media (Instagram post/portrait/story, TikTok/Reels, Facebook, X, LinkedIn, YouTube, Pinterest, WhatsApp). Units mm · cm · in · pt · px (px at a chosen pixels-per-inch), orientation, single/double neatline, margins, canvas grid, ruler guides, smart snapping. |
-| **Map frames** | Live MapLibre map per frame, WYSIWYG at print scale, pan/zoom content (double-click), set or lock scale 1:n, rotation, zoom to layer, per-frame basemap (same as GeoLibre, streets, light, bright, satellite, topographic, none), **GeoLibre capture** mode that includes raster/COG layers. |
+| **Map frames** | Live MapLibre map per frame, WYSIWYG at print scale, pan/zoom content (double-click), set or lock scale 1:n, rotation, zoom to layer, per-frame basemap (same as GeoLibre, streets, light, bright, satellite, topographic, none), **GeoLibre capture** mode that includes raster/COG layers.; **frame shapes**: rectangle, rounded, circle/ellipse, triangle, diamond, pentagon, hexagon, octagon, star, heart, shield, arch, or **any image as a mask** (PNG/SVG silhouette). |
 | **Coordinate grids** | DMS · DM · DD · UTM (m or km, auto zone), lines/crosses/dots, zebra or inside/outside ticks, labels inside/outside, BT/LS or E/W–N/S. |
 | **Inset / key maps** | Extent box, location point or crosshair of another frame. |
-| **Legend** | Built from GeoLibre symbology (`match`, `step`, `interpolate`, rasters as ramps), editable labels/colors/order, manual entries, multi-column, LaTeX labels. |
-| **Color bar** | matplotlib-style: 23 colormaps + custom colors, reverse, continuous or classed, horizontal/vertical, **pointed or square extensions** (min/max/both), even/rounded/custom ticks with tick count, decimals, prefix/suffix, LaTeX title, reads min/max/colormap from GeoLibre raster (`rasterState.rescale`) or graduated layers. |
+| **Legend** | Built from GeoLibre symbology (`match`, `step`, `interpolate`), single-band rasters/COG as colormap ramps, **XYZ / WMS tile layers with a thumbnail of the actual tile**, editable labels/colors/order, manual entries, multi-column, LaTeX labels. |
+| **Color bar** | matplotlib-style: 39 colormaps + custom colors, reverse, continuous or classed, horizontal/vertical, **pointed or square extensions** (min/max/both), even/rounded/custom ticks with tick count, decimals, prefix/suffix, LaTeX title, reads min/max/colormap from GeoLibre raster (`rasterState.rescale`) or graduated layers.; **values from a raster**: min/max and colormap (incl. `_r` reversed) read from the layer's stretch or statistics, with round tick values. |
 | **Scale bars** | 11 styles incl. **dual units** (km below, paper cm / m / mi / nmi above), numeric 1:n. |
 | **North arrows** | 26 styles, follow map rotation, letter U/N. |
+| **Canva-style editing** | One click adds any item at the centre of the view (no box to draw); double-click or Enter edits text right on the page; text presets (heading, subheading, body, caption, map label, callout); text effects (shadow, lift, hollow, outline, highlight, neon, echo) and underline/strike/overline; flip horizontal/vertical for every item; image filters (brightness, contrast, saturation, grayscale, sepia, hue, blur + presets Mono, Vivid, Warm, Faded, Dramatic) and masks (circle, hexagon, star, heart, blob). |
 | **Text & LaTeX** | Text boxes with variables (`{title}`, `{date}`, `{scale}`…), `$…$` math anywhere (text, legend, color bar title, markers), formula item with 104-symbol catalog, structure templates and recent formulas (MathJax 3, vector output). Quick text bar: font (incl. installed fonts), size, bold, italic, color, alignment, superscript/subscript. |
 | **Drawing** | Polyline, polygon, Bézier pen (click = corner, drag = curve), freehand (simplified + smoothed), arrow line; 33 shapes; fills: solid, gradient, hatch patterns (/ \ × − \| + ·); 6 dash styles. |
 | **Symbols** | Point markers with labels (12 symbols); **icon catalog** with Maki (215) and Temaki (557) icons grouped by type (water, terrain, vegetation, transport, public services, health, education, religion, tourism, sports, utilities, hazards…). |
@@ -67,6 +68,8 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 | **Soft dark theme** | **Floating text toolbar** |
 | ![Map frame panel: navigation, scale, basemap, grid](docs/img/ui-map-panel.png) | ![matplotlib-style color bar](docs/img/ui-colorbar.png) |
 | **Map frame panel: navigation, scale, basemap, grid** | **matplotlib-style color bar** |
+| ![Map frames: circle, hexagon, image mask, triangle; legend with tile and raster layers](docs/img/ui-map-frames.png) | |
+| **Map frame shapes, image mask, tile & raster legend** | |
 | ![LaTeX, dual scale bar, hatch & gradient fills, frosted glass](docs/img/ui-features-dark.png) | ![Shape toolbar](docs/img/ui-shape-toolbar.png) |
 | **LaTeX, dual scale bar, hatch & gradient fills, frosted glass** | **Shape toolbar** |
 | ![Color wheel](docs/img/ui-color-wheel.png) | ![LaTeX formula and symbol catalog](docs/img/ui-latex.png) |

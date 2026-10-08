@@ -188,6 +188,48 @@ function mapOptions(exclude, allowEmpty = true, emptyLabel = "First map (automat
   for (const m of mapItems()) if (m.id !== exclude) opts.push([m.id, m.name]);
   return opts;
 }
+// Frame shape rows for map items: preset shapes or an image (its alpha / silhouette) as a mask.
+function mapFrameShapeRows(item) {
+  const p = item.props;
+  const P = (k) => `props.${k}`;
+  const shape = p.frameShape || "rect";
+  const pickMask = () => {
+    const input = el("input", { type: "file", accept: "image/png,image/svg+xml,image/webp,image/gif" });
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const fr = new FileReader();
+      fr.onload = () => commit(() => {
+        p.frameShape = "image";
+        p.frameImage = fr.result;
+      });
+      fr.readAsDataURL(file);
+    });
+    input.click();
+  };
+  const rows = [
+    row("Shape", fSelect(item, P("frameShape"), MAP_FRAME_SHAPES, {
+      after: () => {
+        if (p.frameShape === "image" && !p.frameImage) pickMask();
+        renderProps();
+      },
+    })),
+  ];
+  if (shape === "rounded") rows.push(row("Corner radius", fNum(item, P("frameRadius"), { min: 0, step: 0.5, unit: "mm" })));
+  if (shape === "circle" || shape === "star" || shape === "pentagon" || shape === "hexagon" || shape === "octagon") {
+    rows.push(btn("Make it regular (equal width & height)", () => commit(() => {
+      const s = Math.min(item.w, item.h);
+      item.w = item.h = round(s, 1);
+    }), { iconName: "fit" }));
+  }
+  if (shape === "image") {
+    rows.push(btn(p.frameImage ? "Replace mask image…" : "Choose mask image…", pickMask, { iconName: "image" }));
+    rows.push(el("p", { class: `${NS}-muted` }, "The map shows where the image is opaque — use a PNG/SVG silhouette (e.g. a province outline or a logo) with a transparent background."));
+  }
+  if (shape !== "rect" && shape !== "rounded") rows.push(el("p", { class: `${NS}-muted` }, "Grid frame ticks and labels are drawn only on rectangular frames."));
+  return rows;
+}
+
 function btn(label, onClick, { primary = false, iconName, title } = {}) {
   return el("button", { type: "button", class: `${NS}-btn ${primary ? `${NS}-primary` : ""}`, title: title || label, html: `${iconName ? icon(iconName) : ""}<span>${esc(label)}</span>`, onclick: onClick });
 }
@@ -255,6 +297,24 @@ function renderProps() {
   renderQuickBar();
 }
 
+function imageAdjustSection(item) {
+  const p = item.props;
+  if (!p.adjust) p.adjust = {};
+  const a = p.adjust;
+  const sl = (key, label, min, max, step = 1) => row(label, fRange(a, key, min, max, step, { after: () => refreshCanvas() }));
+  for (const [k, v] of Object.entries({ brightness: 0, contrast: 0, saturation: 0, grayscale: 0, sepia: 0, hue: 0, blur: 0 })) if (a[k] == null) a[k] = v;
+  const presets = [
+    ["Original", {}],
+    ["Mono", { grayscale: 100, contrast: 10 }],
+    ["Vivid", { saturation: 45, contrast: 12 }],
+    ["Warm", { sepia: 30, saturation: 10 }],
+    ["Faded", { contrast: -25, brightness: 8, saturation: -20 }],
+    ["Dramatic", { contrast: 40, brightness: -6 }],
+  ];
+  const presetRow = el("div", { class: `${NS}-chips` }, ...presets.map(([n, v]) => el("button", { type: "button", class: `${NS}-chip`, onclick: () => commit(() => (p.adjust = { brightness: 0, contrast: 0, saturation: 0, grayscale: 0, sepia: 0, hue: 0, blur: 0, ...v })) }, n)));
+  return section("Adjust", [presetRow, sl("brightness", "Brightness", -100, 100), sl("contrast", "Contrast", -100, 100), sl("saturation", "Saturation", -100, 100), sl("grayscale", "Grayscale", 0, 100), sl("sepia", "Sepia", 0, 100), sl("hue", "Hue", -180, 180), sl("blur", "Blur", 0, 5, 0.1)], false);
+}
+
 function emptyState() {
   const tip = (k, t) => el("li", {}, el("kbd", {}, k), el("span", {}, t));
   return el("div", { class: `${NS}-emptycard` },
@@ -295,6 +355,14 @@ function commonProps(item) {
     el("div", { class: `${NS}-grid2` }, row("X", fNum(item, "x", { unit: "mm", after })), row("Y", fNum(item, "y", { unit: "mm", after }))),
     el("div", { class: `${NS}-grid2` }, row("Width", fNum(item, "w", { min: 1, unit: "mm", after })), row("Height", fNum(item, "h", { min: 1, unit: "mm", after }))),
     el("div", { class: `${NS}-grid2` }, row("Rotation", fNum(item, "rot", { min: -360, max: 360, step: 1, unit: "°", after })), row("Opacity", fRange(item, "opacity", 0, 1, 0.05, { after }))),
+    el("div", { class: `${NS}-btnrow` },
+      btn("Flip H", () => commit(() => (item.flipX = !item.flipX)), { iconName: "flipH", title: "Flip horizontally" }),
+      btn("Flip V", () => commit(() => (item.flipY = !item.flipY)), { iconName: "flipV", title: "Flip vertically" }),
+      btn("Center", () => commit(() => {
+        item.x = round((S.doc.page.width - item.w) / 2, 2);
+        item.y = round((S.doc.page.height - item.h) / 2, 2);
+      }), { iconName: "alC", title: "Center on page" }),
+    ),
     el("div", { class: `${NS}-row` }, fCheck(item, "locked", "Lock position", { after: () => { renderItemList(); renderSelection(); refreshCanvas(); } }), fCheck(item, "hidden", "Hide", { after })),
   ])];
 }
@@ -359,6 +427,7 @@ function itemProps(item) {
             row("Background", fColor(item, P("background"))),
           ]),
           section("Frame", [
+            ...mapFrameShapeRows(item),
             fCheck(item, P("frame.show"), "Show frame"),
             el("div", { class: `${NS}-grid2` }, row("Color", fColor(item, P("frame.color"))), row("Width", fNum(item, P("frame.width"), { min: 0, step: 0.05, unit: "mm" }))),
           ]),
@@ -404,6 +473,7 @@ function itemProps(item) {
           }, { iconName: "refresh", title: "Fetch the latest style & layers from GeoLibre" }),
         ]),
         section("Frame", [
+          ...mapFrameShapeRows(item),
           fCheck(item, P("frame.show"), "Show frame"),
           el("div", { class: `${NS}-grid2` }, row("Color", fColor(item, P("frame.color"))), row("Width", fNum(item, P("frame.width"), { min: 0, step: 0.05, unit: "mm" }))),
         ]),
@@ -506,7 +576,7 @@ function itemProps(item) {
       const read = () =>
         commit(() => {
           const msg = readColorbarFromLayer(p);
-          toast(msg, /no stored|not found/.test(msg) ? "warn" : "info");
+          toast(msg, /no stored|not found|not in the list|RGB composite/.test(msg) ? "warn" : "info");
         });
       out.push(
         section("Data", [
@@ -631,6 +701,12 @@ function itemProps(item) {
           })),
         ]),
         section("LaTeX & Symbols", [templateButtons(S.ui.textArea, { mathWrap: true }), symbolCatalog(S.ui.textArea, { mathWrap: true })], false),
+        section("Text effects", [
+          row("Effect", fSelect(item, P("effect"), Object.entries(TEXT_EFFECTS), { after: () => { refreshCanvas(); renderProps(); } })),
+          p.effect && p.effect !== "none" && p.effect !== "lift" && p.effect !== "hollow" ? row("Effect color", fColor(item, P("effectColor"))) : null,
+          p.effect && p.effect !== "none" && p.effect !== "highlight" ? row("Strength", fRange(item, P("effectStrength"), 0, 100, 5)) : null,
+          row("Decoration", fSeg(item, P("decoration"), [["none", "None"], ["underline", "<u>U</u>"], ["line-through", "<s>S</s>"], ["overline", "<span style='text-decoration:overline'>O</span>"]])),
+        ], !!(p.effect && p.effect !== "none")),
         section("Halo, Background & Border", [
           fCheck(item, P("halo"), "Text halo / outline"),
           el("div", { class: `${NS}-grid2` }, row("Halo color", fColor(item, P("haloColor"))), row("Halo width", fNum(item, P("haloWidth"), { min: 0, step: 0.1, unit: "mm" }))),
@@ -648,12 +724,16 @@ function itemProps(item) {
           p.src ? el("img", { src: p.src, class: `${NS}-imgprev` }) : el("p", { class: `${NS}-muted` }, "No image yet."),
           el("div", { class: `${NS}-btnrow` }, btn("Choose image…", () => pickImage(item), { iconName: "image", primary: true }), p.src ? btn("Remove", () => commit(() => (p.src = ""))) : null),
           row("Fit", fSelect(item, P("fit"), [["contain", "Contain (keep ratio)"], ["cover", "Cover (crop)"], ["fill", "Stretch"]])),
+          row("Mask", fSelect(item, P("mask"), [["none", "Rectangle"], ["circle", "Circle / ellipse"], ["hexagon", "Hexagon"], ["star", "Star"], ["heart", "Heart"], ["blob", "Blob"]])),
           row("Opacity", fRange(item, P("opacity"), 0, 1, 0.05)),
           fCheck(item, P("border.show"), "Border"),
           el("div", { class: `${NS}-grid2` }, row("Color", fColor(item, P("border.color"))), row("Width", fNum(item, P("border.width"), { min: 0, step: 0.05, unit: "mm" }))),
           row("Corner radius", fNum(item, P("border.radius"), { min: 0, step: 0.5, unit: "mm" })),
         ]),
+        imageAdjustSection(item),
       );
+      break;
+    case "__image_adjust__":
       break;
     case "shape":
       out.push(

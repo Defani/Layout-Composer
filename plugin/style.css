@@ -2085,3 +2085,67 @@ html.dark .glc-root .glc-toast,
 .glc-ibtn.glc-dim {
   opacity: 0.35;
 }
+
+/* ---------- inline text editor */
+.glc-inline {
+  position: absolute;
+  z-index: 100005;
+  border: 1.5px solid var(--glc-sel);
+  border-radius: 2px;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  box-sizing: border-box;
+  transform-origin: center center;
+  box-shadow: 0 0 0 3px rgb(13 153 255 / 0.18);
+}
+.glc-qsep {
+  width: 1px;
+  height: 20px;
+  background: var(--glc-border);
+  margin: 0 4px;
+  flex: none;
+}
+
+/* every body pane keeps its own grid column, so hiding a dock never shifts the others */
+.glc-tools { grid-column: 1; grid-row: 1; }
+.glc-left { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; }
+.glc-stage { grid-column: 3; grid-row: 1; }
+.glc-right { grid-column: 4; grid-row: 1; min-width: 0; overflow: hidden; }
+@media (max-width: 900px) {
+  .glc-body,
+  .glc-root.hide-left .glc-body {
+    grid-template-columns: 48px 0 minmax(0, 1fr) 260px;
+  }
+  .glc-root.hide-right .glc-body,
+  .glc-root.hide-left.hide-right .glc-body {
+    grid-template-columns: 48px 0 minmax(0, 1fr) 0;
+  }
+  .glc-root:not(.hide-left) .glc-body {
+    grid-template-columns: 48px 180px minmax(0, 1fr) 0;
+  }
+  .glc-tool span {
+    display: none;
+  }
+  .glc-tool {
+    width: 40px;
+    min-height: 36px;
+  }
+}
+.glc-status > * {
+  white-space: nowrap;
+  flex: none;
+}
+.glc-status .glc-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+@media (max-width: 1100px) {
+  .glc-status .glc-hint,
+  .glc-status .glc-pos {
+    display: none;
+  }
+  .glc-status .glc-selinfo {
+    margin-right: auto;
+  }
+}

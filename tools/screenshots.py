@@ -15,6 +15,7 @@ SHOTS = [
     ("klhk.html", "text", "ui-text-toolbar.png"),
     ("klhk.html", "map", "ui-map-panel.png"),
     ("index.html", "colorbar", "ui-colorbar.png"),
+    ("index.html", "frames", "ui-map-frames.png"),
     ("index.html", "shape", "ui-shape-toolbar.png"),
     ("index.html", "wheel", "ui-color-wheel.png"),
     ("index.html", "latex", "ui-latex.png"),

@@ -25,12 +25,31 @@ const COLORMAPS = {
   jet: ["#00007f", "#0000ff", "#007fff", "#00ffff", "#7fff7f", "#ffff00", "#ff7f00", "#ff0000", "#7f0000"],
   greys: ["#ffffff", "#f0f0f0", "#d9d9d9", "#bdbdbd", "#969696", "#737373", "#525252", "#252525", "#000000"],
   gray: ["#000000", "#ffffff"],
+  hot: ["#0b0000", "#4c0000", "#8e0000", "#d00000", "#ff1300", "#ff5600", "#ff9800", "#ffda00", "#ffff3c", "#ffffff"],
+  cool: ["#00ffff", "#1ce3ff", "#38c7ff", "#55aaff", "#718eff", "#8e71ff", "#aa55ff", "#c738ff", "#e31cff", "#ff00ff"],
+  rainbow: ["#8000ff", "#4c4ffc", "#1996f3", "#1acfe3", "#4cf2ce", "#80feb3", "#b2f295", "#e6cf73", "#ff964f", "#ff0000"],
+  ocean: ["#008000", "#004c1c", "#001938", "#001a55", "#004c71", "#00808e", "#19b2aa", "#4ce6c6", "#80ffe3", "#ffffff"],
+  gist_earth: ["#000000", "#122870", "#2a6a84", "#3d8b6f", "#4f9a50", "#7aaa55", "#a9b65d", "#bd9f6e", "#d7b9a5", "#fdfbfb"],
+  bwr: ["#0000ff", "#3939ff", "#7171ff", "#aaaaff", "#e3e3ff", "#ffe3e3", "#ffaaaa", "#ff7171", "#ff3939", "#ff0000"],
+  seismic: ["#00004c", "#0000a6", "#0000ff", "#7171ff", "#e3e3ff", "#ffe3e3", "#ff7171", "#ff0000", "#c00000", "#800000"],
+  piyg: ["#8e0152", "#c51b7d", "#de77ae", "#f1b6da", "#fde0ef", "#e6f5d0", "#b8e186", "#7fbc41", "#4d9221", "#276419"],
+  prgn: ["#40004b", "#762a83", "#9970ab", "#c2a5cf", "#e7d4e8", "#d9f0d3", "#a6dba0", "#5aae61", "#1b7837", "#00441b"],
+  puor: ["#2d004b", "#542788", "#8073ac", "#b2abd2", "#d8daeb", "#fee0b6", "#fdb863", "#e08214", "#b35806", "#7f3b08"],
+  ylgnbu: ["#ffffd9", "#edf8b1", "#c7e9b4", "#7fcdbb", "#41b6c4", "#1d91c0", "#225ea8", "#253494", "#081d58"],
+  ylorbr: ["#ffffe5", "#fff7bc", "#fee391", "#fec44f", "#fe9929", "#ec7014", "#cc4c02", "#993404", "#662506"],
+  bupu: ["#f7fcfd", "#e0ecf4", "#bfd3e6", "#9ebcda", "#8c96c6", "#8c6bb1", "#88419d", "#810f7c", "#4d004b"],
+  gnbu: ["#f7fcf0", "#e0f3db", "#ccebc5", "#a8ddb5", "#7bccc4", "#4eb3d3", "#2b8cbe", "#0868ac", "#084081"],
+  twilight: ["#e2d9e2", "#a5b5cf", "#6981c0", "#5e43a5", "#2f1436", "#5a1d3f", "#9e3d4a", "#c7806f", "#d9c0b8", "#e2d9e2"],
+  cubehelix: ["#000000", "#1a1530", "#163d4e", "#1f6642", "#54792f", "#a07949", "#d07e93", "#cf9cda", "#c1caf3", "#ffffff"],
 };
 const COLORMAP_LABELS = {
   viridis: "Viridis", plasma: "Plasma", inferno: "Inferno", magma: "Magma", cividis: "Cividis", turbo: "Turbo",
   spectral: "Spectral", rdylgn: "RdYlGn", rdylbu: "RdYlBu", rdbu: "RdBu", brbg: "BrBG", coolwarm: "Coolwarm",
   terrain: "Terrain", ylgn: "YlGn", ylorrd: "YlOrRd", blues: "Blues", greens: "Greens", oranges: "Oranges",
   reds: "Reds", purples: "Purples", jet: "Jet", greys: "Greys", gray: "Gray",
+  hot: "Hot", cool: "Cool", rainbow: "Rainbow", ocean: "Ocean", gist_earth: "Earth", bwr: "BWR", seismic: "Seismic",
+  piyg: "PiYG", prgn: "PRGn", puor: "PuOr", ylgnbu: "YlGnBu", ylorbr: "YlOrBr", bupu: "BuPu", gnbu: "GnBu",
+  twilight: "Twilight", cubehelix: "Cubehelix",
 };
 
 function hexToRgb(h) {
@@ -67,9 +86,19 @@ function colormapGradientCss(name, reverse) {
 }
 
 // Tick values for the bar.
+// Finite low/high of a color bar (bad input → 0…1, equal values → ±0.5).
+function colorbarRange(p) {
+  let a = Number(p.vmin);
+  let b = Number(p.vmax);
+  if (!Number.isFinite(a)) a = 0;
+  if (!Number.isFinite(b)) b = a + 1;
+  let lo = Math.min(a, b);
+  let hi = Math.max(a, b);
+  if (hi === lo) [lo, hi] = [lo - 0.5, hi + 0.5];
+  return [lo, hi];
+}
 function colorbarTicks(p) {
-  const lo = Math.min(p.vmin, p.vmax);
-  const hi = Math.max(p.vmin, p.vmax);
+  const [lo, hi] = colorbarRange(p);
   if (!(hi > lo)) return [lo];
   if (p.tickMode === "custom") {
     return String(p.customTicks || "")
@@ -92,7 +121,8 @@ function tickDecimals(p, ticks) {
   if (ticks.length < 2) return Math.abs(ticks[0] || 0) < 10 ? 2 : 0;
   const step = Math.abs(ticks[1] - ticks[0]) || 1;
   // smallest decimal count that keeps every tick exact (max 4)
-  for (let d = 0; d <= 4; d++) {
+  const maxD = clamp(Math.ceil(-Math.log10(step)) + 2, 0, 4);
+  for (let d = 0; d <= maxD; d++) {
     if (ticks.every((t) => Math.abs(t - round(t, d)) < step * 1e-6)) return d;
   }
   return clamp(Math.ceil(-Math.log10(step)) + 1, 0, 4);
@@ -162,8 +192,7 @@ RENDERERS.colorbar = function colorbar(item) {
   const pad = p.padding || 0;
   const tickLen = p.tickDir === "none" ? 0 : p.tickLen;
   const tickOut = p.tickDir === "out" || p.tickDir === "both" ? tickLen : 0;
-  const lo = Math.min(p.vmin, p.vmax);
-  const hi = Math.max(p.vmin, p.vmax);
+  const [lo, hi] = colorbarRange(p);
   const span = hi - lo || 1;
   const extLo = p.extend === "min" || p.extend === "both";
   const extHi = p.extend === "max" || p.extend === "both";
@@ -312,48 +341,134 @@ function projectLayers() {
     return [];
   }
 }
+// Layer kinds as GeoLibre stores them (type + source + metadata).
+const TILE_TYPE_RE = /^(xyz|tiles?|tms|wms|wmts|arcgis|pmtiles-raster|mbtiles-raster|raster-tiles?)$/i;
+function isTileLayer(l) {
+  if (!l) return false;
+  if (l.metadata?.rasterState) return false;
+  const t = String(l.type || "");
+  if (TILE_TYPE_RE.test(t)) return true;
+  const kind = String(l.metadata?.sourceKind || "");
+  if (/xyz|wms|wmts|tile/i.test(kind)) return true;
+  return l.source?.type === "raster" && !/cog|tif/i.test(t);
+}
+function isDataRaster(l) {
+  if (!l) return false;
+  if (l.metadata?.rasterState) return true;
+  if (isTileLayer(l)) return false;
+  return /cog|geotiff|tiff?|raster|zarr|netcdf|georaster|dem/i.test(String(l.type || "")) || /\.(tiff?|vrt)(\?|$)/i.test(String(l.source?.url || l.url || ""));
+}
+// [min, max] from whatever GeoLibre stored: rescale [[a,b]], [a,b], "a,b", {min,max}, stats…
+function rasterRange(l) {
+  const md = l?.metadata || {};
+  const rs = md.rasterState || {};
+  const pair = (v) => {
+    if (v == null) return null;
+    if (typeof v === "string") v = v.split(/[\s,;]+/).filter(Boolean).map(Number);
+    if (Array.isArray(v)) {
+      if (Array.isArray(v[0])) return pair(v[0]);
+      if (v.length >= 2 && v.slice(0, 2).every((x) => x !== null && x !== "" && Number.isFinite(Number(x)))) return [Number(v[0]), Number(v[1])];
+      return null;
+    }
+    if (typeof v === "object") {
+      const lo = v.min ?? v.vmin ?? v.minimum ?? v.low;
+      const hi = v.max ?? v.vmax ?? v.maximum ?? v.high;
+      if (Number.isFinite(Number(lo)) && Number.isFinite(Number(hi)) && lo !== null && hi !== null) return [Number(lo), Number(hi)];
+    }
+    return null;
+  };
+  const band = Array.isArray(rs.bands) ? Math.max(0, Number(rs.bands[0]) - 1 || 0) : 0;
+  const cands = [
+    rs.rescale, rs.range, rs.domain, rs, rs.stats?.[band], rs.statistics?.[band], rs.stats, rs.statistics,
+    md.statistics?.[band], md.stats?.[band], md.bandStats?.[band], md.statistics, md.stats, md.range,
+    l?.style?.rasterRange, l?.style?.rescale,
+  ];
+  for (const c of cands) {
+    const r = pair(c);
+    if (r && r[0] !== r[1]) return r;
+  }
+  return null;
+}
+// Colormap name → {name, reverse} for the COLORMAPS table, or null.
+const CMAP_ALIASES = { grey: "gray", greys: "greys", grayscale: "gray", greyscale: "gray", earth: "gist_earth", spectral_r: "spectral", rdylgn: "rdylgn", ndvi: "rdylgn", elevation: "terrain", dem: "terrain" };
+function rasterColormap(name) {
+  let n = String(name || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!n) return null;
+  let reverse = false;
+  if (/_r$/.test(n)) {
+    reverse = true;
+    n = n.slice(0, -2);
+  }
+  n = CMAP_ALIASES[n] || n;
+  if (!COLORMAPS[n]) n = n.replace(/_/g, "");
+  return COLORMAPS[n] ? { name: n, reverse } : null;
+}
+// All project layers: the live list plus snapshot-only layers (some rasters are drawn by deck.gl).
+function allProjectLayers() {
+  const snap = projectLayers();
+  const byId = new Map(snap.map((l) => [l.id, l]));
+  const out = [];
+  const seen = new Set();
+  for (const gl of glLayers()) {
+    out.push({ ...gl, ...(byId.get(gl.id) || {}), name: gl.name || byId.get(gl.id)?.name, visible: gl.visible });
+    seen.add(gl.id);
+  }
+  for (const l of snap) if (!seen.has(l.id)) out.push(l);
+  return out;
+}
 function colorbarSourceOptions() {
   const opts = [["", "Manual values"]];
-  const snap = new Map(projectLayers().map((l) => [l.id, l]));
-  for (const gl of glLayers()) {
-    const l = snap.get(gl.id) || gl;
-    const raster = l.metadata?.rasterState || /cog|raster|tif/i.test(String(l.type || ""));
+  for (const l of allProjectLayers()) {
+    const raster = isDataRaster(l);
     const graduated = l.style?.vectorStyleMode && l.style.vectorStyleMode !== "single";
-    if (raster || graduated) opts.push([gl.id, `${gl.name || gl.id}${raster ? " (raster)" : " (graduated)"}`]);
+    if (raster || graduated) opts.push([l.id, `${l.name || l.id}${raster ? " (raster)" : " (graduated)"}`]);
   }
   return opts;
 }
 // Copy vmin/vmax/colormap from a layer into the color bar props. Returns a message.
 function readColorbarFromLayer(p) {
-  const l = projectLayers().find((x) => x.id === p.source);
+  const l = allProjectLayers().find((x) => x.id === p.source);
   if (!l) return "Layer not found in the current GeoLibre project.";
-  const rs = l.metadata?.rasterState;
-  if (rs) {
-    const r = Array.isArray(rs.rescale) && rs.rescale[0];
-    if (r && r.length >= 2) {
-      p.vmin = Number(r[0]);
-      p.vmax = Number(r[1]);
+  const named = !p.title || p.title === "Value" || p.title === p._autoTitle;
+  if (isDataRaster(l)) {
+    const rs = l.metadata?.rasterState || {};
+    const r = rasterRange(l);
+    if (r) {
+      p.vmin = r[0];
+      p.vmax = r[1];
+      // data ranges are rarely round: label round values inside them
+      if (p.tickMode !== "custom") p.tickMode = "nice";
     }
-    const cm = String(rs.colormap || "").toLowerCase().replace(/_r$/, "");
-    if (COLORMAPS[cm]) {
-      p.colormap = cm;
-      p.reverse = /_r$/i.test(String(rs.colormap || ""));
+    const multi = Array.isArray(rs.bands) && rs.bands.length >= 3 && !rs.colormap;
+    const cm = rasterColormap(rs.colormap || rs.colormapName || rs.cmap || l.style?.colormap);
+    if (cm) {
+      p.colormap = cm.name;
+      p.reverse = cm.reverse;
+    } else if (!rs.colormap && !multi) {
+      // single band without a colormap is shown in grey
+      p.colormap = "gray";
+      p.reverse = false;
     }
-    if (!p.title || p.title === "Value") p.title = l.name || p.title;
-    return r ? `Range ${fmtNumber(p.vmin, 2)} – ${fmtNumber(p.vmax, 2)} read from “${l.name}”.` : `Colormap read from “${l.name}”; it has no stored value range, so set min/max manually.`;
+    if (named) p.title = p._autoTitle = l.name || p.title;
+    const cmMsg = rs.colormap && !cm ? ` Colormap “${rs.colormap}” is not in the list — pick the closest one.` : "";
+    if (multi) return `“${l.name}” is an RGB composite; a color bar applies to single-band rasters.`;
+    return r ? `Range ${fmtNumber(p.vmin, 2)} – ${fmtNumber(p.vmax, 2)} read from “${l.name}”.${cmMsg}` : `Colormap read from “${l.name}”; it has no stored value range, so set min/max manually.${cmMsg}`;
   }
   const st = l.style || {};
-  const stops = Array.isArray(st.vectorStyleStops) ? st.vectorStyleStops.filter((s) => s && s.color != null) : [];
+  const stops = Array.isArray(st.vectorStyleStops) ? st.vectorStyleStops.filter((s) => s && s.color != null && Number.isFinite(Number(s.value))) : [];
   if (stops.length >= 2) {
     p.vmin = Number(stops[0].value);
     p.vmax = Number(stops[stops.length - 1].value);
-    const ramp = String(st.vectorStyleColorRamp || "").toLowerCase();
-    if (COLORMAPS[ramp] && st.vectorStyleMode !== "categorized") p.colormap = ramp;
-    else {
+    const cm = rasterColormap(st.vectorStyleColorRamp);
+    if (cm && st.vectorStyleMode !== "categorized") {
+      p.colormap = cm.name;
+      p.reverse = cm.reverse;
+    } else {
       p.colormap = "custom";
+      p.reverse = false;
       p.customColors = stops.map((s) => s.color).join(", ");
     }
-    if (!p.title || p.title === "Value") p.title = st.vectorStyleProperty || l.name;
+    if (named) p.title = p._autoTitle = st.vectorStyleProperty || l.name;
     return `Range ${fmtNumber(p.vmin, 2)} – ${fmtNumber(p.vmax, 2)} read from “${l.name}”.`;
   }
   return `“${l.name}” has no stored value range — set min/max manually.`;

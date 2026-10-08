@@ -14,6 +14,9 @@ const ITEM_TYPES = {
       basemap: "geolibre",
       background: "#ffffff",
       frame: { show: true, color: "#000000", width: 0.5 },
+      frameShape: "rect",
+      frameRadius: 4,
+      frameImage: "",
       grid: {
         show: false,
         type: "dms",
@@ -228,6 +231,130 @@ function syncSnapshotView(item) {
   return { src: sn.src, w: iw, h: ih, x: (item.w - iw) / 2, y: (item.h - ih) / 2 };
 }
 
+// ---- text effects (Canva-style): shadow, lift, hollow, outline, highlight, neon
+const TEXT_EFFECTS = { none: "None", shadow: "Shadow", lift: "Lift", hollow: "Hollow", outline: "Outline", highlight: "Highlight", neon: "Neon", echo: "Echo" };
+function textEffect(item, lines, x, y0, lh, anchor) {
+  const p = item.props;
+  const e = p.effect || "none";
+  const c = esc(p.effectColor || "#000000");
+  const k = (p.effectStrength ?? 50) / 50; // 0..2
+  const id = item.id.replace(/[^\w]/g, "");
+  const f = p.font;
+  const res = { defs: "", before: "", groupAttr: "", textAttr: "" };
+  if (e === "shadow") {
+    res.defs = `<defs><filter id="tfx-${id}" x="-20%" y="-30%" width="140%" height="160%"><feDropShadow dx="${round(0.35 * k, 3)}" dy="${round(0.35 * k, 3)}" stdDeviation="${round(0.25 * k, 3)}" flood-color="${c}" flood-opacity="0.55"/></filter></defs>`;
+    res.groupAttr = ` filter="url(#tfx-${id})"`;
+  } else if (e === "lift") {
+    res.defs = `<defs><filter id="tfx-${id}" x="-20%" y="-30%" width="140%" height="180%"><feDropShadow dx="0" dy="${round(0.5 * k, 3)}" stdDeviation="${round(0.9 * k, 3)}" flood-color="#000000" flood-opacity="0.35"/></filter></defs>`;
+    res.groupAttr = ` filter="url(#tfx-${id})"`;
+  } else if (e === "neon") {
+    res.defs = `<defs><filter id="tfx-${id}" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur in="SourceAlpha" stdDeviation="${round(0.6 * k, 3)}" result="b"/><feFlood flood-color="${c}" flood-opacity="0.95"/><feComposite in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+    res.groupAttr = ` filter="url(#tfx-${id})"`;
+  } else if (e === "hollow") {
+    res.textAttr = `fill="none" stroke="${esc(f.color)}" stroke-width="${round(0.12 * Math.max(k, 0.3) * (f.size / 10), 3)}"`;
+  } else if (e === "outline") {
+    res.textAttr = `stroke="${c}" stroke-width="${round(0.25 * Math.max(k, 0.3) * (f.size / 10), 3)}" paint-order="stroke" stroke-linejoin="round"`;
+  } else if (e === "echo") {
+    const dx = 0.45 * k;
+    const dyy = 0.45 * k;
+    res.before = `<text text-anchor="${anchor}" ${fontAttrs({ ...f, color: p.effectColor || "#999999" })} opacity="0.45">${lines.map((ln, i) => `<tspan x="${round(x + dx * 2, 3)}" y="${round(y0 + i * lh + dyy * 2, 3)}">${esc(ln)}</tspan>`).join("")}</text>` + `<text text-anchor="${anchor}" ${fontAttrs({ ...f, color: p.effectColor || "#999999" })} opacity="0.7">${lines.map((ln, i) => `<tspan x="${round(x + dx, 3)}" y="${round(y0 + i * lh + dyy, 3)}">${esc(ln)}</tspan>`).join("")}</text>`;
+  } else if (e === "highlight") {
+    const fh = f.size * PT;
+    res.before = lines
+      .map((ln, i) => {
+        const w = textWidthMm(ln, f);
+        if (!w) return "";
+        const x0 = anchor === "middle" ? x - w / 2 : anchor === "end" ? x - w : x;
+        const pad = fh * 0.18 * Math.max(k, 0.5);
+        return `<rect x="${round(x0 - pad, 3)}" y="${round(y0 + i * lh - fh * 0.82 - pad / 2, 3)}" width="${round(w + pad * 2, 3)}" height="${round(fh * 1.05 + pad, 3)}" rx="${round(pad, 3)}" fill="${esc(p.effectColor || "#fde047")}"/>`;
+      })
+      .join("");
+  }
+  return res;
+}
+
+// ---- map frame shapes (circle, triangle, … or an image used as a mask)
+const MAP_FRAME_SHAPES = [
+  ["rect", "Rectangle"], ["rounded", "Rounded rectangle"], ["circle", "Circle / ellipse"], ["triangle", "Triangle"],
+  ["diamond", "Diamond"], ["pentagon", "Pentagon"], ["hexagon", "Hexagon"], ["octagon", "Octagon"],
+  ["star", "Star"], ["heart", "Heart"], ["shield", "Shield"], ["arch", "Arch"], ["image", "Image (mask)…"],
+];
+// SVG path of a map frame shape in a w × h box, or null for a plain rectangle.
+function mapFramePath(p, w, h) {
+  const s = p.frameShape || "rect";
+  const r = clamp(p.frameRadius ?? 4, 0, Math.min(w, h) / 2);
+  const R = (v) => round(v, 3);
+  switch (s) {
+    case "rounded":
+      return `M${R(r)},0H${R(w - r)}A${R(r)},${R(r)} 0 0 1 ${R(w)},${R(r)}V${R(h - r)}A${R(r)},${R(r)} 0 0 1 ${R(w - r)},${R(h)}H${R(r)}A${R(r)},${R(r)} 0 0 1 0,${R(h - r)}V${R(r)}A${R(r)},${R(r)} 0 0 1 ${R(r)},0Z`;
+    case "circle":
+      return `M0,${R(h / 2)}A${R(w / 2)},${R(h / 2)} 0 1 0 ${R(w)},${R(h / 2)}A${R(w / 2)},${R(h / 2)} 0 1 0 0,${R(h / 2)}Z`;
+    case "triangle":
+      return `M${R(w / 2)},0L${R(w)},${R(h)}L0,${R(h)}Z`;
+    case "diamond":
+      return `M${R(w / 2)},0L${R(w)},${R(h / 2)}L${R(w / 2)},${R(h)}L0,${R(h / 2)}Z`;
+    case "pentagon":
+      return shapePath({ poly: 5 }, w, h);
+    case "hexagon":
+      return shapePath({ poly: 6 }, w, h);
+    case "octagon":
+      return shapePath({ poly: 8 }, w, h);
+    case "star":
+      return shapePath({ star: [5, 0.5] }, w, h);
+    case "heart":
+      return SHAPES.find((x) => x.id === "heart")?.d(w, h) || null;
+    case "shield":
+      return `M0,0H${R(w)}V${R(h * 0.45)}C${R(w)},${R(h * 0.75)} ${R(w * 0.75)},${R(h * 0.9)} ${R(w / 2)},${R(h)}C${R(w * 0.25)},${R(h * 0.9)} 0,${R(h * 0.75)} 0,${R(h * 0.45)}Z`;
+    case "arch":
+      return `M0,${R(h)}V${R(Math.min(w / 2, h))}A${R(w / 2)},${R(Math.min(w / 2, h))} 0 0 1 ${R(w)},${R(Math.min(w / 2, h))}V${R(h)}Z`;
+    default:
+      return null;
+  }
+}
+function mapFrameIsImage(p) {
+  return p.frameShape === "image" && !!p.frameImage;
+}
+
+// ---- image adjustments + masks
+function imageMaskShape(item, r) {
+  const p = item.props;
+  const m = p.mask || "none";
+  const { w, h } = item;
+  if (m === "circle") return `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2}" ry="${h / 2}"/>`;
+  if (m === "hexagon") return `<path d="${shapePath({ poly: 6 }, w, h)}"/>`;
+  if (m === "star") return `<path d="${shapePath({ star: [5, 0.45] }, w, h)}"/>`;
+  if (m === "heart") return `<path d="${SHAPES.find((x) => x.id === "heart").d(w, h)}"/>`;
+  if (m === "blob") return `<path d="M${w * 0.5},0C${w * 0.85},0 ${w},${h * 0.2} ${w},${h * 0.5}S${w * 0.8},${h} ${w * 0.45},${h}S0,${h * 0.75} 0,${h * 0.45}S${w * 0.2},0 ${w * 0.5},0Z"/>`;
+  return `<rect width="${w}" height="${h}" rx="${r}"/>`;
+}
+function imageFilter(item) {
+  const a = item.props.adjust || {};
+  const b = (a.brightness || 0) / 100;
+  const c = 1 + (a.contrast || 0) / 100;
+  const sat = Math.max(0, 1 + (a.saturation || 0) / 100) * (1 - (a.grayscale || 0) / 100);
+  const hue = a.hue || 0;
+  const blur = a.blur || 0;
+  const sepia = (a.sepia || 0) / 100;
+  if (!b && c === 1 && sat === 1 && !hue && !blur && !sepia) return { defs: "", attr: "" };
+  const id = `imf-${item.id.replace(/[^\w]/g, "")}`;
+  const slope = round(c, 4);
+  const icept = round(-(0.5 * c) + 0.5 + b, 4);
+  const sepiaM = sepia
+    ? `<feColorMatrix type="matrix" values="${[0.393 + 0.607 * (1 - sepia), 0.769 - 0.769 * (1 - sepia), 0.189 - 0.189 * (1 - sepia), 0, 0, 0.349 - 0.349 * (1 - sepia), 0.686 + 0.314 * (1 - sepia), 0.168 - 0.168 * (1 - sepia), 0, 0, 0.272 - 0.272 * (1 - sepia), 0.534 - 0.534 * (1 - sepia), 0.131 + 0.869 * (1 - sepia), 0, 0, 0, 0, 0, 1, 0].map((v) => round(v, 4)).join(" ")}"/>`
+    : "";
+  return {
+    defs:
+      `<filter id="${id}" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">` +
+      `<feComponentTransfer><feFuncR type="linear" slope="${slope}" intercept="${icept}"/><feFuncG type="linear" slope="${slope}" intercept="${icept}"/><feFuncB type="linear" slope="${slope}" intercept="${icept}"/></feComponentTransfer>` +
+      `<feColorMatrix type="saturate" values="${round(sat, 4)}"/>` +
+      (hue ? `<feColorMatrix type="hueRotate" values="${hue}"/>` : "") +
+      sepiaM +
+      (blur ? `<feGaussianBlur stdDeviation="${round(blur, 3)}"/>` : "") +
+      `</filter>`,
+    attr: ` filter="url(#${id})"`,
+  };
+}
+
 // ---------------------------------------------------------------- SVG renderers
 // renderItem(item, ctx) -> SVG markup in item-local mm (0..w, 0..h).
 // ctx = { export: bool, mapImages: Map(itemId -> dataURL) }
@@ -253,10 +380,15 @@ const RENDERERS = {
     const p = item.props;
     const { w, h } = item;
     const clipId = `clip-${item.id}`;
-    let out = `<defs><clipPath id="${clipId}"><rect width="${w}" height="${h}"/></clipPath></defs>`;
+    const shapeD = mapFramePath(p, w, h);
+    const imgMask = mapFrameIsImage(p);
+    const clipShape = shapeD ? `<path d="${shapeD}"/>` : `<rect width="${w}" height="${h}"/>`;
+    let out = `<defs><clipPath id="${clipId}">${clipShape}</clipPath>`;
+    if (imgMask) out += `<mask id="mk-${item.id}" mask-type="alpha" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="${w}" height="${h}"><image href="${esc(p.frameImage)}" width="${w}" height="${h}" preserveAspectRatio="none"/></mask>`;
+    out += `</defs>`;
     const snap = p.source === "snapshot" && p.snapshot?.src ? syncSnapshotView(item) : null;
+    out += imgMask ? `<g mask="url(#mk-${item.id})">` : `<g clip-path="url(#${clipId})">`;
     if (ctx.export || snap) out += `<rect width="${w}" height="${h}" fill="${esc(p.background || "#fff")}"/>`;
-    out += `<g clip-path="url(#${clipId})">`;
     if (snap) {
       out += `<image href="${snap.src}" x="${round(snap.x, 3)}" y="${round(snap.y, 3)}" width="${round(snap.w, 3)}" height="${round(snap.h, 3)}" preserveAspectRatio="none"/>`;
     } else if (ctx.export) {
@@ -270,8 +402,12 @@ const RENDERERS = {
     }
     if (p.grid?.show && p.grid.style !== "none") out += renderGridLines(item);
     out += `</g>`;
-    if (p.grid?.show) out += renderGridFrame(item);
-    if (p.frame?.show) out += `<rect width="${w}" height="${h}" fill="none" stroke="${esc(p.frame.color)}" stroke-width="${p.frame.width}"/>`;
+    if (p.grid?.show && !shapeD && !imgMask) out += renderGridFrame(item);
+    if (p.frame?.show && !imgMask) {
+      out += shapeD
+        ? `<path d="${shapeD}" fill="none" stroke="${esc(p.frame.color)}" stroke-width="${p.frame.width}" stroke-linejoin="round"/>`
+        : `<rect width="${w}" height="${h}" fill="none" stroke="${esc(p.frame.color)}" stroke-width="${p.frame.width}"/>`;
+    }
     return out;
   },
 
@@ -459,18 +595,22 @@ const RENDERERS = {
     if (p.valign === "bottom") y0 = item.h - pad - blockH + asc + (lh - f.size * PT) / 2;
     const x = p.align === "center" ? item.w / 2 : p.align === "right" ? item.w - pad : pad;
     const anchor = p.align === "center" ? "middle" : p.align === "right" ? "end" : "start";
+    const tfx = textEffect(item, lines, x, y0, lh, anchor);
+    out += tfx.defs + tfx.before + `<g${tfx.groupAttr}>`;
     if (hasMath(content)) {
       // $...$ math: one MathJax line per text line (no automatic wrapping)
       content.split("\n").forEach((ln, i) => {
-        out += richLine(ln, x, y0 + i * lh, f, anchor, haloAttrs({ ...p, halo: p.halo })).svg;
+        out += richLine(ln, x, y0 + i * lh, f, anchor, tfx.textAttr || haloAttrs({ ...p, halo: p.halo })).svg;
       });
     } else {
-      out += `<text text-anchor="${anchor}" ${fontAttrs(f)} ${haloAttrs({ ...p, halo: p.halo })}>`;
+      const deco = p.decoration && p.decoration !== "none" ? ` text-decoration="${p.decoration}"` : "";
+      out += `<text text-anchor="${anchor}" ${fontAttrs(f)}${deco} ${tfx.textAttr || haloAttrs({ ...p, halo: p.halo })}>`;
       lines.forEach((ln, i) => {
         out += `<tspan x="${round(x, 3)}" y="${round(y0 + i * lh, 3)}">${esc(ln) || " "}</tspan>`;
       });
       out += `</text>`;
     }
+    out += `</g>`;
     if (p.border?.show) out += `<rect width="${item.w}" height="${item.h}" rx="${r}" fill="none" ${strokeAttrs(p.border.color, p.border.width, p.border.style)}/>`;
     return out;
   },
@@ -482,9 +622,11 @@ const RENDERERS = {
     const par = p.fit === "cover" ? "xMidYMid slice" : p.fit === "fill" ? "none" : "xMidYMid meet";
     const r = p.border?.radius || 0;
     const clipId = `imgclip-${item.id}`;
-    let out = `<defs><clipPath id="${clipId}"><rect width="${item.w}" height="${item.h}" rx="${r}"/></clipPath></defs>`;
-    out += `<image href="${esc(p.src)}" width="${item.w}" height="${item.h}" preserveAspectRatio="${par}" opacity="${p.opacity ?? 1}" clip-path="url(#${clipId})"/>`;
-    if (p.border?.show) out += `<rect width="${item.w}" height="${item.h}" rx="${r}" fill="none" stroke="${esc(p.border.color)}" stroke-width="${p.border.width}"/>`;
+    const mask = imageMaskShape(item, r);
+    const filt = imageFilter(item);
+    let out = `<defs><clipPath id="${clipId}">${mask}</clipPath>${filt.defs}</defs>`;
+    out += `<image href="${esc(p.src)}" width="${item.w}" height="${item.h}" preserveAspectRatio="${par}" opacity="${p.opacity ?? 1}" clip-path="url(#${clipId})"${filt.attr}/>`;
+    if (p.border?.show) out += mask.replace("/>", ` fill="none" stroke="${esc(p.border.color)}" stroke-width="${p.border.width}"/>`);
     return out;
   },
 
@@ -770,6 +912,20 @@ function legendPatch(patch, x, y, pw, ph) {
       const id = `lg${Math.random().toString(36).slice(2, 8)}`;
       const stops = (patch.colors || []).map((c, i, a) => `<stop offset="${a.length > 1 ? i / (a.length - 1) : 0}" stop-color="${esc(c)}"/>`).join("");
       return `<defs><linearGradient id="${id}" x1="0" x2="1" y1="0" y2="0">${stops}</linearGradient></defs><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="url(#${id})" stroke="#666" stroke-width="0.15"/>`;
+    }
+    case "tile": {
+      const src = tileThumb(patch.url);
+      const id = `lt${Math.random().toString(36).slice(2, 8)}`;
+      if (src) {
+        return `<defs><clipPath id="${id}"><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}"/></clipPath></defs><image href="${src}" x="${P(x)}" y="${P(y + ph / 2 - pw / 2)}" width="${P(pw)}" height="${P(pw)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id})"/><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="none" stroke="#666" stroke-width="0.15"/>`;
+      }
+      // placeholder: a small tiled map
+      const cw = pw / 3;
+      const chh = ph / 2;
+      let cells = "";
+      const tones = ["#cfe3c4", "#e8e2d4", "#b9d7ea", "#e8e2d4", "#d9e8cc", "#cfe3c4"];
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) cells += `<rect x="${P(x + i * cw)}" y="${P(y + j * chh)}" width="${P(cw)}" height="${P(chh)}" fill="${tones[i * 2 + j]}" stroke="#ffffff" stroke-width="0.12"/>`;
+      return `${cells}<path d="M${P(x)},${P(y + ph * 0.7)}C${P(x + pw * 0.3)},${P(y + ph * 0.2)} ${P(x + pw * 0.6)},${P(y + ph * 0.9)} ${P(x + pw)},${P(y + ph * 0.35)}" fill="none" stroke="#f59e0b" stroke-width="0.3"/><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="none" stroke="#666" stroke-width="0.15"/>`;
     }
     case "raster":
       return `<rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="${esc(patch.fill || "#9ca3af")}" stroke="#666" stroke-width="0.15"/><path d="M${P(x)},${P(y + ph)}L${P(x + pw * 0.4)},${P(y + ph * 0.35)}L${P(x + pw * 0.6)},${P(y + ph * 0.65)}L${P(x + pw)},${P(y)}" fill="none" stroke="#fff" stroke-width="0.25" opacity="0.6"/>`;

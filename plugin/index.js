@@ -8,7 +8,7 @@
 
 const PLUGIN_ID = "geolibre-layout-composer";
 const PLUGIN_NAME = "Layout Composer";
-const PLUGIN_VERSION = "1.3.0";
+const PLUGIN_VERSION = "1.4.0";
 const NS = "glc"; // CSS class prefix
 const STORE_KEY = "glc:layouts:v1";
 const PX96 = 96 / 25.4; // CSS px per mm at 96 dpi
@@ -1034,6 +1034,9 @@ const ITEM_TYPES = {
       basemap: "geolibre",
       background: "#ffffff",
       frame: { show: true, color: "#000000", width: 0.5 },
+      frameShape: "rect",
+      frameRadius: 4,
+      frameImage: "",
       grid: {
         show: false,
         type: "dms",
@@ -1248,6 +1251,130 @@ function syncSnapshotView(item) {
   return { src: sn.src, w: iw, h: ih, x: (item.w - iw) / 2, y: (item.h - ih) / 2 };
 }
 
+// ---- text effects (Canva-style): shadow, lift, hollow, outline, highlight, neon
+const TEXT_EFFECTS = { none: "None", shadow: "Shadow", lift: "Lift", hollow: "Hollow", outline: "Outline", highlight: "Highlight", neon: "Neon", echo: "Echo" };
+function textEffect(item, lines, x, y0, lh, anchor) {
+  const p = item.props;
+  const e = p.effect || "none";
+  const c = esc(p.effectColor || "#000000");
+  const k = (p.effectStrength ?? 50) / 50; // 0..2
+  const id = item.id.replace(/[^\w]/g, "");
+  const f = p.font;
+  const res = { defs: "", before: "", groupAttr: "", textAttr: "" };
+  if (e === "shadow") {
+    res.defs = `<defs><filter id="tfx-${id}" x="-20%" y="-30%" width="140%" height="160%"><feDropShadow dx="${round(0.35 * k, 3)}" dy="${round(0.35 * k, 3)}" stdDeviation="${round(0.25 * k, 3)}" flood-color="${c}" flood-opacity="0.55"/></filter></defs>`;
+    res.groupAttr = ` filter="url(#tfx-${id})"`;
+  } else if (e === "lift") {
+    res.defs = `<defs><filter id="tfx-${id}" x="-20%" y="-30%" width="140%" height="180%"><feDropShadow dx="0" dy="${round(0.5 * k, 3)}" stdDeviation="${round(0.9 * k, 3)}" flood-color="#000000" flood-opacity="0.35"/></filter></defs>`;
+    res.groupAttr = ` filter="url(#tfx-${id})"`;
+  } else if (e === "neon") {
+    res.defs = `<defs><filter id="tfx-${id}" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur in="SourceAlpha" stdDeviation="${round(0.6 * k, 3)}" result="b"/><feFlood flood-color="${c}" flood-opacity="0.95"/><feComposite in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+    res.groupAttr = ` filter="url(#tfx-${id})"`;
+  } else if (e === "hollow") {
+    res.textAttr = `fill="none" stroke="${esc(f.color)}" stroke-width="${round(0.12 * Math.max(k, 0.3) * (f.size / 10), 3)}"`;
+  } else if (e === "outline") {
+    res.textAttr = `stroke="${c}" stroke-width="${round(0.25 * Math.max(k, 0.3) * (f.size / 10), 3)}" paint-order="stroke" stroke-linejoin="round"`;
+  } else if (e === "echo") {
+    const dx = 0.45 * k;
+    const dyy = 0.45 * k;
+    res.before = `<text text-anchor="${anchor}" ${fontAttrs({ ...f, color: p.effectColor || "#999999" })} opacity="0.45">${lines.map((ln, i) => `<tspan x="${round(x + dx * 2, 3)}" y="${round(y0 + i * lh + dyy * 2, 3)}">${esc(ln)}</tspan>`).join("")}</text>` + `<text text-anchor="${anchor}" ${fontAttrs({ ...f, color: p.effectColor || "#999999" })} opacity="0.7">${lines.map((ln, i) => `<tspan x="${round(x + dx, 3)}" y="${round(y0 + i * lh + dyy, 3)}">${esc(ln)}</tspan>`).join("")}</text>`;
+  } else if (e === "highlight") {
+    const fh = f.size * PT;
+    res.before = lines
+      .map((ln, i) => {
+        const w = textWidthMm(ln, f);
+        if (!w) return "";
+        const x0 = anchor === "middle" ? x - w / 2 : anchor === "end" ? x - w : x;
+        const pad = fh * 0.18 * Math.max(k, 0.5);
+        return `<rect x="${round(x0 - pad, 3)}" y="${round(y0 + i * lh - fh * 0.82 - pad / 2, 3)}" width="${round(w + pad * 2, 3)}" height="${round(fh * 1.05 + pad, 3)}" rx="${round(pad, 3)}" fill="${esc(p.effectColor || "#fde047")}"/>`;
+      })
+      .join("");
+  }
+  return res;
+}
+
+// ---- map frame shapes (circle, triangle, … or an image used as a mask)
+const MAP_FRAME_SHAPES = [
+  ["rect", "Rectangle"], ["rounded", "Rounded rectangle"], ["circle", "Circle / ellipse"], ["triangle", "Triangle"],
+  ["diamond", "Diamond"], ["pentagon", "Pentagon"], ["hexagon", "Hexagon"], ["octagon", "Octagon"],
+  ["star", "Star"], ["heart", "Heart"], ["shield", "Shield"], ["arch", "Arch"], ["image", "Image (mask)…"],
+];
+// SVG path of a map frame shape in a w × h box, or null for a plain rectangle.
+function mapFramePath(p, w, h) {
+  const s = p.frameShape || "rect";
+  const r = clamp(p.frameRadius ?? 4, 0, Math.min(w, h) / 2);
+  const R = (v) => round(v, 3);
+  switch (s) {
+    case "rounded":
+      return `M${R(r)},0H${R(w - r)}A${R(r)},${R(r)} 0 0 1 ${R(w)},${R(r)}V${R(h - r)}A${R(r)},${R(r)} 0 0 1 ${R(w - r)},${R(h)}H${R(r)}A${R(r)},${R(r)} 0 0 1 0,${R(h - r)}V${R(r)}A${R(r)},${R(r)} 0 0 1 ${R(r)},0Z`;
+    case "circle":
+      return `M0,${R(h / 2)}A${R(w / 2)},${R(h / 2)} 0 1 0 ${R(w)},${R(h / 2)}A${R(w / 2)},${R(h / 2)} 0 1 0 0,${R(h / 2)}Z`;
+    case "triangle":
+      return `M${R(w / 2)},0L${R(w)},${R(h)}L0,${R(h)}Z`;
+    case "diamond":
+      return `M${R(w / 2)},0L${R(w)},${R(h / 2)}L${R(w / 2)},${R(h)}L0,${R(h / 2)}Z`;
+    case "pentagon":
+      return shapePath({ poly: 5 }, w, h);
+    case "hexagon":
+      return shapePath({ poly: 6 }, w, h);
+    case "octagon":
+      return shapePath({ poly: 8 }, w, h);
+    case "star":
+      return shapePath({ star: [5, 0.5] }, w, h);
+    case "heart":
+      return SHAPES.find((x) => x.id === "heart")?.d(w, h) || null;
+    case "shield":
+      return `M0,0H${R(w)}V${R(h * 0.45)}C${R(w)},${R(h * 0.75)} ${R(w * 0.75)},${R(h * 0.9)} ${R(w / 2)},${R(h)}C${R(w * 0.25)},${R(h * 0.9)} 0,${R(h * 0.75)} 0,${R(h * 0.45)}Z`;
+    case "arch":
+      return `M0,${R(h)}V${R(Math.min(w / 2, h))}A${R(w / 2)},${R(Math.min(w / 2, h))} 0 0 1 ${R(w)},${R(Math.min(w / 2, h))}V${R(h)}Z`;
+    default:
+      return null;
+  }
+}
+function mapFrameIsImage(p) {
+  return p.frameShape === "image" && !!p.frameImage;
+}
+
+// ---- image adjustments + masks
+function imageMaskShape(item, r) {
+  const p = item.props;
+  const m = p.mask || "none";
+  const { w, h } = item;
+  if (m === "circle") return `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2}" ry="${h / 2}"/>`;
+  if (m === "hexagon") return `<path d="${shapePath({ poly: 6 }, w, h)}"/>`;
+  if (m === "star") return `<path d="${shapePath({ star: [5, 0.45] }, w, h)}"/>`;
+  if (m === "heart") return `<path d="${SHAPES.find((x) => x.id === "heart").d(w, h)}"/>`;
+  if (m === "blob") return `<path d="M${w * 0.5},0C${w * 0.85},0 ${w},${h * 0.2} ${w},${h * 0.5}S${w * 0.8},${h} ${w * 0.45},${h}S0,${h * 0.75} 0,${h * 0.45}S${w * 0.2},0 ${w * 0.5},0Z"/>`;
+  return `<rect width="${w}" height="${h}" rx="${r}"/>`;
+}
+function imageFilter(item) {
+  const a = item.props.adjust || {};
+  const b = (a.brightness || 0) / 100;
+  const c = 1 + (a.contrast || 0) / 100;
+  const sat = Math.max(0, 1 + (a.saturation || 0) / 100) * (1 - (a.grayscale || 0) / 100);
+  const hue = a.hue || 0;
+  const blur = a.blur || 0;
+  const sepia = (a.sepia || 0) / 100;
+  if (!b && c === 1 && sat === 1 && !hue && !blur && !sepia) return { defs: "", attr: "" };
+  const id = `imf-${item.id.replace(/[^\w]/g, "")}`;
+  const slope = round(c, 4);
+  const icept = round(-(0.5 * c) + 0.5 + b, 4);
+  const sepiaM = sepia
+    ? `<feColorMatrix type="matrix" values="${[0.393 + 0.607 * (1 - sepia), 0.769 - 0.769 * (1 - sepia), 0.189 - 0.189 * (1 - sepia), 0, 0, 0.349 - 0.349 * (1 - sepia), 0.686 + 0.314 * (1 - sepia), 0.168 - 0.168 * (1 - sepia), 0, 0, 0.272 - 0.272 * (1 - sepia), 0.534 - 0.534 * (1 - sepia), 0.131 + 0.869 * (1 - sepia), 0, 0, 0, 0, 0, 1, 0].map((v) => round(v, 4)).join(" ")}"/>`
+    : "";
+  return {
+    defs:
+      `<filter id="${id}" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">` +
+      `<feComponentTransfer><feFuncR type="linear" slope="${slope}" intercept="${icept}"/><feFuncG type="linear" slope="${slope}" intercept="${icept}"/><feFuncB type="linear" slope="${slope}" intercept="${icept}"/></feComponentTransfer>` +
+      `<feColorMatrix type="saturate" values="${round(sat, 4)}"/>` +
+      (hue ? `<feColorMatrix type="hueRotate" values="${hue}"/>` : "") +
+      sepiaM +
+      (blur ? `<feGaussianBlur stdDeviation="${round(blur, 3)}"/>` : "") +
+      `</filter>`,
+    attr: ` filter="url(#${id})"`,
+  };
+}
+
 // ---------------------------------------------------------------- SVG renderers
 // renderItem(item, ctx) -> SVG markup in item-local mm (0..w, 0..h).
 // ctx = { export: bool, mapImages: Map(itemId -> dataURL) }
@@ -1273,10 +1400,15 @@ const RENDERERS = {
     const p = item.props;
     const { w, h } = item;
     const clipId = `clip-${item.id}`;
-    let out = `<defs><clipPath id="${clipId}"><rect width="${w}" height="${h}"/></clipPath></defs>`;
+    const shapeD = mapFramePath(p, w, h);
+    const imgMask = mapFrameIsImage(p);
+    const clipShape = shapeD ? `<path d="${shapeD}"/>` : `<rect width="${w}" height="${h}"/>`;
+    let out = `<defs><clipPath id="${clipId}">${clipShape}</clipPath>`;
+    if (imgMask) out += `<mask id="mk-${item.id}" mask-type="alpha" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="${w}" height="${h}"><image href="${esc(p.frameImage)}" width="${w}" height="${h}" preserveAspectRatio="none"/></mask>`;
+    out += `</defs>`;
     const snap = p.source === "snapshot" && p.snapshot?.src ? syncSnapshotView(item) : null;
+    out += imgMask ? `<g mask="url(#mk-${item.id})">` : `<g clip-path="url(#${clipId})">`;
     if (ctx.export || snap) out += `<rect width="${w}" height="${h}" fill="${esc(p.background || "#fff")}"/>`;
-    out += `<g clip-path="url(#${clipId})">`;
     if (snap) {
       out += `<image href="${snap.src}" x="${round(snap.x, 3)}" y="${round(snap.y, 3)}" width="${round(snap.w, 3)}" height="${round(snap.h, 3)}" preserveAspectRatio="none"/>`;
     } else if (ctx.export) {
@@ -1290,8 +1422,12 @@ const RENDERERS = {
     }
     if (p.grid?.show && p.grid.style !== "none") out += renderGridLines(item);
     out += `</g>`;
-    if (p.grid?.show) out += renderGridFrame(item);
-    if (p.frame?.show) out += `<rect width="${w}" height="${h}" fill="none" stroke="${esc(p.frame.color)}" stroke-width="${p.frame.width}"/>`;
+    if (p.grid?.show && !shapeD && !imgMask) out += renderGridFrame(item);
+    if (p.frame?.show && !imgMask) {
+      out += shapeD
+        ? `<path d="${shapeD}" fill="none" stroke="${esc(p.frame.color)}" stroke-width="${p.frame.width}" stroke-linejoin="round"/>`
+        : `<rect width="${w}" height="${h}" fill="none" stroke="${esc(p.frame.color)}" stroke-width="${p.frame.width}"/>`;
+    }
     return out;
   },
 
@@ -1479,18 +1615,22 @@ const RENDERERS = {
     if (p.valign === "bottom") y0 = item.h - pad - blockH + asc + (lh - f.size * PT) / 2;
     const x = p.align === "center" ? item.w / 2 : p.align === "right" ? item.w - pad : pad;
     const anchor = p.align === "center" ? "middle" : p.align === "right" ? "end" : "start";
+    const tfx = textEffect(item, lines, x, y0, lh, anchor);
+    out += tfx.defs + tfx.before + `<g${tfx.groupAttr}>`;
     if (hasMath(content)) {
       // $...$ math: one MathJax line per text line (no automatic wrapping)
       content.split("\n").forEach((ln, i) => {
-        out += richLine(ln, x, y0 + i * lh, f, anchor, haloAttrs({ ...p, halo: p.halo })).svg;
+        out += richLine(ln, x, y0 + i * lh, f, anchor, tfx.textAttr || haloAttrs({ ...p, halo: p.halo })).svg;
       });
     } else {
-      out += `<text text-anchor="${anchor}" ${fontAttrs(f)} ${haloAttrs({ ...p, halo: p.halo })}>`;
+      const deco = p.decoration && p.decoration !== "none" ? ` text-decoration="${p.decoration}"` : "";
+      out += `<text text-anchor="${anchor}" ${fontAttrs(f)}${deco} ${tfx.textAttr || haloAttrs({ ...p, halo: p.halo })}>`;
       lines.forEach((ln, i) => {
         out += `<tspan x="${round(x, 3)}" y="${round(y0 + i * lh, 3)}">${esc(ln) || " "}</tspan>`;
       });
       out += `</text>`;
     }
+    out += `</g>`;
     if (p.border?.show) out += `<rect width="${item.w}" height="${item.h}" rx="${r}" fill="none" ${strokeAttrs(p.border.color, p.border.width, p.border.style)}/>`;
     return out;
   },
@@ -1502,9 +1642,11 @@ const RENDERERS = {
     const par = p.fit === "cover" ? "xMidYMid slice" : p.fit === "fill" ? "none" : "xMidYMid meet";
     const r = p.border?.radius || 0;
     const clipId = `imgclip-${item.id}`;
-    let out = `<defs><clipPath id="${clipId}"><rect width="${item.w}" height="${item.h}" rx="${r}"/></clipPath></defs>`;
-    out += `<image href="${esc(p.src)}" width="${item.w}" height="${item.h}" preserveAspectRatio="${par}" opacity="${p.opacity ?? 1}" clip-path="url(#${clipId})"/>`;
-    if (p.border?.show) out += `<rect width="${item.w}" height="${item.h}" rx="${r}" fill="none" stroke="${esc(p.border.color)}" stroke-width="${p.border.width}"/>`;
+    const mask = imageMaskShape(item, r);
+    const filt = imageFilter(item);
+    let out = `<defs><clipPath id="${clipId}">${mask}</clipPath>${filt.defs}</defs>`;
+    out += `<image href="${esc(p.src)}" width="${item.w}" height="${item.h}" preserveAspectRatio="${par}" opacity="${p.opacity ?? 1}" clip-path="url(#${clipId})"${filt.attr}/>`;
+    if (p.border?.show) out += mask.replace("/>", ` fill="none" stroke="${esc(p.border.color)}" stroke-width="${p.border.width}"/>`);
     return out;
   },
 
@@ -1791,6 +1933,20 @@ function legendPatch(patch, x, y, pw, ph) {
       const stops = (patch.colors || []).map((c, i, a) => `<stop offset="${a.length > 1 ? i / (a.length - 1) : 0}" stop-color="${esc(c)}"/>`).join("");
       return `<defs><linearGradient id="${id}" x1="0" x2="1" y1="0" y2="0">${stops}</linearGradient></defs><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="url(#${id})" stroke="#666" stroke-width="0.15"/>`;
     }
+    case "tile": {
+      const src = tileThumb(patch.url);
+      const id = `lt${Math.random().toString(36).slice(2, 8)}`;
+      if (src) {
+        return `<defs><clipPath id="${id}"><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}"/></clipPath></defs><image href="${src}" x="${P(x)}" y="${P(y + ph / 2 - pw / 2)}" width="${P(pw)}" height="${P(pw)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id})"/><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="none" stroke="#666" stroke-width="0.15"/>`;
+      }
+      // placeholder: a small tiled map
+      const cw = pw / 3;
+      const chh = ph / 2;
+      let cells = "";
+      const tones = ["#cfe3c4", "#e8e2d4", "#b9d7ea", "#e8e2d4", "#d9e8cc", "#cfe3c4"];
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) cells += `<rect x="${P(x + i * cw)}" y="${P(y + j * chh)}" width="${P(cw)}" height="${P(chh)}" fill="${tones[i * 2 + j]}" stroke="#ffffff" stroke-width="0.12"/>`;
+      return `${cells}<path d="M${P(x)},${P(y + ph * 0.7)}C${P(x + pw * 0.3)},${P(y + ph * 0.2)} ${P(x + pw * 0.6)},${P(y + ph * 0.9)} ${P(x + pw)},${P(y + ph * 0.35)}" fill="none" stroke="#f59e0b" stroke-width="0.3"/><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="none" stroke="#666" stroke-width="0.15"/>`;
+    }
     case "raster":
       return `<rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="${esc(patch.fill || "#9ca3af")}" stroke="#666" stroke-width="0.15"/><path d="M${P(x)},${P(y + ph)}L${P(x + pw * 0.4)},${P(y + ph * 0.35)}L${P(x + pw * 0.6)},${P(y + ph * 0.65)}L${P(x + pw)},${P(y)}" fill="none" stroke="#fff" stroke-width="0.25" opacity="0.6"/>`;
     default: {
@@ -1887,12 +2043,31 @@ const COLORMAPS = {
   jet: ["#00007f", "#0000ff", "#007fff", "#00ffff", "#7fff7f", "#ffff00", "#ff7f00", "#ff0000", "#7f0000"],
   greys: ["#ffffff", "#f0f0f0", "#d9d9d9", "#bdbdbd", "#969696", "#737373", "#525252", "#252525", "#000000"],
   gray: ["#000000", "#ffffff"],
+  hot: ["#0b0000", "#4c0000", "#8e0000", "#d00000", "#ff1300", "#ff5600", "#ff9800", "#ffda00", "#ffff3c", "#ffffff"],
+  cool: ["#00ffff", "#1ce3ff", "#38c7ff", "#55aaff", "#718eff", "#8e71ff", "#aa55ff", "#c738ff", "#e31cff", "#ff00ff"],
+  rainbow: ["#8000ff", "#4c4ffc", "#1996f3", "#1acfe3", "#4cf2ce", "#80feb3", "#b2f295", "#e6cf73", "#ff964f", "#ff0000"],
+  ocean: ["#008000", "#004c1c", "#001938", "#001a55", "#004c71", "#00808e", "#19b2aa", "#4ce6c6", "#80ffe3", "#ffffff"],
+  gist_earth: ["#000000", "#122870", "#2a6a84", "#3d8b6f", "#4f9a50", "#7aaa55", "#a9b65d", "#bd9f6e", "#d7b9a5", "#fdfbfb"],
+  bwr: ["#0000ff", "#3939ff", "#7171ff", "#aaaaff", "#e3e3ff", "#ffe3e3", "#ffaaaa", "#ff7171", "#ff3939", "#ff0000"],
+  seismic: ["#00004c", "#0000a6", "#0000ff", "#7171ff", "#e3e3ff", "#ffe3e3", "#ff7171", "#ff0000", "#c00000", "#800000"],
+  piyg: ["#8e0152", "#c51b7d", "#de77ae", "#f1b6da", "#fde0ef", "#e6f5d0", "#b8e186", "#7fbc41", "#4d9221", "#276419"],
+  prgn: ["#40004b", "#762a83", "#9970ab", "#c2a5cf", "#e7d4e8", "#d9f0d3", "#a6dba0", "#5aae61", "#1b7837", "#00441b"],
+  puor: ["#2d004b", "#542788", "#8073ac", "#b2abd2", "#d8daeb", "#fee0b6", "#fdb863", "#e08214", "#b35806", "#7f3b08"],
+  ylgnbu: ["#ffffd9", "#edf8b1", "#c7e9b4", "#7fcdbb", "#41b6c4", "#1d91c0", "#225ea8", "#253494", "#081d58"],
+  ylorbr: ["#ffffe5", "#fff7bc", "#fee391", "#fec44f", "#fe9929", "#ec7014", "#cc4c02", "#993404", "#662506"],
+  bupu: ["#f7fcfd", "#e0ecf4", "#bfd3e6", "#9ebcda", "#8c96c6", "#8c6bb1", "#88419d", "#810f7c", "#4d004b"],
+  gnbu: ["#f7fcf0", "#e0f3db", "#ccebc5", "#a8ddb5", "#7bccc4", "#4eb3d3", "#2b8cbe", "#0868ac", "#084081"],
+  twilight: ["#e2d9e2", "#a5b5cf", "#6981c0", "#5e43a5", "#2f1436", "#5a1d3f", "#9e3d4a", "#c7806f", "#d9c0b8", "#e2d9e2"],
+  cubehelix: ["#000000", "#1a1530", "#163d4e", "#1f6642", "#54792f", "#a07949", "#d07e93", "#cf9cda", "#c1caf3", "#ffffff"],
 };
 const COLORMAP_LABELS = {
   viridis: "Viridis", plasma: "Plasma", inferno: "Inferno", magma: "Magma", cividis: "Cividis", turbo: "Turbo",
   spectral: "Spectral", rdylgn: "RdYlGn", rdylbu: "RdYlBu", rdbu: "RdBu", brbg: "BrBG", coolwarm: "Coolwarm",
   terrain: "Terrain", ylgn: "YlGn", ylorrd: "YlOrRd", blues: "Blues", greens: "Greens", oranges: "Oranges",
   reds: "Reds", purples: "Purples", jet: "Jet", greys: "Greys", gray: "Gray",
+  hot: "Hot", cool: "Cool", rainbow: "Rainbow", ocean: "Ocean", gist_earth: "Earth", bwr: "BWR", seismic: "Seismic",
+  piyg: "PiYG", prgn: "PRGn", puor: "PuOr", ylgnbu: "YlGnBu", ylorbr: "YlOrBr", bupu: "BuPu", gnbu: "GnBu",
+  twilight: "Twilight", cubehelix: "Cubehelix",
 };
 
 function hexToRgb(h) {
@@ -1929,9 +2104,19 @@ function colormapGradientCss(name, reverse) {
 }
 
 // Tick values for the bar.
+// Finite low/high of a color bar (bad input → 0…1, equal values → ±0.5).
+function colorbarRange(p) {
+  let a = Number(p.vmin);
+  let b = Number(p.vmax);
+  if (!Number.isFinite(a)) a = 0;
+  if (!Number.isFinite(b)) b = a + 1;
+  let lo = Math.min(a, b);
+  let hi = Math.max(a, b);
+  if (hi === lo) [lo, hi] = [lo - 0.5, hi + 0.5];
+  return [lo, hi];
+}
 function colorbarTicks(p) {
-  const lo = Math.min(p.vmin, p.vmax);
-  const hi = Math.max(p.vmin, p.vmax);
+  const [lo, hi] = colorbarRange(p);
   if (!(hi > lo)) return [lo];
   if (p.tickMode === "custom") {
     return String(p.customTicks || "")
@@ -1954,7 +2139,8 @@ function tickDecimals(p, ticks) {
   if (ticks.length < 2) return Math.abs(ticks[0] || 0) < 10 ? 2 : 0;
   const step = Math.abs(ticks[1] - ticks[0]) || 1;
   // smallest decimal count that keeps every tick exact (max 4)
-  for (let d = 0; d <= 4; d++) {
+  const maxD = clamp(Math.ceil(-Math.log10(step)) + 2, 0, 4);
+  for (let d = 0; d <= maxD; d++) {
     if (ticks.every((t) => Math.abs(t - round(t, d)) < step * 1e-6)) return d;
   }
   return clamp(Math.ceil(-Math.log10(step)) + 1, 0, 4);
@@ -2024,8 +2210,7 @@ RENDERERS.colorbar = function colorbar(item) {
   const pad = p.padding || 0;
   const tickLen = p.tickDir === "none" ? 0 : p.tickLen;
   const tickOut = p.tickDir === "out" || p.tickDir === "both" ? tickLen : 0;
-  const lo = Math.min(p.vmin, p.vmax);
-  const hi = Math.max(p.vmin, p.vmax);
+  const [lo, hi] = colorbarRange(p);
   const span = hi - lo || 1;
   const extLo = p.extend === "min" || p.extend === "both";
   const extHi = p.extend === "max" || p.extend === "both";
@@ -2174,48 +2359,134 @@ function projectLayers() {
     return [];
   }
 }
+// Layer kinds as GeoLibre stores them (type + source + metadata).
+const TILE_TYPE_RE = /^(xyz|tiles?|tms|wms|wmts|arcgis|pmtiles-raster|mbtiles-raster|raster-tiles?)$/i;
+function isTileLayer(l) {
+  if (!l) return false;
+  if (l.metadata?.rasterState) return false;
+  const t = String(l.type || "");
+  if (TILE_TYPE_RE.test(t)) return true;
+  const kind = String(l.metadata?.sourceKind || "");
+  if (/xyz|wms|wmts|tile/i.test(kind)) return true;
+  return l.source?.type === "raster" && !/cog|tif/i.test(t);
+}
+function isDataRaster(l) {
+  if (!l) return false;
+  if (l.metadata?.rasterState) return true;
+  if (isTileLayer(l)) return false;
+  return /cog|geotiff|tiff?|raster|zarr|netcdf|georaster|dem/i.test(String(l.type || "")) || /\.(tiff?|vrt)(\?|$)/i.test(String(l.source?.url || l.url || ""));
+}
+// [min, max] from whatever GeoLibre stored: rescale [[a,b]], [a,b], "a,b", {min,max}, stats…
+function rasterRange(l) {
+  const md = l?.metadata || {};
+  const rs = md.rasterState || {};
+  const pair = (v) => {
+    if (v == null) return null;
+    if (typeof v === "string") v = v.split(/[\s,;]+/).filter(Boolean).map(Number);
+    if (Array.isArray(v)) {
+      if (Array.isArray(v[0])) return pair(v[0]);
+      if (v.length >= 2 && v.slice(0, 2).every((x) => x !== null && x !== "" && Number.isFinite(Number(x)))) return [Number(v[0]), Number(v[1])];
+      return null;
+    }
+    if (typeof v === "object") {
+      const lo = v.min ?? v.vmin ?? v.minimum ?? v.low;
+      const hi = v.max ?? v.vmax ?? v.maximum ?? v.high;
+      if (Number.isFinite(Number(lo)) && Number.isFinite(Number(hi)) && lo !== null && hi !== null) return [Number(lo), Number(hi)];
+    }
+    return null;
+  };
+  const band = Array.isArray(rs.bands) ? Math.max(0, Number(rs.bands[0]) - 1 || 0) : 0;
+  const cands = [
+    rs.rescale, rs.range, rs.domain, rs, rs.stats?.[band], rs.statistics?.[band], rs.stats, rs.statistics,
+    md.statistics?.[band], md.stats?.[band], md.bandStats?.[band], md.statistics, md.stats, md.range,
+    l?.style?.rasterRange, l?.style?.rescale,
+  ];
+  for (const c of cands) {
+    const r = pair(c);
+    if (r && r[0] !== r[1]) return r;
+  }
+  return null;
+}
+// Colormap name → {name, reverse} for the COLORMAPS table, or null.
+const CMAP_ALIASES = { grey: "gray", greys: "greys", grayscale: "gray", greyscale: "gray", earth: "gist_earth", spectral_r: "spectral", rdylgn: "rdylgn", ndvi: "rdylgn", elevation: "terrain", dem: "terrain" };
+function rasterColormap(name) {
+  let n = String(name || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!n) return null;
+  let reverse = false;
+  if (/_r$/.test(n)) {
+    reverse = true;
+    n = n.slice(0, -2);
+  }
+  n = CMAP_ALIASES[n] || n;
+  if (!COLORMAPS[n]) n = n.replace(/_/g, "");
+  return COLORMAPS[n] ? { name: n, reverse } : null;
+}
+// All project layers: the live list plus snapshot-only layers (some rasters are drawn by deck.gl).
+function allProjectLayers() {
+  const snap = projectLayers();
+  const byId = new Map(snap.map((l) => [l.id, l]));
+  const out = [];
+  const seen = new Set();
+  for (const gl of glLayers()) {
+    out.push({ ...gl, ...(byId.get(gl.id) || {}), name: gl.name || byId.get(gl.id)?.name, visible: gl.visible });
+    seen.add(gl.id);
+  }
+  for (const l of snap) if (!seen.has(l.id)) out.push(l);
+  return out;
+}
 function colorbarSourceOptions() {
   const opts = [["", "Manual values"]];
-  const snap = new Map(projectLayers().map((l) => [l.id, l]));
-  for (const gl of glLayers()) {
-    const l = snap.get(gl.id) || gl;
-    const raster = l.metadata?.rasterState || /cog|raster|tif/i.test(String(l.type || ""));
+  for (const l of allProjectLayers()) {
+    const raster = isDataRaster(l);
     const graduated = l.style?.vectorStyleMode && l.style.vectorStyleMode !== "single";
-    if (raster || graduated) opts.push([gl.id, `${gl.name || gl.id}${raster ? " (raster)" : " (graduated)"}`]);
+    if (raster || graduated) opts.push([l.id, `${l.name || l.id}${raster ? " (raster)" : " (graduated)"}`]);
   }
   return opts;
 }
 // Copy vmin/vmax/colormap from a layer into the color bar props. Returns a message.
 function readColorbarFromLayer(p) {
-  const l = projectLayers().find((x) => x.id === p.source);
+  const l = allProjectLayers().find((x) => x.id === p.source);
   if (!l) return "Layer not found in the current GeoLibre project.";
-  const rs = l.metadata?.rasterState;
-  if (rs) {
-    const r = Array.isArray(rs.rescale) && rs.rescale[0];
-    if (r && r.length >= 2) {
-      p.vmin = Number(r[0]);
-      p.vmax = Number(r[1]);
+  const named = !p.title || p.title === "Value" || p.title === p._autoTitle;
+  if (isDataRaster(l)) {
+    const rs = l.metadata?.rasterState || {};
+    const r = rasterRange(l);
+    if (r) {
+      p.vmin = r[0];
+      p.vmax = r[1];
+      // data ranges are rarely round: label round values inside them
+      if (p.tickMode !== "custom") p.tickMode = "nice";
     }
-    const cm = String(rs.colormap || "").toLowerCase().replace(/_r$/, "");
-    if (COLORMAPS[cm]) {
-      p.colormap = cm;
-      p.reverse = /_r$/i.test(String(rs.colormap || ""));
+    const multi = Array.isArray(rs.bands) && rs.bands.length >= 3 && !rs.colormap;
+    const cm = rasterColormap(rs.colormap || rs.colormapName || rs.cmap || l.style?.colormap);
+    if (cm) {
+      p.colormap = cm.name;
+      p.reverse = cm.reverse;
+    } else if (!rs.colormap && !multi) {
+      // single band without a colormap is shown in grey
+      p.colormap = "gray";
+      p.reverse = false;
     }
-    if (!p.title || p.title === "Value") p.title = l.name || p.title;
-    return r ? `Range ${fmtNumber(p.vmin, 2)} – ${fmtNumber(p.vmax, 2)} read from “${l.name}”.` : `Colormap read from “${l.name}”; it has no stored value range, so set min/max manually.`;
+    if (named) p.title = p._autoTitle = l.name || p.title;
+    const cmMsg = rs.colormap && !cm ? ` Colormap “${rs.colormap}” is not in the list — pick the closest one.` : "";
+    if (multi) return `“${l.name}” is an RGB composite; a color bar applies to single-band rasters.`;
+    return r ? `Range ${fmtNumber(p.vmin, 2)} – ${fmtNumber(p.vmax, 2)} read from “${l.name}”.${cmMsg}` : `Colormap read from “${l.name}”; it has no stored value range, so set min/max manually.${cmMsg}`;
   }
   const st = l.style || {};
-  const stops = Array.isArray(st.vectorStyleStops) ? st.vectorStyleStops.filter((s) => s && s.color != null) : [];
+  const stops = Array.isArray(st.vectorStyleStops) ? st.vectorStyleStops.filter((s) => s && s.color != null && Number.isFinite(Number(s.value))) : [];
   if (stops.length >= 2) {
     p.vmin = Number(stops[0].value);
     p.vmax = Number(stops[stops.length - 1].value);
-    const ramp = String(st.vectorStyleColorRamp || "").toLowerCase();
-    if (COLORMAPS[ramp] && st.vectorStyleMode !== "categorized") p.colormap = ramp;
-    else {
+    const cm = rasterColormap(st.vectorStyleColorRamp);
+    if (cm && st.vectorStyleMode !== "categorized") {
+      p.colormap = cm.name;
+      p.reverse = cm.reverse;
+    } else {
       p.colormap = "custom";
+      p.reverse = false;
       p.customColors = stops.map((s) => s.color).join(", ");
     }
-    if (!p.title || p.title === "Value") p.title = st.vectorStyleProperty || l.name;
+    if (named) p.title = p._autoTitle = st.vectorStyleProperty || l.name;
     return `Range ${fmtNumber(p.vmin, 2)} – ${fmtNumber(p.vmax, 2)} read from “${l.name}”.`;
   }
   return `“${l.name}” has no stored value range — set min/max manually.`;
@@ -3098,6 +3369,17 @@ function placeLiveMap(item, rec) {
   c.style.width = `${W}px`;
   c.style.height = `${H}px`;
   c.style.transform = `scale(${k * (item.w * PX96) / W}, ${k * (item.h * PX96) / H})`;
+  // frame shape: clip in the container's own (unscaled 96-dpi) pixels
+  const p = item.props;
+  const d = mapFramePath(p, W, H);
+  c.style.clipPath = d && !mapFrameIsImage(p) ? `path("${d}")` : "";
+  const mk = mapFrameIsImage(p) ? `url("${p.frameImage}")` : "";
+  if (c._mask !== mk) {
+    c._mask = mk;
+    for (const k2 of ["maskImage", "webkitMaskImage"]) c.style[k2] = mk;
+    for (const k2 of ["maskSize", "webkitMaskSize"]) c.style[k2] = mk ? "100% 100%" : "";
+    for (const k2 of ["maskRepeat", "webkitMaskRepeat"]) c.style[k2] = mk ? "no-repeat" : "";
+  }
   const ratio = (window.devicePixelRatio || 1) * clamp(k, 0.5, 3);
   if (rec.map && rec.ratio !== ratio && typeof rec.map.setPixelRatio === "function") {
     rec.ratio = ratio;
@@ -3348,20 +3630,82 @@ function describeCond(c) {
 }
 const num = (v, d) => (typeof v === "number" ? v : d);
 
+// ---------------------------------------------------------------- tile thumbnails for legends
+// URL of the tile under the main map centre (XYZ templates and WMS GetMap URLs).
+function tileSampleUrl(l) {
+  const src = l?.source || {};
+  let tpl = (Array.isArray(src.tiles) && src.tiles[0]) || src.url || l?.url || "";
+  if (!tpl || !/\{z\}|\{bbox|bbox=|\{x\}/i.test(tpl)) return "";
+  const m = mainMap();
+  const c = m?.getCenter?.() || { lng: 0, lat: 0 };
+  const z = clamp(Math.round((m?.getZoom?.() ?? 3) - 1), 0, 18);
+  const n = 2 ** z;
+  const x = clamp(Math.floor(((c.lng + 180) / 360) * n), 0, n - 1);
+  const latR = (clamp(c.lat, -85, 85) * Math.PI) / 180;
+  const y = clamp(Math.floor(((1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2) * n), 0, n - 1);
+  const R = 6378137 * Math.PI;
+  const size = (2 * R) / n;
+  const bbox = [-R + x * size, R - (y + 1) * size, -R + (x + 1) * size, R - y * size].map((v) => v.toFixed(2)).join(",");
+  return tpl
+    .replace(/\{s\}/g, "a")
+    .replace(/\{z\}/g, z)
+    .replace(/\{x\}/g, x)
+    .replace(/\{y\}/g, y)
+    .replace(/\{-y\}/g, n - 1 - y)
+    .replace(/\{bbox-epsg-3857\}/gi, bbox)
+    .replace(/\{ratio\}|\{r\}/g, "");
+}
+// Tile images are fetched once and kept as data URLs so they survive SVG → canvas export.
+const TILE_THUMBS = new Map();
+function tileThumb(url) {
+  if (!url) return null;
+  const hit = TILE_THUMBS.get(url);
+  if (hit) return hit === "pending" || hit === "error" ? null : hit;
+  TILE_THUMBS.set(url, "pending");
+  fetch(url, { mode: "cors" })
+    .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(r.status))))
+    .then((b) => new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = rej;
+      fr.readAsDataURL(b);
+    }))
+    .then((d) => {
+      TILE_THUMBS.set(url, d);
+      clearTimeout(tileThumb.t);
+      tileThumb.t = setTimeout(() => S.ui && refreshCanvas(), 60);
+    })
+    .catch(() => TILE_THUMBS.set(url, "error"));
+  return null;
+}
+
 function legendFromMap() {
   const m = mainMap();
   if (!m) return [];
   const style = m.getStyle();
   const entries = [];
-  const layers = glLayers().filter((l) => l.visible !== false);
-  const snap = new Map(projectLayers().map((l) => [l.id, l]));
+  const layers = allProjectLayers().filter((l) => l.visible !== false);
   for (const gl of layers) {
-    const rs = snap.get(gl.id)?.metadata?.rasterState;
-    if (rs) {
+    if (isDataRaster(gl)) {
       // COG rasters are drawn by deck.gl, outside the MapLibre style
-      const cm = String(rs.colormap || "").toLowerCase().replace(/_r$/, "");
-      const colors = COLORMAPS[cm] ? colorbarColors({ colormap: cm, reverse: /_r$/i.test(String(rs.colormap || "")) }) : null;
-      entries.push({ key: `${gl.id}`, kind: "item", label: gl.name || gl.id, layerId: gl.id, patch: colors ? { type: "gradient", colors } : { type: "raster", fill: "#94a3b8" } });
+      const rs = gl.metadata?.rasterState || {};
+      const cm = rasterColormap(rs.colormap);
+      const rgb = Array.isArray(rs.bands) && rs.bands.length >= 3 && !rs.colormap;
+      const colors = cm ? colorbarColors({ colormap: cm.name, reverse: cm.reverse }) : rgb ? null : ["#000000", "#ffffff"];
+      const r = rasterRange(gl);
+      entries.push({
+        key: `${gl.id}`,
+        kind: "item",
+        label: gl.name || gl.id,
+        layerId: gl.id,
+        patch: colors ? { type: "gradient", colors } : { type: "tile", url: tileSampleUrl(gl) },
+        ...(r && colors ? { note: `${fmtNumber(Math.min(...r), 2)} – ${fmtNumber(Math.max(...r), 2)}` } : {}),
+      });
+      continue;
+    }
+    if (isTileLayer(gl)) {
+      // basemap / XYZ / WMS tiles: a thumbnail of one tile under the map centre
+      entries.push({ key: `${gl.id}`, kind: "item", label: gl.name || gl.id, layerId: gl.id, patch: { type: "tile", url: tileSampleUrl(gl) } });
       continue;
     }
     const sls = styleLayersFor(style, gl.id).filter((l) => (l.layout?.visibility ?? "visible") !== "none");
@@ -3490,6 +3834,8 @@ const ICON_PATHS = {
   fitsel: "M3 7V3h4M21 7V3h-4M3 17v4h4M21 17v4h-4M8 8h8v8H8z",
   dockleft: "M3 4h18v16H3zM9 4v16M5 8h2M5 11h2",
   dockright: "M3 4h18v16H3zM15 4v16M17 8h2M17 11h2",
+  flipH: "M12 3v18M8 7L3 12l5 5zM16 7l5 5-5 5z",
+  flipV: "M3 12h18M7 8l5-5 5 5zM7 16l5 5 5-5z",
   layout: "M3 3h18v18H3zM6 6h9v8H6zM18 7v4M6 17h5M14 17h4",
   rename: "M4 20h4L19 9l-4-4L4 16zM13 7l4 4",
   colorbar: "M3 9h18v6H3zM3 9l-2 3 2 3M21 9l2 3-2 3M7 18v2M12 18v2M17 18v2",
@@ -3504,7 +3850,45 @@ const ICON_PATHS = {
   camera: "M3 8h4l2-3h6l2 3h4v12H3zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
   sync: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5",
 };
+// Two-tone item icons: a soft tinted body (currentColor at low opacity) under a crisp outline,
+// so they follow the theme and turn blue as a whole when the tool is active.
+const tt = (fill, line, extra = "") =>
+  `<path d="${fill}" fill="currentColor" opacity=".2" stroke="none"/>` +
+  `<path d="${line}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>${extra}`;
 const ICON_SVG = {
+  select: tt("M5.5 3.5l13 7.4-5.6 1.5-2.9 5.6z", "M5.5 3.5l13 7.4-5.6 1.5-2.9 5.6zM12.9 12.4l4.6 4.6"),
+  pan: tt(
+    "M8 11V5.5a1.5 1.5 0 0 1 3 0V10V4a1.5 1.5 0 0 1 3 0v6V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.6-2.2L3 15.6a1.6 1.6 0 0 1 2.4-2.1L8 15z",
+    "M8 11V5.5a1.5 1.5 0 0 1 3 0V10V4a1.5 1.5 0 0 1 3 0v6V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.6-2.2L3 15.6a1.6 1.6 0 0 1 2.4-2.1L8 15z",
+  ),
+  movecontent: tt(
+    "M3 3h18v18H3z",
+    "M3 3h18v18H3zM12 7.5v9M7.5 12h9M10.3 9.2L12 7.5l1.7 1.7M10.3 14.8L12 16.5l1.7-1.7M9.2 10.3L7.5 12l1.7 1.7M14.8 10.3l1.7 1.7-1.7 1.7",
+  ),
+  map: tt("M9 3.5l6 3v14l-6-3z", "M3 6.5l6-3 6 3 6-3v14l-6 3-6-3-6 3zM9 3.5v14M15 6.5v14"),
+  inset: tt("M12.5 11.5h7v7h-7z", "M3 4h18v16H3zM12.5 11.5h7v7h-7zM6 8l3 2.5 2-1.5", '<circle cx="16" cy="15" r="1" fill="currentColor"/>'),
+  list: tt(
+    "M3.5 5h4v3.5h-4zM3.5 15.5h4V19h-4z",
+    "M3.5 5h4v3.5h-4zM3.5 15.5h4V19h-4zM3.5 12h4M11 6.8h9.5M11 12h9.5M11 17.2h9.5",
+  ),
+  colorbar:
+    '<path d="M5 8h4.7v6H5z" fill="currentColor" opacity=".12"/><path d="M9.7 8h4.6v6H9.7z" fill="currentColor" opacity=".38"/><path d="M14.3 8H19v6h-4.7z" fill="currentColor" opacity=".7"/>' +
+    '<path d="M5 8h14l3 3-3 3H5l-3-3zM6 17.5v2M12 17.5v2M18 17.5v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  north:
+    '<path d="M12 3l5.5 15L12 14.6z" fill="currentColor"/>' +
+    '<path d="M12 3L6.5 18 12 14.6 17.5 18z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>' +
+    '<path d="M10 22v-3.2l4 3.2v-3.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>',
+  text: tt("M4 4h16v3.5H4z", "M4 7.5V4h16v3.5M12 4v16M9 20h6"),
+  title: tt("M5 4h4v16H5zM15 4h4v16h-4z", "M7 4v16M17 4v16M7 12h10M5 4h4M5 20h4M15 4h4M15 20h4"),
+  image: tt("M3.5 4.5h17v15h-17z", "M3.5 4.5h17v15h-17zM3.5 17l5.5-5.5 4 4 2.5-2.5 5 5", '<circle cx="15.5" cy="9" r="1.7" fill="currentColor"/>'),
+  shape: tt("M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", "M3.5 3.5h8v8h-8zM12.5 20.5l4.5-8 4.5 8z", '<circle cx="7.5" cy="16.5" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="7" r="3.8" fill="currentColor" opacity=".55"/>'),
+  table: tt("M3.5 4.5h17v5h-17z", "M3.5 4.5h17v15h-17zM3.5 9.5h17M3.5 14.5h17M10 9.5v10"),
+  pen: tt("M12.5 19.5l7-7 2.5 2.5-7 7z", "M12.5 19.5l7-7 2.5 2.5-7 7zM18 13l-1.5-7.5L3 2.5l3 13.5 7 1.5zM3 2.5l7.5 7.5", '<circle cx="11.5" cy="11" r="1.6" fill="currentColor"/>'),
+  marker: tt("M12 21.5s7-6.4 7-11.8a7 7 0 1 0-14 0c0 5.4 7 11.8 7 11.8z", "M12 21.5s7-6.4 7-11.8a7 7 0 1 0-14 0c0 5.4 7 11.8 7 11.8z", '<circle cx="12" cy="9.7" r="2.6" fill="currentColor"/>'),
+  sigma: tt("M6 4h12v3H6z", "M18 7V4H6l6 8-6 8h12v-3"),
+  template: tt("M3 3h8v8H3zM13 13h8v8h-8z", "M3 3h8v8H3zM13 3h8v6h-8zM13 13h8v8h-8zM3 15h8v6H3z"),
+  page: tt("M6 2.5h9l4.5 4.5v14.5H6z", "M6 2.5h9l4.5 4.5v14.5H6zM15 2.5V7h4.5"),
+  layout: tt("M6 6h9v8H6z", "M3 3h18v18H3zM6 6h9v8H6zM18 7v4M6 17h5M14 17h4"),
   scalebar:
     '<rect x="2" y="9" width="20" height="5" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
     '<rect x="2" y="9" width="5" height="5" fill="currentColor"/><rect x="12" y="9" width="5" height="5" fill="currentColor"/>' +
@@ -3536,8 +3920,13 @@ const INSERT_MENUS = [
   {
     id: "text", icon: "text", label: "Text", tools: ["title", "text", "table", "latex"],
     items: [
-      ["title", "title", "Title", "Large centered heading"],
-      ["text", "text", "Text box", "Paragraph with variables and $…$ math"],
+      ["heading", "title", "Heading", "26 pt bold"],
+      ["subheading", "title", "Subheading", "15 pt bold"],
+      ["body", "text", "Body text", "Wrapped paragraph"],
+      ["caption", "text", "Caption", "Small italic note"],
+      ["maplabel", "text", "Map label", "Spaced capitals with halo"],
+      ["callout", "text", "Callout", "Text on a colored box"],
+      ["title", "title", "Map title", "Uses the {title} variable"],
       ["table", "table", "Table / info box", "Rows and columns, e.g. a title block"],
       ["latex", "sigma", "Formula (LaTeX)", "MathJax formula"],
     ],
@@ -3553,7 +3942,7 @@ function buildInsertBar() {
   for (const m of INSERT_MENUS) {
     const b = el("button", { type: "button", class: `${NS}-ins`, "data-tools": m.tools.join(" "), title: m.label, html: `${icon(m.icon, 16)}<span>${esc(m.label)}</span>${m.tool === "image" ? "" : '<svg class="glc-caret" width="8" height="8" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>'}` });
     b.addEventListener("click", () => {
-      if (m.tool === "image") return setTool("image");
+      if (m.tool === "image") return addAtCenter("image");
       if (m.gallery) return openToolGallery({ id: m.tool, gallery: m.gallery }, b);
       if (m.symbols) return openSymbolsMenu(b);
       const list = el("div", { class: `${NS}-menu` });
@@ -3561,7 +3950,7 @@ function buildInsertBar() {
         const it = el("button", { type: "button", class: `${NS}-menuitem`, html: `${icon(ic, 15)}<span>${esc(name)}</span><small>${esc(hint)}</small>` });
         it.addEventListener("click", () => {
           closePopover();
-          setTool(tool);
+          addAtCenter(tool);
         });
         list.appendChild(it);
       }
@@ -3576,7 +3965,7 @@ function openSymbolsMenu(anchor) {
     el("div", { class: `${NS}-ptitle` }, "Point markers"),
     galleryGrid("marker", null, (id) => {
       closePopover();
-      setTool("marker", id);
+      addAtCenter("marker", id);
     }),
     el("div", { class: `${NS}-msep` }),
   );
@@ -3642,6 +4031,7 @@ function buildShell() {
     b.addEventListener("click", () => {
       if (t.action) t.action(b);
       else if (t.gallery) openToolGallery(t, b);
+      else if (["map", "inset", "legend", "colorbar"].includes(t.id)) addAtCenter(t.id);
       else setTool(t.id);
     });
     tools.appendChild(b);
@@ -3905,7 +4295,9 @@ function openToolGallery(tool, anchor) {
   const titles = { north: "Choose a north arrow style", shape: "Choose a shape", scalebar: "Choose a scale bar style", draw: "Draw", marker: "Choose a marker symbol" };
   const pop = popoverAt(anchor, el("div", {}, el("div", { class: `${NS}-ptitle` }, titles[tool.gallery]), galleryGrid(tool.gallery, null, (id) => {
     closePopover();
-    setTool(tool.id, id);
+    // drawing needs the pointer; everything else drops straight onto the page
+    if (tool.id === "pen") setTool("pen", id);
+    else addAtCenter(tool.id, id);
   })), `${NS}-galpop`);
   return pop;
 }
@@ -4129,7 +4521,7 @@ function renderPaper(onlyIds) {
       width: `${item.w * Z}px`,
       height: `${item.h * Z}px`,
       zIndex: String(idx + 1),
-      transform: item.rot ? `rotate(${item.rot}deg)` : "",
+      transform: `${item.rot ? `rotate(${item.rot}deg)` : ""}${item.flipX || item.flipY ? ` scale(${item.flipX ? -1 : 1}, ${item.flipY ? -1 : 1})` : ""}`,
       opacity: String(item.opacity ?? 1),
       display: item.hidden ? "none" : "",
     });
@@ -4374,6 +4766,8 @@ function snapPoint(x, y, exclude, { edgesX = [0], edgesY = [0] } = {}) {
 }
 
 function onPointerDown(e) {
+  if (S.inline && !e.target.closest(`.${NS}-inline`)) finishInlineEdit();
+  if (e.target.closest(`.${NS}-inline`)) return;
   if (e.button === 2) return;
   closePopover();
   const target = e.target;
@@ -4717,7 +5111,10 @@ function onDblClick(e) {
   const item = node && findItem(node.dataset.id);
   if (!item) return;
   if (item.type === "map") enterContentMode(item.id);
-  else if (item.type === "text" || item.type === "table") {
+  else if (item.type === "text") {
+    select([item.id]);
+    startInlineEdit(item);
+  } else if (item.type === "table") {
     select([item.id]);
     setTimeout(() => S.ui.props.querySelector("textarea")?.focus(), 30);
   } else if (item.type === "image") pickImage(item);
@@ -4780,6 +5177,7 @@ function onKey(e) {
   else if (e.shiftKey && (k === "2" || k === "@")) zoomToSelection();
   else if (e.shiftKey && (k === "1" || k === "!")) fitPage();
   else if (ctrl && k === "s") exportJSON();
+  else if (k === "enter" && selectedItems().length === 1 && selectedItems()[0].type === "text") startInlineEdit(selectedItems()[0]);
   else if (k === "delete" || k === "backspace") deleteSelection();
   else if (k === "v") setTool("select");
   else if (k === "h") setTool("pan");
@@ -5653,6 +6051,126 @@ RENDERERS.path = function pathWithHandles(item, ctx) {
   }
   return out;
 };
+// ---------------------------------------------------------------- Canva-style ease of use
+// One click adds an item at the centre of the view; double-click edits text in
+// place; ready-made text presets.
+
+// Centre of what is visible on the canvas, in page mm.
+function viewCenterMM() {
+  const sc = S.ui.scroll;
+  const x = (sc.scrollLeft + sc.clientWidth / 2 - CANVAS_PAD) / S.zoom;
+  const y = (sc.scrollTop + sc.clientHeight / 2 - CANVAS_PAD) / S.zoom;
+  const pg = S.doc.page;
+  return [clamp(x, 0, pg.width), clamp(y, 0, pg.height)];
+}
+
+// Add an item of `tool` (rail / menu ids) centred in the view, then select it.
+function addAtCenter(tool, variant, after) {
+  const type = { inset: "map", title: "text", heading: "text", subheading: "text", body: "text", caption: "text", maplabel: "text", callout: "text" }[tool] || tool;
+  const def = ITEM_TYPES[type];
+  if (!def) return;
+  const [cx, cy] = viewCenterMM();
+  const pg = S.doc.page;
+  // size relative to the page so items are usable on A4 and on large sheets alike
+  const k = clamp(Math.min(pg.width, pg.height) / 210, 0.6, 3);
+  let [w, h] = def.size.map((v) => round(v * k, 1));
+  if (type === "map" && tool === "map") [w, h] = [round(pg.width * 0.6, 1), round(pg.height * 0.6, 1)];
+  w = Math.min(w, pg.width);
+  h = Math.min(h, pg.height);
+  const fx = (v, size, max) => round(clamp(v - size / 2, 0, Math.max(0, max - size)), 1);
+  addItemFromTool(TEXT_PRESETS[tool] ? "text" : tool, { x: fx(cx, w, pg.width), y: fx(cy, h, pg.height), w, h }, variant);
+  const item = S.doc.items.at(-1);
+  if (!item) return;
+  const preset = TEXT_PRESETS[tool];
+  if (preset) {
+    commit(() => {
+      Object.assign(item, { name: preset.name });
+      item.props = deepMerge(item.props, clone(preset.props));
+      item.props.font = { ...item.props.font, ...preset.props.font, size: round((preset.props.font?.size || item.props.font.size) * Math.sqrt(k), 1) };
+      const lh = item.props.font.size * PT * (item.props.lineHeight || 1.2);
+      item.h = round(Math.max(lh + 2 * (item.props.padding || 0) + 1, preset.h ? preset.h * k : 0), 1);
+      if (preset.w) item.w = round(preset.w * k, 1);
+      item.x = fx(cx, item.w, pg.width);
+      item.y = fx(cy, item.h, pg.height);
+    });
+  }
+  setTool("select");
+  select([item.id]);
+  after?.(item);
+  return item;
+}
+
+const TEXT_PRESETS = {
+  heading: { name: "Heading", w: 140, props: { text: "Add a heading", font: { size: 26, bold: true }, align: "center", valign: "middle" } },
+  subheading: { name: "Subheading", w: 120, props: { text: "Add a subheading", font: { size: 15, bold: true, color: "#333333" }, align: "center", valign: "middle" } },
+  body: { name: "Body text", w: 90, h: 24, props: { text: "Add a little bit of body text. Double-click to edit it on the page.", font: { size: 10 }, align: "left", valign: "top", wrap: true } },
+  caption: { name: "Caption", w: 80, props: { text: "Caption — source, date or note", font: { size: 8, italic: true, color: "#555555" }, align: "left", valign: "middle" } },
+  maplabel: { name: "Map label", w: 50, props: { text: "LABEL", font: { size: 9, bold: true, color: "#1f2937", spacing: 20 }, align: "center", valign: "middle", halo: true, haloColor: "#ffffff", haloWidth: 0.8 } },
+  callout: { name: "Callout", w: 70, h: 20, props: { text: "Callout text", font: { size: 10, color: "#ffffff", bold: true }, align: "center", valign: "middle", padding: 3, background: "#0d99ff", border: { show: false, radius: 4 } } },
+};
+
+// ---------------------------------------------------------------- inline text editing
+function startInlineEdit(item) {
+  if (!item || item.type !== "text" || item.locked) return;
+  finishInlineEdit();
+  const node = S.ui.itemEls.get(item.id);
+  if (!node) return;
+  const p = item.props;
+  const Z = S.zoom;
+  const ta = el("textarea", { class: `${NS}-inline`, spellcheck: "false" });
+  ta.value = p.text || "";
+  Object.assign(ta.style, {
+    left: `${item.x * Z}px`,
+    top: `${item.y * Z}px`,
+    width: `${Math.max(item.w * Z, 40)}px`,
+    height: `${Math.max(item.h * Z, 20)}px`,
+    transform: item.rot ? `rotate(${item.rot}deg)` : "",
+    fontFamily: `"${p.font.family}", Arial, sans-serif`,
+    fontSize: `${p.font.size * PT * Z}px`,
+    fontWeight: p.font.bold ? "700" : "400",
+    fontStyle: p.font.italic ? "italic" : "normal",
+    color: p.font.color,
+    textAlign: p.align,
+    lineHeight: String(p.lineHeight || 1.2),
+    padding: `${(p.padding || 0) * Z}px`,
+    background: p.background || "rgba(255,255,255,0.85)",
+  });
+  S.ui.paper.appendChild(ta);
+  node.style.visibility = "hidden";
+  S.inline = { item, ta, node, before: p.text };
+  ta.focus();
+  ta.select();
+  ta.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Escape") {
+      ta.value = S.inline.before;
+      finishInlineEdit();
+    }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) finishInlineEdit();
+  });
+  ta.addEventListener("input", () => {
+    // grow the box while typing
+    ta.style.height = "auto";
+    ta.style.height = `${Math.max(ta.scrollHeight, item.h * Z)}px`;
+  });
+  ta.addEventListener("blur", () => finishInlineEdit());
+}
+function finishInlineEdit() {
+  const ed = S.inline;
+  if (!ed) return;
+  S.inline = null;
+  const { item, ta, node, before } = ed;
+  const text = ta.value;
+  const needH = (ta.scrollHeight / S.zoom);
+  ta.remove();
+  node.style.visibility = "";
+  if (text !== before) {
+    commit(() => {
+      item.props.text = text;
+      if (needH > item.h + 0.5) item.h = round(needH, 1);
+    });
+  }
+}
 // ---------------------------------------------------------------- property panel
 function refreshCanvas() {
   renderPageDecor();
@@ -5843,6 +6361,48 @@ function mapOptions(exclude, allowEmpty = true, emptyLabel = "First map (automat
   for (const m of mapItems()) if (m.id !== exclude) opts.push([m.id, m.name]);
   return opts;
 }
+// Frame shape rows for map items: preset shapes or an image (its alpha / silhouette) as a mask.
+function mapFrameShapeRows(item) {
+  const p = item.props;
+  const P = (k) => `props.${k}`;
+  const shape = p.frameShape || "rect";
+  const pickMask = () => {
+    const input = el("input", { type: "file", accept: "image/png,image/svg+xml,image/webp,image/gif" });
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const fr = new FileReader();
+      fr.onload = () => commit(() => {
+        p.frameShape = "image";
+        p.frameImage = fr.result;
+      });
+      fr.readAsDataURL(file);
+    });
+    input.click();
+  };
+  const rows = [
+    row("Shape", fSelect(item, P("frameShape"), MAP_FRAME_SHAPES, {
+      after: () => {
+        if (p.frameShape === "image" && !p.frameImage) pickMask();
+        renderProps();
+      },
+    })),
+  ];
+  if (shape === "rounded") rows.push(row("Corner radius", fNum(item, P("frameRadius"), { min: 0, step: 0.5, unit: "mm" })));
+  if (shape === "circle" || shape === "star" || shape === "pentagon" || shape === "hexagon" || shape === "octagon") {
+    rows.push(btn("Make it regular (equal width & height)", () => commit(() => {
+      const s = Math.min(item.w, item.h);
+      item.w = item.h = round(s, 1);
+    }), { iconName: "fit" }));
+  }
+  if (shape === "image") {
+    rows.push(btn(p.frameImage ? "Replace mask image…" : "Choose mask image…", pickMask, { iconName: "image" }));
+    rows.push(el("p", { class: `${NS}-muted` }, "The map shows where the image is opaque — use a PNG/SVG silhouette (e.g. a province outline or a logo) with a transparent background."));
+  }
+  if (shape !== "rect" && shape !== "rounded") rows.push(el("p", { class: `${NS}-muted` }, "Grid frame ticks and labels are drawn only on rectangular frames."));
+  return rows;
+}
+
 function btn(label, onClick, { primary = false, iconName, title } = {}) {
   return el("button", { type: "button", class: `${NS}-btn ${primary ? `${NS}-primary` : ""}`, title: title || label, html: `${iconName ? icon(iconName) : ""}<span>${esc(label)}</span>`, onclick: onClick });
 }
@@ -5910,6 +6470,24 @@ function renderProps() {
   renderQuickBar();
 }
 
+function imageAdjustSection(item) {
+  const p = item.props;
+  if (!p.adjust) p.adjust = {};
+  const a = p.adjust;
+  const sl = (key, label, min, max, step = 1) => row(label, fRange(a, key, min, max, step, { after: () => refreshCanvas() }));
+  for (const [k, v] of Object.entries({ brightness: 0, contrast: 0, saturation: 0, grayscale: 0, sepia: 0, hue: 0, blur: 0 })) if (a[k] == null) a[k] = v;
+  const presets = [
+    ["Original", {}],
+    ["Mono", { grayscale: 100, contrast: 10 }],
+    ["Vivid", { saturation: 45, contrast: 12 }],
+    ["Warm", { sepia: 30, saturation: 10 }],
+    ["Faded", { contrast: -25, brightness: 8, saturation: -20 }],
+    ["Dramatic", { contrast: 40, brightness: -6 }],
+  ];
+  const presetRow = el("div", { class: `${NS}-chips` }, ...presets.map(([n, v]) => el("button", { type: "button", class: `${NS}-chip`, onclick: () => commit(() => (p.adjust = { brightness: 0, contrast: 0, saturation: 0, grayscale: 0, sepia: 0, hue: 0, blur: 0, ...v })) }, n)));
+  return section("Adjust", [presetRow, sl("brightness", "Brightness", -100, 100), sl("contrast", "Contrast", -100, 100), sl("saturation", "Saturation", -100, 100), sl("grayscale", "Grayscale", 0, 100), sl("sepia", "Sepia", 0, 100), sl("hue", "Hue", -180, 180), sl("blur", "Blur", 0, 5, 0.1)], false);
+}
+
 function emptyState() {
   const tip = (k, t) => el("li", {}, el("kbd", {}, k), el("span", {}, t));
   return el("div", { class: `${NS}-emptycard` },
@@ -5950,6 +6528,14 @@ function commonProps(item) {
     el("div", { class: `${NS}-grid2` }, row("X", fNum(item, "x", { unit: "mm", after })), row("Y", fNum(item, "y", { unit: "mm", after }))),
     el("div", { class: `${NS}-grid2` }, row("Width", fNum(item, "w", { min: 1, unit: "mm", after })), row("Height", fNum(item, "h", { min: 1, unit: "mm", after }))),
     el("div", { class: `${NS}-grid2` }, row("Rotation", fNum(item, "rot", { min: -360, max: 360, step: 1, unit: "°", after })), row("Opacity", fRange(item, "opacity", 0, 1, 0.05, { after }))),
+    el("div", { class: `${NS}-btnrow` },
+      btn("Flip H", () => commit(() => (item.flipX = !item.flipX)), { iconName: "flipH", title: "Flip horizontally" }),
+      btn("Flip V", () => commit(() => (item.flipY = !item.flipY)), { iconName: "flipV", title: "Flip vertically" }),
+      btn("Center", () => commit(() => {
+        item.x = round((S.doc.page.width - item.w) / 2, 2);
+        item.y = round((S.doc.page.height - item.h) / 2, 2);
+      }), { iconName: "alC", title: "Center on page" }),
+    ),
     el("div", { class: `${NS}-row` }, fCheck(item, "locked", "Lock position", { after: () => { renderItemList(); renderSelection(); refreshCanvas(); } }), fCheck(item, "hidden", "Hide", { after })),
   ])];
 }
@@ -6014,6 +6600,7 @@ function itemProps(item) {
             row("Background", fColor(item, P("background"))),
           ]),
           section("Frame", [
+            ...mapFrameShapeRows(item),
             fCheck(item, P("frame.show"), "Show frame"),
             el("div", { class: `${NS}-grid2` }, row("Color", fColor(item, P("frame.color"))), row("Width", fNum(item, P("frame.width"), { min: 0, step: 0.05, unit: "mm" }))),
           ]),
@@ -6059,6 +6646,7 @@ function itemProps(item) {
           }, { iconName: "refresh", title: "Fetch the latest style & layers from GeoLibre" }),
         ]),
         section("Frame", [
+          ...mapFrameShapeRows(item),
           fCheck(item, P("frame.show"), "Show frame"),
           el("div", { class: `${NS}-grid2` }, row("Color", fColor(item, P("frame.color"))), row("Width", fNum(item, P("frame.width"), { min: 0, step: 0.05, unit: "mm" }))),
         ]),
@@ -6161,7 +6749,7 @@ function itemProps(item) {
       const read = () =>
         commit(() => {
           const msg = readColorbarFromLayer(p);
-          toast(msg, /no stored|not found/.test(msg) ? "warn" : "info");
+          toast(msg, /no stored|not found|not in the list|RGB composite/.test(msg) ? "warn" : "info");
         });
       out.push(
         section("Data", [
@@ -6286,6 +6874,12 @@ function itemProps(item) {
           })),
         ]),
         section("LaTeX & Symbols", [templateButtons(S.ui.textArea, { mathWrap: true }), symbolCatalog(S.ui.textArea, { mathWrap: true })], false),
+        section("Text effects", [
+          row("Effect", fSelect(item, P("effect"), Object.entries(TEXT_EFFECTS), { after: () => { refreshCanvas(); renderProps(); } })),
+          p.effect && p.effect !== "none" && p.effect !== "lift" && p.effect !== "hollow" ? row("Effect color", fColor(item, P("effectColor"))) : null,
+          p.effect && p.effect !== "none" && p.effect !== "highlight" ? row("Strength", fRange(item, P("effectStrength"), 0, 100, 5)) : null,
+          row("Decoration", fSeg(item, P("decoration"), [["none", "None"], ["underline", "<u>U</u>"], ["line-through", "<s>S</s>"], ["overline", "<span style='text-decoration:overline'>O</span>"]])),
+        ], !!(p.effect && p.effect !== "none")),
         section("Halo, Background & Border", [
           fCheck(item, P("halo"), "Text halo / outline"),
           el("div", { class: `${NS}-grid2` }, row("Halo color", fColor(item, P("haloColor"))), row("Halo width", fNum(item, P("haloWidth"), { min: 0, step: 0.1, unit: "mm" }))),
@@ -6303,12 +6897,16 @@ function itemProps(item) {
           p.src ? el("img", { src: p.src, class: `${NS}-imgprev` }) : el("p", { class: `${NS}-muted` }, "No image yet."),
           el("div", { class: `${NS}-btnrow` }, btn("Choose image…", () => pickImage(item), { iconName: "image", primary: true }), p.src ? btn("Remove", () => commit(() => (p.src = ""))) : null),
           row("Fit", fSelect(item, P("fit"), [["contain", "Contain (keep ratio)"], ["cover", "Cover (crop)"], ["fill", "Stretch"]])),
+          row("Mask", fSelect(item, P("mask"), [["none", "Rectangle"], ["circle", "Circle / ellipse"], ["hexagon", "Hexagon"], ["star", "Star"], ["heart", "Heart"], ["blob", "Blob"]])),
           row("Opacity", fRange(item, P("opacity"), 0, 1, 0.05)),
           fCheck(item, P("border.show"), "Border"),
           el("div", { class: `${NS}-grid2` }, row("Color", fColor(item, P("border.color"))), row("Width", fNum(item, P("border.width"), { min: 0, step: 0.05, unit: "mm" }))),
           row("Corner radius", fNum(item, P("border.radius"), { min: 0, step: 0.5, unit: "mm" })),
         ]),
+        imageAdjustSection(item),
       );
+      break;
+    case "__image_adjust__":
       break;
     case "shape":
       out.push(
@@ -6766,7 +7364,13 @@ function renderQuickBar() {
     b.addEventListener("click", () => liveSet(item, `${fp}.${key}`, !getPath(item, `${fp}.${key}`), rerender));
     return b;
   };
-  const parts = [el("span", { class: `${NS}-qlabel` }, ITEM_TYPES[item.type].label), fam, size, tog("bold", "<b>B</b>", "Bold"), tog("italic", "<i>I</i>", "Italic"), fColor(item, `${fp}.color`, { after: () => refreshCanvas() })];
+  const parts = [el("span", { class: `${NS}-qlabel` }, ITEM_TYPES[item.type].label), fam, size, tog("bold", "<b>B</b>", "Bold"), tog("italic", "<i>I</i>", "Italic")];
+  if (item.type === "text") {
+    const u = el("button", { type: "button", class: `${NS}-qbtn ${item.props.decoration === "underline" ? "active" : ""}`, title: "Underline", html: "<u>U</u>" });
+    u.addEventListener("click", () => liveSet(item, "props.decoration", item.props.decoration === "underline" ? "none" : "underline", rerender));
+    parts.push(u);
+  }
+  parts.push(fColor(item, `${fp}.color`, { after: () => refreshCanvas() }));
   if (item.type === "text" || item.type === "table") {
     const alignKey = "props.align";
     for (const [v, ic] of [["left", "alL"], ["center", "alC"], ["right", "alR"]]) {
@@ -6785,10 +7389,14 @@ function renderQuickBar() {
       el("button", { type: "button", class: `${NS}-qbtn`, title: "Subscript (LaTeX $_{}$)", html: "x<sub>2</sub>", onclick: wrapMath("$_{|}$") }),
       el("button", { type: "button", class: `${NS}-qbtn`, title: "Insert formula $…$", html: "∑", onclick: wrapMath("$|$") }),
     );
+    const ef = el("select", { class: `${NS}-input ${NS}-qcase`, title: "Text effect" }, ...Object.entries(TEXT_EFFECTS).map(([v, l]) => el("option", { value: v, selected: (item.props.effect || "none") === v }, l)));
+    ef.addEventListener("change", () => liveSet(item, "props.effect", ef.value, rerender));
+    parts.push(ef);
     const cs = el("select", { class: `${NS}-input ${NS}-qcase`, title: "Letter case" }, ...[["none", "Aa"], ["upper", "AA"], ["lower", "aa"], ["title", "Ab"]].map(([v, l]) => el("option", { value: v, selected: item.props.textCase === v }, l)));
     cs.addEventListener("change", () => liveSet(item, "props.textCase", cs.value, rerender));
     parts.push(cs);
   }
+  parts.push(...commonQuickActions(item));
   host.append(...parts);
 }
 
@@ -6914,8 +7522,20 @@ function shapeQuickTools(item) {
   const fx = itemFx(item);
   const sh = el("button", { type: "button", class: `${NS}-qbtn ${fx.shadow.on ? "active" : ""}`, title: "Drop shadow", html: icon("fx", 15) });
   sh.addEventListener("click", () => liveSet(fx, "shadow.on", !fx.shadow.on, rer));
-  parts.push(sh);
+  parts.push(sh, ...commonQuickActions(item));
   return parts;
+}
+
+// flip / duplicate / lock / delete buttons shared by the floating toolbars
+function commonQuickActions(item) {
+  return [
+    el("span", { class: `${NS}-qsep` }),
+    iconBtn("flipH", "Flip horizontally", () => commit(() => (item.flipX = !item.flipX)), `${NS}-qbtn`),
+    iconBtn("flipV", "Flip vertically", () => commit(() => (item.flipY = !item.flipY)), `${NS}-qbtn`),
+    iconBtn("copy", "Duplicate (Ctrl+D)", () => duplicateSelection(), `${NS}-qbtn`),
+    iconBtn(item.locked ? "lock" : "unlock", item.locked ? "Unlock" : "Lock", () => commit(() => (item.locked = !item.locked)), `${NS}-qbtn`),
+    iconBtn("trash", "Delete", () => deleteSelection(), `${NS}-qbtn`),
+  ];
 }
 // ---------------------------------------------------------------- page size catalog + units
 // Sizes are stored in millimetres; pixel sizes convert at the page's px-per-inch.
@@ -7017,7 +7637,8 @@ function composePageSVG(mapImages, { background = "page" } = {}) {
     const fx = fxExportParts(item, index, mapImages);
     if (fx.defs) s += `<defs>${fx.defs}</defs>`;
     s += fx.backdrop;
-    const t = `translate(${item.x} ${item.y})${item.rot ? ` rotate(${item.rot} ${item.w / 2} ${item.h / 2})` : ""}`;
+    const flip = item.flipX || item.flipY ? ` translate(${item.flipX ? item.w : 0} ${item.flipY ? item.h : 0}) scale(${item.flipX ? -1 : 1} ${item.flipY ? -1 : 1})` : "";
+    const t = `translate(${item.x} ${item.y})${item.rot ? ` rotate(${item.rot} ${item.w / 2} ${item.h / 2})` : ""}${flip}`;
     s += `<g${fx.filterAttr} opacity="${item.opacity ?? 1}"><g transform="${t}"><svg x="0" y="0" width="${item.w}" height="${item.h}" viewBox="0 0 ${item.w} ${item.h}" overflow="visible">`;
     s += renderItem(item, { export: true, mapImages });
     s += `</svg></g></g>`;

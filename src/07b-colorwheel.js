@@ -207,7 +207,13 @@ function renderQuickBar() {
     b.addEventListener("click", () => liveSet(item, `${fp}.${key}`, !getPath(item, `${fp}.${key}`), rerender));
     return b;
   };
-  const parts = [el("span", { class: `${NS}-qlabel` }, ITEM_TYPES[item.type].label), fam, size, tog("bold", "<b>B</b>", "Bold"), tog("italic", "<i>I</i>", "Italic"), fColor(item, `${fp}.color`, { after: () => refreshCanvas() })];
+  const parts = [el("span", { class: `${NS}-qlabel` }, ITEM_TYPES[item.type].label), fam, size, tog("bold", "<b>B</b>", "Bold"), tog("italic", "<i>I</i>", "Italic")];
+  if (item.type === "text") {
+    const u = el("button", { type: "button", class: `${NS}-qbtn ${item.props.decoration === "underline" ? "active" : ""}`, title: "Underline", html: "<u>U</u>" });
+    u.addEventListener("click", () => liveSet(item, "props.decoration", item.props.decoration === "underline" ? "none" : "underline", rerender));
+    parts.push(u);
+  }
+  parts.push(fColor(item, `${fp}.color`, { after: () => refreshCanvas() }));
   if (item.type === "text" || item.type === "table") {
     const alignKey = "props.align";
     for (const [v, ic] of [["left", "alL"], ["center", "alC"], ["right", "alR"]]) {
@@ -226,10 +232,14 @@ function renderQuickBar() {
       el("button", { type: "button", class: `${NS}-qbtn`, title: "Subscript (LaTeX $_{}$)", html: "x<sub>2</sub>", onclick: wrapMath("$_{|}$") }),
       el("button", { type: "button", class: `${NS}-qbtn`, title: "Insert formula $…$", html: "∑", onclick: wrapMath("$|$") }),
     );
+    const ef = el("select", { class: `${NS}-input ${NS}-qcase`, title: "Text effect" }, ...Object.entries(TEXT_EFFECTS).map(([v, l]) => el("option", { value: v, selected: (item.props.effect || "none") === v }, l)));
+    ef.addEventListener("change", () => liveSet(item, "props.effect", ef.value, rerender));
+    parts.push(ef);
     const cs = el("select", { class: `${NS}-input ${NS}-qcase`, title: "Letter case" }, ...[["none", "Aa"], ["upper", "AA"], ["lower", "aa"], ["title", "Ab"]].map(([v, l]) => el("option", { value: v, selected: item.props.textCase === v }, l)));
     cs.addEventListener("change", () => liveSet(item, "props.textCase", cs.value, rerender));
     parts.push(cs);
   }
+  parts.push(...commonQuickActions(item));
   host.append(...parts);
 }
 
@@ -355,6 +365,18 @@ function shapeQuickTools(item) {
   const fx = itemFx(item);
   const sh = el("button", { type: "button", class: `${NS}-qbtn ${fx.shadow.on ? "active" : ""}`, title: "Drop shadow", html: icon("fx", 15) });
   sh.addEventListener("click", () => liveSet(fx, "shadow.on", !fx.shadow.on, rer));
-  parts.push(sh);
+  parts.push(sh, ...commonQuickActions(item));
   return parts;
+}
+
+// flip / duplicate / lock / delete buttons shared by the floating toolbars
+function commonQuickActions(item) {
+  return [
+    el("span", { class: `${NS}-qsep` }),
+    iconBtn("flipH", "Flip horizontally", () => commit(() => (item.flipX = !item.flipX)), `${NS}-qbtn`),
+    iconBtn("flipV", "Flip vertically", () => commit(() => (item.flipY = !item.flipY)), `${NS}-qbtn`),
+    iconBtn("copy", "Duplicate (Ctrl+D)", () => duplicateSelection(), `${NS}-qbtn`),
+    iconBtn(item.locked ? "lock" : "unlock", item.locked ? "Unlock" : "Lock", () => commit(() => (item.locked = !item.locked)), `${NS}-qbtn`),
+    iconBtn("trash", "Delete", () => deleteSelection(), `${NS}-qbtn`),
+  ];
 }
