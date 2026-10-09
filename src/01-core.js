@@ -8,7 +8,7 @@
 
 const PLUGIN_ID = "layout-composer";
 const PLUGIN_NAME = "Layout Composer";
-const PLUGIN_VERSION = "1.8.1";
+const PLUGIN_VERSION = "1.8.2";
 const NS = "glc"; // CSS class prefix
 const STORE_KEY = "glc:layouts:v1";
 const PX96 = 96 / 25.4; // CSS px per mm at 96 dpi
@@ -198,6 +198,31 @@ function wrapText(text, font, maxWidthMm) {
   return out;
 }
 // Numeric weight of a font object (100…900); `bold` is kept for older layouts.
+// Start one of the bundled third-party libraries (VENDOR_SRC, added by tools/build.py)
+// as a classic script from a Blob URL. Nothing is downloaded from another host.
+const vendorLoads = {};
+function loadVendorScript(name) {
+  if (!vendorLoads[name]) {
+    vendorLoads[name] = new Promise((resolve, reject) => {
+      const code = typeof VENDOR_SRC !== "undefined" ? VENDOR_SRC[name] : null;
+      if (!code) return reject(new Error(`The ${name} library is not bundled in this build`));
+      const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+      const sc = document.createElement("script");
+      sc.src = url;
+      sc.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      sc.onerror = () => {
+        URL.revokeObjectURL(url);
+        vendorLoads[name] = null;
+        reject(new Error(`The ${name} library could not be started`));
+      };
+      document.head.appendChild(sc);
+    });
+  }
+  return vendorLoads[name];
+}
 function fontWeight(f) {
   return f.weight || (f.bold ? 700 : 400);
 }

@@ -55,16 +55,11 @@ let jsPdfPromise = null;
 function loadJsPDF() {
   if (window.jspdf?.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
   if (!jsPdfPromise) {
-    jsPdfPromise = new Promise((resolve, reject) => {
-      const sc = document.createElement("script");
-      sc.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-      sc.onload = () => (window.jspdf?.jsPDF ? resolve(window.jspdf.jsPDF) : reject(new Error("jsPDF is not available")));
-      sc.onerror = () => {
-        jsPdfPromise = null;
-        reject(new Error("Could not load the PDF library (check your internet connection)"));
-      };
-      document.head.appendChild(sc);
+    jsPdfPromise = loadVendorScript("jspdf").then(() => {
+      if (!window.jspdf?.jsPDF) throw new Error("jsPDF is not available");
+      return window.jspdf.jsPDF;
     });
+    jsPdfPromise.catch(() => (jsPdfPromise = null));
   }
   return jsPdfPromise;
 }
@@ -216,24 +211,17 @@ function projectName() {
 }
 
 // ---------------------------------------------------------------- vector PDF (svg2pdf)
-const SVG2PDF_URL = "https://cdn.jsdelivr.net/npm/svg2pdf.js@2.2.4/dist/svg2pdf.umd.min.js";
 let svg2pdfPromise = null;
 function loadSvg2pdf() {
   if (window.svg2pdf?.svg2pdf) return Promise.resolve(window.svg2pdf.svg2pdf);
   if (!svg2pdfPromise) {
-    svg2pdfPromise = loadJsPDF().then(
-      () =>
-        new Promise((resolve, reject) => {
-          const sc = document.createElement("script");
-          sc.src = SVG2PDF_URL;
-          sc.onload = () => (window.svg2pdf?.svg2pdf ? resolve(window.svg2pdf.svg2pdf) : reject(new Error("svg2pdf not available")));
-          sc.onerror = () => {
-            svg2pdfPromise = null;
-            reject(new Error("Could not load the vector PDF library (check the internet connection)"));
-          };
-          document.head.appendChild(sc);
-        }),
-    );
+    svg2pdfPromise = loadJsPDF()
+      .then(() => loadVendorScript("svg2pdf"))
+      .then(() => {
+        if (!window.svg2pdf?.svg2pdf) throw new Error("svg2pdf is not available");
+        return window.svg2pdf.svg2pdf;
+      });
+    svg2pdfPromise.catch(() => (svg2pdfPromise = null));
   }
   return svg2pdfPromise;
 }

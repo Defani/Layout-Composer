@@ -1,8 +1,7 @@
 // ---------------------------------------------------------------- LaTeX (MathJax)
 // Formulas render through MathJax 3 (SVG output, no font cache) so each formula
 // becomes self-contained vector paths that work on screen, in PNG/PDF and in SVG.
-// MathJax loads on first use; until then the plain text is drawn as a stand-in.
-const MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js";
+// MathJax (bundled) starts on first use; until then the plain text is drawn as a stand-in.
 const MATH = { promise: null, ready: false, failed: false, cache: new Map() };
 
 function loadMathJax() {
@@ -14,23 +13,22 @@ function loadMathJax() {
       return resolve();
     }
     if (!window.MathJax) {
-      window.MathJax = { svg: { fontCache: "none" }, startup: { typeset: false }, options: { enableMenu: false } };
+      // no menu, no extra components: MathJax never fetches anything
+      window.MathJax = { loader: { load: [] }, svg: { fontCache: "none" }, startup: { typeset: false }, options: { enableMenu: false } };
     }
-    const sc = document.createElement("script");
-    sc.src = MATHJAX_URL;
-    sc.async = true;
-    sc.onload = () =>
-      (window.MathJax.startup?.promise || Promise.resolve()).then(() => {
-        MATH.ready = !!window.MathJax?.tex2svg;
-        if (MATH.ready) resolve();
-        else reject(new Error("MathJax did not start"));
-      });
-    sc.onerror = () => {
-      MATH.failed = true;
-      MATH.promise = null;
-      reject(new Error("Could not load MathJax (check the internet connection)"));
-    };
-    document.head.appendChild(sc);
+    loadVendorScript("mathjax").then(
+      () =>
+        (window.MathJax.startup?.promise || Promise.resolve()).then(() => {
+          MATH.ready = !!window.MathJax?.tex2svg;
+          if (MATH.ready) resolve();
+          else reject(new Error("MathJax did not start"));
+        }),
+      (e) => {
+        MATH.failed = true;
+        MATH.promise = null;
+        reject(e);
+      },
+    );
   });
   MATH.promise.then(
     () => {

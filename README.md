@@ -2,7 +2,7 @@
 
 **Cartographic layout designer for [GeoLibre](https://plugins.geolibre.app)**. Design publication-ready maps with map frames, coordinate grids, legends, matplotlib-style color bars, attribute tables and charts from your layers, LaTeX formulas, icon catalogs, GeoPDF export and QGIS template exchange, without leaving GeoLibre.
 
-![Version](https://img.shields.io/badge/version-1.8.1-0d99ff)
+![Version](https://img.shields.io/badge/version-1.8.2-0d99ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![GeoLibre plugin](https://img.shields.io/badge/GeoLibre-plugin-4e8a2e)
 ![Category: Cartography](https://img.shields.io/badge/category-Cartography-6a3d9a)
@@ -102,7 +102,7 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 
 ## Install
 
-1. Download `layout-composer-1.8.1.zip` from [Releases](https://github.com/Defani/Layout-Composer/releases) (or build it with `sh build.sh`).
+1. Download `layout-composer-1.8.2.zip` from [Releases](https://github.com/Defani/Layout-Composer/releases) (or build it with `sh build.sh             # or: python tools/build.py --release`).
 2. GeoLibre Desktop: copy the zip into `%APPDATA%\org.geolibre.desktop\plugins` (Windows) and restart GeoLibre — or install it from **Manage Plugins** in Settings once it is in the registry.
 3. Enable **Layout Composer** in the **Plugins** menu, then open it with **Open Layout Composer** in the Layout menu or the layout button at the top right of the map.
 
@@ -257,7 +257,7 @@ The example layout follows **Keputusan Menteri LHK No. 399 Tahun 2024** (Spesifi
 ## Development
 
 ```text
-src/            sources, concatenated in order into plugin/index.js
+src/            sources (JavaScript and style.css), bundled and minified into plugin/
   01-core.js        state, history, storage, variables
   02-symbols.js     north arrows, shapes, scale bar styles
   03-geo.js         Web Mercator, UTM, grids
@@ -274,8 +274,9 @@ src/            sources, concatenated in order into plugin/index.js
   08-export.js      PNG/JPG/PDF/vector PDF/GeoPDF/SVG
   08b-qpt.js        QGIS .qpt template import and export
   09-plugin.js      GeoLibre plugin entry
-plugin/         plugin.json, index.js (built), style.css
-tools/          build_catalog.py (groups Maki/Temaki icons by type), build_material.py (Material Symbols by category), screenshots.py (README images)
+plugin/         plugin.json, LICENSE, NOTICE.md; index.js and style.css are built
+vendor/         jsPDF, svg2pdf.js and MathJax as released, embedded in the bundle
+tools/          build.py (bundle, minify, zip), build_catalog.py (groups Maki/Temaki icons by type), build_material.py (Material Symbols by category), screenshots.py (README images)
 test/           index.html and klhk.html harnesses (MapLibre + mock GeoLibre API)
 examples/       sample layouts
 ```
@@ -284,7 +285,7 @@ examples/       sample layouts
 sh build.sh
 ```
 
-Builds `plugin/index.js` and `layout-composer.zip`. To test without GeoLibre, serve the folder (`python -m http.server`) and open `test/index.html`.
+Builds a single minified ES module (`plugin/index.js`, esbuild) and `plugin/style.css`, then zips them as `layout-composer.zip`; `--release` also writes `dist/layout-composer-<version>.zip` with its SHA-256. Put the esbuild binary on `PATH`, in `tools/bin/`, or set `ESBUILD`. The plugin loads no code from other hosts: jsPDF, svg2pdf.js and MathJax are embedded and started from a Blob URL the first time they are needed. To test without GeoLibre, serve the folder (`python -m http.server`) and open `test/index.html`.
 
 ## Licenses and third-party notices
 
@@ -293,9 +294,9 @@ Builds `plugin/index.js` and `layout-composer.zip`. To test without GeoLibre, se
 | Component | Used for | Source | License |
 |---|---|---|---|
 | MapLibre GL JS | Map rendering (provided by the GeoLibre host, not bundled) | [maplibre.org](https://maplibre.org) | BSD-3-Clause |
-| MathJax 3.2.2 | Renders LaTeX as SVG (loaded on first use) | [mathjax.org](https://www.mathjax.org), jsDelivr | Apache-2.0 |
-| jsPDF 2.5.1 | PDF / GeoPDF output (loaded on export) | [github.com/parallax/jsPDF](https://github.com/parallax/jsPDF), cdnjs | MIT |
-| svg2pdf.js 2.2.4 | Vector PDF (loaded on export) | [github.com/yWorks/svg2pdf.js](https://github.com/yWorks/svg2pdf.js), jsDelivr | MIT |
+| MathJax 3.2.2 | Renders LaTeX as SVG (bundled, started on first use) | [mathjax.org](https://www.mathjax.org) | Apache-2.0 |
+| jsPDF 2.5.1 | PDF / GeoPDF output (bundled, started on export) | [github.com/parallax/jsPDF](https://github.com/parallax/jsPDF) | MIT |
+| svg2pdf.js 2.2.4 | Vector PDF (bundled, started on export) | [github.com/yWorks/svg2pdf.js](https://github.com/yWorks/svg2pdf.js) | MIT |
 | Maki 8.2.0 icons | Icon catalog | [github.com/mapbox/maki](https://github.com/mapbox/maki) | CC0-1.0 |
 | Temaki 5.13.0 icons | Icon catalog | [github.com/rapideditor/temaki](https://github.com/rapideditor/temaki) | CC0-1.0 |
 | Material Symbols (@material-symbols/svg-400 0.47.4) | Icon catalog, Google tab (loaded from jsDelivr on use) | [fonts.google.com/icons](https://fonts.google.com/icons), [github.com/google/material-design-icons](https://github.com/google/material-design-icons) | Apache-2.0 |
