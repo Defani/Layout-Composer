@@ -219,6 +219,42 @@ async function run() {
     document.title = "READY";
     return;
   }
+  if (name === "ai") {
+    // a stand-in for the Live MCP Bridge chat hub
+    const hist = [];
+    const subs = new Set();
+    let typing = false;
+    const snap = () => ({ history: hist.slice(), listening: true, typing, queued: 0, connected: true, status: "connected" });
+    const notify = () => subs.forEach((f) => f(snap()));
+    window.__geolibreLive = {
+      version: "mock",
+      snapshot: snap,
+      subscribe(fn) {
+        subs.add(fn);
+        fn(snap());
+        return () => subs.delete(fn);
+      },
+      send(text, ctx) {
+        hist.push({ role: "user", text, time: "10:02", state: "read", via: ctx.source });
+        typing = true;
+        notify();
+        setTimeout(() => {
+          typing = false;
+          hist.push({ role: "bot", text: "Done: I added a **legend** under the map and linked it to *Map 1*. Want the title in bold and centred too?", status: "done", time: "10:02", via: ctx.source });
+          notify();
+        }, 500);
+        return { id: "m1" };
+      },
+      renderChart() {},
+    };
+    await sleep(3500);
+    byTitle("Ask AI").click();
+    await sleep(300);
+    const ta = q(".glc-aiinput");
+    ta.value = "Add a legend under the map";
+    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await sleep(900);
+  }
   if (name === "templates") byTitle("New layout / templates").click();
   await sleep(2500);
   document.title = "READY";

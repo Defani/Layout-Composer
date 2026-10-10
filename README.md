@@ -2,7 +2,7 @@
 
 **Cartographic layout designer for [GeoLibre](https://plugins.geolibre.app)**. Design publication-ready maps with map frames, coordinate grids, legends, matplotlib-style color bars, attribute tables and charts from your layers, LaTeX formulas, icon catalogs, GeoPDF export and QGIS template exchange, without leaving GeoLibre.
 
-![Version](https://img.shields.io/badge/version-1.8.2-0d99ff)
+![Version](https://img.shields.io/badge/version-1.9.0-0d99ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![GeoLibre plugin](https://img.shields.io/badge/GeoLibre-plugin-4e8a2e)
 ![Category: Cartography](https://img.shields.io/badge/category-Cartography-6a3d9a)
@@ -61,6 +61,7 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 | **Drawing** | Polyline, polygon, Bézier pen (click = corner, drag = curve), freehand (simplified + smoothed), arrow line; 33 shapes; fills: solid, gradient, hatch patterns (/ \ × − \| + ·); 6 dash styles. |
 | **Symbols** | Point markers with labels (12 symbols); **icon catalog** with Maki (215) and Temaki (557) icons grouped by type (water, terrain, vegetation, transport, public services, health, education, religion, tourism, sports, utilities, hazards…) and **Google Material Symbols (3,912 icons in 17 categories: maps, travel, transit, home, business…)** in outlined, rounded or sharp style, regular or filled. The catalog searches as you type and loads icons in batches, and placed icons are stored in the layout so they work offline. |
 | **Effects** | Drop shadow and frosted glass (blurs the map behind; reproduced in exports) on any item. |
+| **Ask AI** | A chat bar under the canvas (✨ in the top bar). Messages go to your AI client through the **Live MCP Bridge** plugin, with the open layout described (page, items, selection), and replies come back in the same bar. The AI can change the layout through `window.LayoutComposer.ai` (`describe`, `add`, `update`, `remove`, `select`, `page`, `undo`, `exportDialog`). Without the bridge the bar only explains how to enable it; nothing is sent anywhere else. |
 | **Editing** | Minimal desktop-style workspace: every tool sits in the top bar (main menu and layout picker on the left; tools, map elements and insert menus in the centre; zoom, save and export on the right), outline icons that follow the light or dark theme, a full-height Layers panel, and an align, distribute and order bar at the top of the properties panel. Item properties grouped into Content, Style, Grid and Arrange tabs (or All); top-bar insert menus (Text, Draw, Shape, Image, Symbols, Scale bar), floating contextual toolbar for text and shapes, map navigation in the map panel (zoom in/out, fit layers, zoom to layer, previous/next extent), Move-content tool, collapsible left/right docks, item search, Figma-style selection (handles, rotation knob, size badge), hover outlines, multi-select, groups, align/distribute, lock/hide, rename, context menu, undo/redo, copy/paste, layers list. Round color wheel with brightness, hex, eyedropper, palette and recent colors. Light theme and soft neutral dark theme that follow GeoLibre.; **precise position and size** in mm, cm, in, pt or px, with a QGIS-style 9-point reference point, lock aspect ratio and ±90° rotation buttons. |
 | **Grid design** | Canvas grid with spacing, major lines every N, lines or dots, color and opacity; **layout grid** like Figma (columns and rows with gutters and margin, shown on screen only, items snap to the edges); ruler guides plus guides at an exact position, guide color; adjustable snap distance and arrow-key nudge steps. |
 | **Layouts & templates** | Several layouts per project, autosave, save/open `.layout.json`, **save your own templates** and start new layouts from them (maps re-framed on the current GeoLibre view). |
@@ -83,8 +84,8 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 | **Google Material Symbols in the icon catalog** | **Font picker with every Google Font** |
 | ![Export window with progress and steps](docs/img/ui-export-progress.png) | ![Grid design: canvas grid, layout grid and guides](docs/img/ui-grid-design.png) |
 | **Export window: progress from left to right, with steps** | **Grid design: canvas grid, layout grid, guides** |
-| ![Precise position and size](docs/img/ui-position.png) | |
-| **Precise position and size with reference point and units** | |
+| ![Precise position and size](docs/img/ui-position.png) | ![Ask AI chat bar](docs/img/ui-ai-chat.png) |
+| **Precise position and size with reference point and units** | **Ask AI chat bar** |
 | ![LaTeX, dual scale bar, hatch & gradient fills, frosted glass](docs/img/ui-features-dark.png) | ![Shape toolbar](docs/img/ui-shape-toolbar.png) |
 | **LaTeX, dual scale bar, hatch & gradient fills, frosted glass** | **Shape toolbar** |
 | ![Color wheel](docs/img/ui-color-wheel.png) | ![LaTeX formula and symbol catalog](docs/img/ui-latex.png) |

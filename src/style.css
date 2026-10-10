@@ -3227,3 +3227,217 @@ html.dark .glc-root .glc-toast,
 .glc-quick .glc-qop {
   width: 92px;
 }
+
+/* ================================================================ AI chat bar */
+.glc-aichat {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 100020;
+  width: min(560px, calc(100% - 48px));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--glc-border);
+  border-radius: 14px;
+  background: var(--glc-bg);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.08), 0 12px 32px rgb(0 0 0 / 0.16);
+  overflow: hidden;
+}
+.glc-aipanel {
+  display: none;
+  flex-direction: column;
+  border-bottom: 1px solid var(--glc-border);
+}
+.glc-aichat.open .glc-aipanel {
+  display: flex;
+}
+.glc-aihead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--glc-border);
+}
+.glc-aititle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--glc-sel);
+  flex: none;
+}
+.glc-aititle b {
+  color: var(--glc-fg);
+  font-weight: 600;
+}
+.glc-aistatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  color: var(--glc-muted-fg);
+  font-size: 11px;
+}
+.glc-aistatus span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glc-aistatus i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: #9ca3af;
+}
+.glc-aistatus.on i {
+  background: #14ae5c;
+}
+.glc-aistatus.busy i {
+  background: var(--glc-sel);
+  animation: glc-pulse 1s ease-in-out infinite;
+}
+.glc-aistatus.idle i {
+  background: #f5a623;
+}
+.glc-aistatus.off i {
+  background: #f24822;
+}
+@keyframes glc-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.glc-aicollapse {
+  transform: none;
+}
+.glc-ailist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(42vh, 380px);
+  min-height: 120px;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+.glc-aiempty {
+  margin: auto 0;
+  color: var(--glc-muted-fg);
+  font-size: 12px;
+}
+.glc-aiempty b {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--glc-fg);
+}
+.glc-aiempty p {
+  margin: 0;
+}
+.glc-aimsg {
+  max-width: 85%;
+  padding: 8px 11px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  word-wrap: break-word;
+}
+.glc-aimsg small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  opacity: 0.65;
+}
+.glc-aimsg.me {
+  align-self: flex-end;
+  background: var(--glc-sel);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.glc-aimsg.ai {
+  align-self: flex-start;
+  background: var(--glc-muted);
+  color: var(--glc-fg);
+  border-bottom-left-radius: 4px;
+}
+.glc-aimsg.sys {
+  align-self: center;
+  max-width: 100%;
+  background: transparent;
+  color: var(--glc-muted-fg);
+  font-size: 11px;
+  text-align: center;
+}
+.glc-aimsg code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.08);
+  font-size: 11.5px;
+}
+.glc-aichart {
+  margin-top: 6px;
+  min-width: 260px;
+}
+.glc-aityping {
+  display: flex;
+  gap: 4px;
+  padding: 10px 12px;
+}
+.glc-aityping span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--glc-muted-fg);
+  animation: glc-pulse 1.2s ease-in-out infinite;
+}
+.glc-aityping span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.glc-aityping span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.glc-aibar {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 6px 6px 6px 12px;
+}
+.glc-aiinput {
+  flex: 1;
+  min-height: 34px;
+  max-height: 120px;
+  padding: 8px 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--glc-fg);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.glc-aiinput::placeholder {
+  color: var(--glc-muted-fg);
+}
+.glc-aiinput:disabled {
+  opacity: 0.6;
+}
+.glc-aisend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 0;
+  border-radius: 10px;
+  background: var(--glc-sel);
+  color: #fff;
+  cursor: pointer;
+}
+.glc-aisend:hover {
+  filter: brightness(1.08);
+}
+.glc-aitoggle.on {
+  color: var(--glc-sel);
+}

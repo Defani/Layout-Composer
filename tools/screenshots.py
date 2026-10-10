@@ -32,6 +32,7 @@ SHOTS = [
     ("index.html", "fonts", "ui-fonts.png"),
     ("index.html", "paper", "ui-page-sizes.png"),
     ("index.html", "export", "ui-export.png"),
+    ("index.html", "ai", "ui-ai-chat.png"),
     ("klhk.html", "progress", "ui-export-progress.png"),
     ("index.html", "position", "ui-position.png"),
     ("index.html", "grid", "ui-grid-design.png"),

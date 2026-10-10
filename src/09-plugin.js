@@ -61,6 +61,7 @@ function openComposer() {
   setTool("select");
   renderAll();
   ensureDocFonts();
+  connectAiChat();
   requestAnimationFrame(() => fitPage());
   S.root.focus({ preventScroll: true });
 }
@@ -120,7 +121,7 @@ export const plugin = {
       ],
     });
     if (typeof dispose === "function") S.disposers.push(dispose);
-    window.LayoutComposer = window.GeoLibreLayoutComposer = { open: openComposer, close: closeComposer, version: PLUGIN_VERSION, _state: S, _debug: { embeddedFontCss, docFontFamilies, ensureFont, layoutToQpt, qptToLayout, aggregate, legendFromMap, glLayers, mainMap, composePageSVG, renderMapImage, rasterize, addItemFromTool, select, renderAll, loadMathJax, geoFrames, geoRegister, saveVectorPdf, findItem } };
+    window.LayoutComposer = window.GeoLibreLayoutComposer = { open: openComposer, close: closeComposer, version: PLUGIN_VERSION, ai: aiApi(), _state: S, _debug: { embeddedFontCss, docFontFamilies, ensureFont, layoutToQpt, qptToLayout, aggregate, legendFromMap, glLayers, mainMap, composePageSVG, renderMapImage, rasterize, addItemFromTool, select, renderAll, loadMathJax, geoFrames, geoRegister, saveVectorPdf, findItem } };
   },
   deactivate(app) {
     closeComposer();
