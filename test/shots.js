@@ -16,7 +16,7 @@ async function waitFor(fn, timeout = 30000) {
 }
 
 async function loadExample() {
-  const data = await fetch("../examples/kawasan-hutan-aceh-klhk.layout.json").then((r) => r.json());
+  const data = await fetch("../examples/kawasan-hutan-aceh.layout.json").then((r) => r.json());
   const doc = data.layout;
   localStorage.setItem("glc:layouts:v1", JSON.stringify({ active: doc.id, layouts: { [doc.id]: doc } }));
 }
@@ -246,9 +246,10 @@ async function run() {
         return { id: "m1" };
       },
       renderChart() {},
+      profile: { user: { name: "Defani", avatar: "" }, bot: { name: "Claude", avatar: "" } },
     };
     await sleep(3500);
-    byTitle("Ask AI").click();
+    if (!q(".glc-aichat.open")) byTitle("Ask AI").click();
     await sleep(300);
     const ta = q(".glc-aiinput");
     ta.value = "Add a legend under the map";

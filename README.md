@@ -15,14 +15,13 @@
 ![Temaki](https://img.shields.io/badge/icons-Temaki%20CC0-1f78b4)
 ![Material Symbols](https://img.shields.io/badge/icons-Material%20Symbols%20Apache--2.0-4285F4?logo=google&logoColor=white)
 ![Google Fonts](https://img.shields.io/badge/fonts-Google%20Fonts%20(2000%2B)-4285F4?logo=googlefonts&logoColor=white)
-![KLHK layout](https://img.shields.io/badge/layout-SK%20MENLHK%20399%2F2024-02ad00)
 ![QGIS templates](https://img.shields.io/badge/QGIS-.qpt%20import%20%2F%20export-589632?logo=qgis&logoColor=white)
 
 Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani/Layout-Composer>
 
 ![Layout Composer editor](docs/img/ui-overview.png)
 
-*The editor with a forest-area map of Aceh laid out following SK MENLHK 399/2024. The layout file is in [`examples/`](examples/kawasan-hutan-aceh-klhk.layout.json); the exported page is shown under [KLHK cartographic rules](#klhk-cartographic-rules).*
+*The editor with a forest-area map of Aceh. The layout file is in [`examples/`](examples/kawasan-hutan-aceh.layout.json); the exported page is shown under [Example map](#example-map).*
 
 ---
 
@@ -35,7 +34,7 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 - [Architecture](#architecture)
 - [Export pipeline](#export-pipeline)
 - [Layout data model](#layout-data-model)
-- [KLHK cartographic rules](#klhk-cartographic-rules)
+- [Example map](#example-map)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Development](#development)
 - [Licenses and third-party notices](#licenses-and-third-party-notices)
@@ -46,7 +45,7 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 
 | Area | What you get |
 |---|---|
-| **Page** | Size catalog grouped by type — ISO A0–A6, ISO B0–B5, Letter/Legal/Tabloid/ANSI/Arch, F4, KLHK minimum sizes (SK 399/2024 Table 1), posters, photo prints, presentation (16:9, 4:3, 16:10, 4K) and social media (Instagram post/portrait/story, TikTok/Reels, Facebook, X, LinkedIn, YouTube, Pinterest, WhatsApp). Units mm · cm · in · pt · px (px at a chosen pixels-per-inch), orientation, single/double neatline, margins, canvas grid, ruler guides, smart snapping. |
+| **Page** | Size catalog grouped by type — ISO A0–A6, ISO B0–B5, Letter/Legal/Tabloid/ANSI/Arch, F4, Indonesian minimum sizes per map scale, posters, photo prints, presentation (16:9, 4:3, 16:10, 4K) and social media (Instagram post/portrait/story, TikTok/Reels, Facebook, X, LinkedIn, YouTube, Pinterest, WhatsApp). Units mm · cm · in · pt · px (px at a chosen pixels-per-inch), orientation, single/double neatline, margins, canvas grid, ruler guides, smart snapping. |
 | **Map frames** | Live MapLibre map per frame, WYSIWYG at print scale, pan/zoom content (double-click), set or lock scale 1:n, rotation, zoom to layer, per-frame basemap (same as GeoLibre, streets, light, bright, satellite, topographic, none), **GeoLibre capture** mode that includes raster/COG layers.; **frame shapes**: rectangle, rounded, circle/ellipse, triangle, diamond, pentagon, hexagon, octagon, star, heart, shield, arch, or **any image as a mask** (PNG/SVG silhouette).; **layers per frame**: each frame shows its own set of GeoLibre layers (e.g. an inset with only the boundary), and linked legends follow. |
 | **Coordinate grids** | DMS · DM · DD · UTM (m or km, auto zone), lines/crosses/dots, zebra or inside/outside ticks, labels inside/outside, BT/LS or E/W–N/S. |
 | **Inset / key maps** | Extent box, location point or crosshair of another frame. |
@@ -222,22 +221,11 @@ classDiagram
   Item <|-- DataProps
 ```
 
-## KLHK cartographic rules
+## Example map
 
-The example layout follows **Keputusan Menteri LHK No. 399 Tahun 2024** (Spesifikasi Penyajian IGT LHK):
+A forest-area map of Aceh made with Layout Composer: map face on the left, margin information on the right (logo, title, area, numeric and bar scale, north arrow, projection note, legend, sources, notes, key map). The layout file is in [`examples/`](examples/kawasan-hutan-aceh.layout.json).
 
-| Element | Rule (SK 399/2024) | In Layout Composer |
-|---|---|---|
-| Layout | Map face left, margin information right | Example layout |
-| Grid | DMS, lines R190 G232 B255 or black "+" marks; ≥ 2 lat and 2 lon labels | Grid style DMS, color #BEE8FF, Arial labels |
-| Fonts | Arial, black; title Arial Bold capitals centered; notes Arial Italic in a box | Text items + quick text bar |
-| Scale | Numeric and bar; key map numeric only | Scale bar + `Scale {scale}` text |
-| North arrow | Arrow pointing up with "U" | North arrow, letter U |
-| Projection note | System, coordinates, datum (WGS 1984/SRGI) | Text block |
-| Forest functions | KSA/KPA 173 63 255 · HL 2 173 0 · HPT 138 242 0 · HP 255 255 0 · HPK 255 94 255 · APL 255 255 255 | Layer colors in the example; legend built automatically |
-| Paper size | Minimum sizes per scale (Table 1) | Indonesia group in the page size catalog |
-
-![KLHK forest-area map exported from Layout Composer](docs/img/klhk-kawasan-hutan-aceh.png)
+![Forest-area map exported from Layout Composer](docs/img/kawasan-hutan-aceh.png)
 
 ## Keyboard shortcuts
 
@@ -278,7 +266,7 @@ src/            sources (JavaScript and style.css), bundled and minified into pl
 plugin/         plugin.json, LICENSE, NOTICE.md; index.js and style.css are built
 vendor/         jsPDF, svg2pdf.js and MathJax as released, embedded in the bundle
 tools/          build.py (bundle, minify, zip), build_catalog.py (groups Maki/Temaki icons by type), build_material.py (Material Symbols by category), screenshots.py (README images)
-test/           index.html and klhk.html harnesses (MapLibre + mock GeoLibre API)
+test/           HTML test harnesses (MapLibre + mock GeoLibre API)
 examples/       sample layouts
 ```
 
@@ -308,7 +296,6 @@ Builds a single minified ES module (`plugin/index.js`, esbuild) and `plugin/styl
 | Turbo | Colormap | Google AI (Anton Mikhailov) | Apache-2.0 |
 | Spectral, RdYlGn, RdYlBu, RdBu, BrBG, YlGn, YlOrRd, Blues, Greens, Oranges, Reds, Purples, Greys | Colormaps | ColorBrewer — Cynthia Brewer | Apache-2.0 |
 | Coolwarm, Jet, Terrain, Gray | Colormaps | Matplotlib (Coolwarm: K. Moreland) | Matplotlib license (BSD-style) |
-| KLHK cartographic rules and forest-function colors | Example layout | Keputusan Menteri LHK No. 399/2024 (public regulation) | Public regulation |
 | Basemap styles in map frames | Optional per-frame basemaps | OpenFreeMap styles; data © OpenStreetMap contributors | Styles BSD-3-Clause / data ODbL-1.0 |
 | Satellite / topographic raster basemaps | Optional per-frame basemaps | Esri World Imagery / World Topo Map tile services | Esri terms of use — attribute the provider when publishing |
 | Installed fonts | Text | System fonts and fonts installed on your computer (none bundled) | Their own licenses |
