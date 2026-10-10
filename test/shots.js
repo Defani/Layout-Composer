@@ -16,9 +16,55 @@ async function waitFor(fn, timeout = 30000) {
 }
 
 async function loadExample() {
-  const data = await fetch("../examples/kawasan-hutan-aceh.layout.json").then((r) => r.json());
-  const doc = data.layout;
+  const data = await fetch("../examples/kelerengan-kuningan.layout.json").then((r) => r.json());
+  const doc = data.layout || data;
   localStorage.setItem("glc:layouts:v1", JSON.stringify({ active: doc.id, layouts: { [doc.id]: doc } }));
+  return doc.id;
+}
+
+// README shots show the released feature set: hide the AI chat and the KLHK templates.
+function hideUnreleased() {
+  localStorage.setItem("glc:aidock", "float");
+  const st = document.createElement("style");
+  st.textContent = ".glc-aitoggle, .glc-aichat, .glc-aicursor, .glc-klhkrow { display: none !important; }";
+  document.head.append(st);
+  new MutationObserver(() => {
+    for (const h of document.querySelectorAll(".glc-mhead")) {
+      if (/KLHK/.test(h.textContent)) {
+        h.style.display = "none";
+        if (h.previousElementSibling?.classList.contains("glc-msep")) h.previousElementSibling.style.display = "none";
+      }
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+}
+
+// NDVK0 raster in a scientific (matplotlib-like) figure: axes with ticks, vertical color bar.
+function buildRaster(G) {
+  const D = G._debug;
+  const S = G._state;
+  const A = (k, x, y, w, h, v) => {
+    D.addItemFromTool(k, { x, y, w, h }, v);
+    return S.doc.items.at(-1);
+  };
+  Object.assign(S.doc.page, { size: "custom", orientation: "portrait", width: 200, height: 215, margin: 0, showMargin: false });
+  const f = (size) => ({ family: "DejaVu Sans", size, bold: false, italic: false, color: "#000000", spacing: 0 });
+  const [w, s, e, n] = window.__bounds;
+  const map = A("map", 28, 20, 126, 166);
+  Object.assign(map.props, { basemap: "geolibre", background: "#ffffff" });
+  map.props.view = { center: [(w + e) / 2, (s + n) / 2], zoom: 12.42, bearing: 0 };
+  map.props.frame = { show: true, color: "#000000", width: 0.3 };
+  Object.assign(map.props.grid, { show: true, type: "dd", decimals: 2, lang: "en", style: "none", frameStyle: "ticks-out", tickLen: 1.4, interval: 0.02, labels: { top: false, bottom: true, left: true, right: false }, labelPos: "outside", rotateSide: true, gap: 0.8, font: f(7) });
+  const cb = A("colorbar", 160, 20, 16, 166);
+  Object.assign(cb.props, { orientation: "vertical", vmin: -0.997, vmax: 0.037, colormap: "viridis", extend: "neither", title: "", tickCount: 6 });
+  const t = A("text", 28, 8, 126, 9);
+  Object.assign(t.props, { text: "NDVK0", align: "center", valign: "middle", font: f(11) });
+  const x = A("text", 28, 196, 126, 6);
+  Object.assign(x.props, { text: "Longitude", align: "center", font: f(8) });
+  const y = A("text", 4, 98, 20, 6);
+  Object.assign(y.props, { text: "Latitude", align: "center", font: f(8) });
+  y.rot = -90;
+  D.renderAll();
+  return { cb, map };
 }
 
 function buildFeatures(G) {
@@ -32,11 +78,11 @@ function buildFeatures(G) {
   map.props.grid.show = true;
   map.props.grid.frameStyle = "zebra";
   const cb = A("colorbar", 170, 12, 115, 18);
-  Object.assign(cb.props, { vmin: -0.2, vmax: 0.85, colormap: "rdylgn", extend: "both", title: "NDVI ($\\rho_{NIR}-\\rho_{Red}$)", tickCount: 6 });
+  Object.assign(cb.props, { source: "ndvk0", vmin: -0.997, vmax: 0.037, colormap: "viridis", extend: "neither", title: "NDVK0", tickCount: 6 });
   const cb2 = A("colorbar", 255, 40, 30, 90);
-  Object.assign(cb2.props, { orientation: "vertical", vmin: 0, vmax: 3000, colormap: "terrain", extend: "max", extendShape: "rect", bins: 6, title: "Elevation (m)" });
+  Object.assign(cb2.props, { source: "dem", orientation: "vertical", vmin: 25, vmax: 3078, colormap: "terrain", extend: "neither", bins: 6, title: "Elevasi (m)" });
   A("latex", 170, 40, 75, 22).props.tex = "\\frac{NIR-Red}{NIR+Red}";
-  A("text", 170, 64, 80, 10).props.text = "Biomass ($Mg\\,ha^{-1}$)";
+  A("text", 170, 64, 80, 10).props.text = "Kelas lereng ($\\%$)";
   const sb = A("scalebar", 170, 78, 80, 14);
   sb.props.style = "dual";
   const sh = A("shape", 170, 100, 30, 24, "heart");
@@ -47,10 +93,10 @@ function buildFeatures(G) {
   Object.assign(card.props, { fill: "", strokeWidth: 0 });
   card.fx = { shadow: { on: true, color: "#000000", opacity: 0.35, blur: 1.5, dx: 0.6, dy: 1 }, glass: { on: true, blur: 3, tint: "#ffffff", opacity: 0.4, radius: 3, border: true } };
   const t = A("text", 22, 22, 62, 16);
-  Object.assign(t.props, { text: "Frosted glass card" });
+  Object.assign(t.props, { text: "Kabupaten Kuningan" });
   t.props.font.size = 14;
   t.props.font.bold = true;
-  A("marker", 60, 80, 45, 9, "capital").props.label = "Ibu kota";
+  A("marker", 60, 80, 45, 9, "capital").props.label = "Kuningan";
   A("north", 130, 95, 20, 28, "rose-ring");
   A("legend", 10, 140, 150, 50);
   D.renderAll();
@@ -84,7 +130,7 @@ function buildFrames(G) {
   m4.props.frame.width = 0.8;
   A("legend", 220, 14, 68, 110);
   const cb = A("colorbar", 220, 135, 68, 18);
-  Object.assign(cb.props, { source: "dem-srtm", vmin: 12.5, vmax: 2875, colormap: "terrain", extend: "max", tickMode: "nice", title: "DEM SRTM (m)" });
+  Object.assign(cb.props, { source: "dem", vmin: 25, vmax: 3078, colormap: "terrain", extend: "neither", tickMode: "nice", title: "Elevasi Mapzen Terrain (m)" });
   D.renderAll();
   return { m1, cb };
 }
@@ -98,16 +144,16 @@ function buildData(G) {
     return S.doc.items.at(-1);
   };
   const m = A("map", 10, 10, 150, 110);
-  m.props.hiddenLayers = ["titik-sampel"];
+  m.props.hiddenLayers = ["titik-kec"];
   A("legend", 10, 125, 70, 60);
   const t = A("attrtable", 168, 10, 118, 30);
-  Object.assign(t.props, { showCount: true });
+  Object.assign(t.props, { layer: "kelerengan", group: "Keterangan", valueMode: "area", showCount: true, decimals: 1, locale: "id-ID" });
   const c = A("chart", 168, 62, 60, 60, "donut");
-  Object.assign(c.props, { title: "Share of area", legendValues: "percent", showLegend: false });
+  Object.assign(c.props, { layer: "kelerengan", group: "Kelas_lere", valueMode: "area", title: "Luas kelas lereng", legendValues: "percent", showLegend: false, locale: "id-ID" });
   const b = A("chart", 232, 62, 56, 60, "hbar");
-  Object.assign(b.props, { group: "desa", valueMode: "sum", valueField: "kode", labels: "value", decimals: 0, colorMode: "palette", palette: "viridis", title: "Sum of code per village" });
+  Object.assign(b.props, { layer: "kelerengan", group: "Kelas_lere", valueMode: "area", sort: "value-desc", labels: "value", decimals: 0, title: "Luas kelas lereng (ha)", locale: "id-ID" });
   const b2 = A("chart", 90, 128, 196, 60, "bar");
-  Object.assign(b2.props, { group: "desa", valueMode: "count", labels: "value", colorMode: "palette", palette: "plasma", title: "Features per village" });
+  Object.assign(b2.props, { layer: "kecamatan", group: "kecamatan", valueMode: "area", topN: 0, labels: "none", decimals: 0, colorMode: "palette", palette: "plasma", title: "Luas per kecamatan (ha)", locale: "id-ID" });
   D.renderAll();
   return { c, t, m };
 }
@@ -115,9 +161,12 @@ function buildData(G) {
 async function run() {
   if (!shot) return;
   document.documentElement.classList.toggle("dark", shot.endsWith("-dark"));
-  const klhk = location.pathname.endsWith("klhk.html");
-  if (klhk) await loadExample();
-  else localStorage.removeItem("glc:layouts:v1");
+  const example = location.pathname.endsWith("example.html");
+  const raster = location.pathname.endsWith("raster.html");
+  const name0 = shot.replace(/-dark$/, "");
+  if (name0 !== "ai") hideUnreleased();
+  const exampleId = example ? await loadExample() : null;
+  if (!example) localStorage.removeItem("glc:layouts:v1");
   localStorage.setItem("glc:docks", JSON.stringify({ left: true, right: true }));
   await waitFor(() => window.__app && window.LayoutComposer && window.__app.getMap().isStyleLoaded());
   await sleep(1500);
@@ -126,8 +175,13 @@ async function run() {
   const D = G._debug;
   G.open();
   await sleep(1200);
+  if (exampleId) {
+    await G.ai.switchLayout(exampleId);
+    await sleep(1500);
+  }
   let staged = {};
-  if (!klhk) staged = shot.startsWith("frames") ? buildFrames(G) : shot.startsWith("data") || shot.startsWith("chart") || shot.startsWith("layers") ? buildData(G) : buildFeatures(G);
+  if (raster) staged = buildRaster(G);
+  else if (!example) staged = shot.startsWith("frames") ? buildFrames(G) : shot.startsWith("data") || shot.startsWith("chart") || shot.startsWith("layers") ? buildData(G) : buildFeatures(G);
   const q = (sel) => document.querySelector(sel);
   const byTitle = (t) => [...document.querySelectorAll("button")].find((b) => b.title === t);
   const name = shot.replace(/-dark$/, "");

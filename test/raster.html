@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Layout Composer — raster example</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" />
+<script>document.write('<link rel="stylesheet" href="../plugin/style.css?v=' + Date.now() + '" />')</script>
+<style>
+  :root { --background: 0 0% 100%; --foreground: 222 47% 11%; --card: 210 20% 98%; --border: 214 32% 88%; --muted: 210 40% 96%; --muted-foreground: 215 16% 47%; --accent: 210 40% 94%; --primary: 221 83% 53%; --primary-foreground: 0 0% 100%; }
+  html.dark { --background: 222 47% 8%; --foreground: 210 40% 96%; --card: 222 40% 11%; --border: 217 25% 22%; --muted: 217 30% 15%; --muted-foreground: 215 20% 65%; --accent: 217 30% 18%; --primary: 217 91% 60%; --primary-foreground: 0 0% 100%; }
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #map { position: absolute; inset: 40px 0 0 0; }
+  #bar { height: 40px; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid #ddd; }
+</style>
+</head>
+<body>
+<div id="bar"><b>GeoLibre (mock) — NDVK0 raster</b><button id="open">Open Layout Composer</button></div>
+<div id="map"></div>
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script type="module">
+  // NDVK0.tif (Float32, WGS 84, 777 x 1022 px) rendered to test/data/ndvk0.png with the
+  // viridis ramp over its range -0.997 .. 0.037 (gdaldem color-relief, nodata transparent).
+  const BOUNDS = [111.1737029, -7.6476275, 111.243502, -7.5558197];
+  const style = { version: 8, glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf", sources: {}, layers: [{ id: "bg", type: "background", paint: { "background-color": "#ffffff" } }] };
+  const map = new maplibregl.Map({ container: "map", style, center: [(BOUNDS[0] + BOUNDS[2]) / 2, (BOUNDS[1] + BOUNDS[3]) / 2], zoom: 12.5, preserveDrawingBuffer: true });
+  const layers = [{ id: "ndvk0", name: "NDVK0", type: "raster", visible: true, metadata: { rasterState: { bands: [1], colormap: "viridis", stats: [{ min: -0.997, max: 0.037 }] } } }];
+  map.once("style.load", () => {
+    const [w, s, e, n] = BOUNDS;
+    map.addSource("ndvk0", { type: "image", url: "data/ndvk0.png", coordinates: [[w, n], [e, n], [e, s], [w, s]] });
+    map.addLayer({ id: "ndvk0", type: "raster", source: "ndvk0", paint: { "raster-resampling": "nearest", "raster-fade-duration": 0 } });
+  });
+  const app = {
+    getMap: () => map,
+    listLayers: () => layers,
+    addMapControl: (c, pos) => map.addControl(c, pos),
+    removeMapControl: (c) => map.removeControl(c),
+    registerToolbarMenu: () => () => {},
+    getLayerFeatures: () => [],
+    getProjectSnapshot: () => ({ name: "NDVK0", layers }),
+  };
+  const mod = await import("../plugin/index.js?v=" + Date.now());
+  mod.plugin.activate(app);
+  window.__app = app;
+  window.__bounds = BOUNDS;
+  document.getElementById("open").onclick = () => window.LayoutComposer.open();
+</script>
+<script type="module" src="shots.js"></script>
+</body>
+</html>

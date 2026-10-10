@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Layout Composer — uji coba</title>
+<title>Layout Composer — test page</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" />
 <script>document.write('<link rel="stylesheet" href="../plugin/style.css?v=' + Date.now() + '" />')</script>
 <style>
@@ -16,43 +16,39 @@
 </style>
 </head>
 <body>
-<div id="bar"><b>GeoLibre (simulasi)</b><button id="open">Buka Layout Composer</button><button id="dark">Gelap/Terang</button></div>
+<div id="bar"><b>GeoLibre (mock) — Kabupaten Kuningan</b><button id="open">Open Layout Composer</button><button id="dark">Dark / light</button></div>
 <div id="map"></div>
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <script type="module">
-  const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [106.83, -6.4], zoom: 9.3, preserveDrawingBuffer: true });
-  // sample user layers: categorized polygons, a line and points
-  const polys = { type: "FeatureCollection", features: [] };
-  const kelas = ["Hutan", "Sawah", "Permukiman", "Perkebunan"];
-  let k = 0;
-  for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
-    const x = 106.55 + i * 0.13, y = -6.65 + j * 0.15;
-    polys.features.push({ type: "Feature", properties: { kelas: kelas[k % 4], kode: 100 + k, desa: ["Cibinong", "Citeureup", "Babakan Madang", "Sukaraja"][(k++ * 7) % 4] }, geometry: { type: "Polygon", coordinates: [[[x, y], [x + 0.12, y], [x + 0.12, y + 0.13], [x, y + 0.13], [x, y]]] } });
-  }
-  const sungai = { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[106.5, -6.7], [106.7, -6.5], [106.85, -6.45], [107.1, -6.2]] } }] };
-  const titik = { type: "FeatureCollection", features: [[106.8, -6.6], [106.9, -6.35], [106.65, -6.3]].map((c) => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: c } })) };
+  // Real data in test/data (not in git): Kuningan slope classes, sub-district
+  // boundaries (Peta Dasar Nasional) and a label point per sub-district.
+  const get = (f) => fetch(`data/${f}`).then((r) => r.json());
+  const [lereng, kecamatan, titik] = await Promise.all([get("kelerengan_kuningan.geojson"), get("kecamatan_kuningan.geojson"), get("ibukota_kecamatan.geojson")]);
+  const KELAS = { "0-8 %": "#2E8B22", "8-15 %": "#55D400", "15-25%": "#F2EA1D", "25-40%": "#FF9A00", ">40%": "#E60000" };
+  const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [108.59, -6.99], zoom: 9.7, preserveDrawingBuffer: true });
   const layers = [
-    { id: "tutupan-lahan", name: "Tutupan Lahan 2024", type: "geojson", visible: true },
-    { id: "sungai", name: "Sungai Utama", type: "geojson", visible: true },
-    { id: "titik-sampel", name: "Titik Sampel", type: "geojson", visible: true },
+    { id: "kelerengan", name: "Kelerengan Kabupaten Kuningan", type: "geojson", visible: true },
+    { id: "kecamatan", name: "Batas Kecamatan", type: "geojson", visible: true },
+    { id: "titik-kec", name: "Titik Kecamatan", type: "geojson", visible: true },
     { id: "osm-hot", name: "OpenStreetMap HOT", type: "xyz", visible: true },
   ];
-  // snapshot-only layers, as GeoLibre reports them (the COG is drawn by deck.gl, not in listLayers)
+  // snapshot-only layers, as GeoLibre reports them (rasters are drawn by deck.gl, not in listLayers)
   const snapLayers = [
-    { id: "dem-srtm", name: "DEM SRTM (m)", type: "cog", visible: true, source: { url: "https://example.org/dem.tif" }, metadata: { rasterState: { bands: [1], colormap: "terrain", rescale: "12.5, 2875" } } },
-    { id: "ndvi", name: "NDVI 2024", type: "raster", visible: true, metadata: { rasterState: { bands: [1], colormap: "RdYlGn", stats: [{ min: -0.2, max: 0.9 }] } } },
+    { id: "dem", name: "Elevasi Mapzen Terrain (m)", type: "cog", visible: true, source: { url: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png" }, metadata: { rasterState: { bands: [1], colormap: "terrain", rescale: "25, 3078" } } },
+    { id: "ndvk0", name: "NDVK0", type: "raster", visible: true, metadata: { rasterState: { bands: [1], colormap: "viridis", stats: [{ min: -0.997, max: 0.037 }] } } },
     { id: "osm-hot", name: "OpenStreetMap HOT", type: "xyz", source: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256 }, metadata: { sourceKind: "xyz-url" } },
   ];
   map.once("style.load", () => {
     map.addSource("osm-hot", { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256 });
-    map.addLayer({ id: "osm-hot", type: "raster", source: "osm-hot", paint: { "raster-opacity": 0.6 } });
-    map.addSource("tutupan-lahan", { type: "geojson", data: polys });
-    map.addLayer({ id: "tutupan-lahan-fill", type: "fill", source: "tutupan-lahan", paint: { "fill-color": ["match", ["get", "kelas"], "Hutan", "#15803d", "Sawah", "#facc15", "Permukiman", "#dc2626", "Perkebunan", "#84cc16", "#999999"], "fill-opacity": 0.7 } });
-    map.addLayer({ id: "tutupan-lahan-line", type: "line", source: "tutupan-lahan", paint: { "line-color": "#334155", "line-width": 0.8 } });
-    map.addSource("sungai", { type: "geojson", data: sungai });
-    map.addLayer({ id: "sungai-line", type: "line", source: "sungai", paint: { "line-color": "#2563eb", "line-width": 3 } });
-    map.addSource("titik-sampel", { type: "geojson", data: titik });
-    map.addLayer({ id: "titik-sampel-circle", type: "circle", source: "titik-sampel", paint: { "circle-color": "#f97316", "circle-radius": 6, "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
+    map.addLayer({ id: "osm-hot", type: "raster", source: "osm-hot", paint: { "raster-opacity": 0.5 } });
+    map.addSource("terrain", { type: "raster-dem", tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"], encoding: "terrarium", tileSize: 256, maxzoom: 14 });
+    map.addLayer({ id: "hillshade", type: "hillshade", source: "terrain", paint: { "hillshade-exaggeration": 0.35 } });
+    map.addSource("kelerengan", { type: "geojson", data: lereng });
+    map.addLayer({ id: "kelerengan-fill", type: "fill", source: "kelerengan", paint: { "fill-color": ["match", ["get", "Kelas_lere"], ...Object.entries(KELAS).flat(), "#cccccc"], "fill-opacity": 0.85 } });
+    map.addSource("kecamatan", { type: "geojson", data: kecamatan });
+    map.addLayer({ id: "kecamatan-line", type: "line", source: "kecamatan", paint: { "line-color": "#1f2937", "line-width": 0.9, "line-dasharray": [4, 1.5, 1, 1.5] } });
+    map.addSource("titik-kec", { type: "geojson", data: titik });
+    map.addLayer({ id: "titik-kec-circle", type: "circle", source: "titik-kec", paint: { "circle-color": "#ffffff", "circle-radius": 3, "circle-stroke-color": "#111827", "circle-stroke-width": 1.2 } });
   });
   const app = {
     getMap: () => map,
@@ -60,8 +56,8 @@
     addMapControl: (c, pos) => map.addControl(c, pos),
     removeMapControl: (c) => map.removeControl(c),
     registerToolbarMenu: (m) => { console.log("menu registered", m.label); return () => {}; },
-    getLayerFeatures: (id) => ({ "tutupan-lahan": polys, sungai, "titik-sampel": titik }[id]?.features || []),
-    getProjectSnapshot: () => ({ name: "Peta Tutupan Lahan Kabupaten Bogor", layers: snapLayers }),
+    getLayerFeatures: (id) => ({ kelerengan: lereng, kecamatan, "titik-kec": titik }[id]?.features || []),
+    getProjectSnapshot: () => ({ name: "Peta Kelerengan Kabupaten Kuningan", layers: snapLayers }),
   };
   const mod = await import("../plugin/index.js?v=" + Date.now());
   mod.plugin.activate(app);

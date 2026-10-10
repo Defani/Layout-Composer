@@ -1,0 +1,1358 @@
+{
+ "id": "lay_mv2mv0s811eo",
+ "name": "Kelerengan Kabupaten Kuningan",
+ "page": {
+  "size": "A4",
+  "orientation": "landscape",
+  "width": 297,
+  "height": 210,
+  "background": "#ffffff",
+  "margin": 10,
+  "showMargin": true,
+  "gridSize": 5,
+  "showGrid": false,
+  "snapGrid": true,
+  "snapGuides": true,
+  "showGuides": true,
+  "guides": {
+   "v": [],
+   "h": []
+  },
+  "border": {
+   "show": false,
+   "color": "#000000",
+   "width": 0.6,
+   "double": false,
+   "inset": 5,
+   "gap": 1.2
+  }
+ },
+ "items": [
+  {
+   "id": "shape_mv2mve5p2a7p",
+   "type": "shape",
+   "name": "Neatline",
+   "x": 5,
+   "y": 5,
+   "w": 287,
+   "h": 200,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "shape": "rect",
+    "fill": "",
+    "fillOpacity": 1,
+    "stroke": "#000000",
+    "strokeWidth": 0.5,
+    "strokeStyle": "solid",
+    "radius": 3,
+    "shadow": false,
+    "fillType": "solid",
+    "fill2": "#cbd5e1",
+    "gradientAngle": 90,
+    "pattern": "/",
+    "patternColor": "#111111",
+    "patternSpacing": 2,
+    "patternWidth": 0.2,
+    "patternBg": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "map_mv2mve7o396q",
+   "type": "map",
+   "name": "Main map",
+   "x": 15,
+   "y": 13,
+   "w": 199,
+   "h": 184,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "source": "live",
+    "view": {
+     "center": [
+      108.589065,
+      -6.98749015689001
+     ],
+     "zoom": 10.085533636875745,
+     "bearing": 0
+    },
+    "scaleLock": 0,
+    "basemap": "geolibre",
+    "background": "#ffffff",
+    "frame": {
+     "show": true,
+     "color": "#000000",
+     "width": 0.4
+    },
+    "frameShape": "rect",
+    "frameRadius": 4,
+    "frameImage": "",
+    "grid": {
+     "show": true,
+     "type": "dms",
+     "interval": 0.08333333333333333,
+     "lang": "id",
+     "style": "lines",
+     "color": "#BEE8FF",
+     "width": 0.25,
+     "dash": "solid",
+     "opacity": 1,
+     "crossSize": 2.5,
+     "labels": {
+      "top": true,
+      "bottom": true,
+      "left": true,
+      "right": true
+     },
+     "labelPos": "outside",
+     "rotateSide": true,
+     "gap": 1,
+     "font": {
+      "family": "Arial",
+      "size": 5.5,
+      "bold": false,
+      "italic": false,
+      "color": "#000000",
+      "spacing": 0
+     },
+     "decimals": 2,
+     "frameStyle": "none",
+     "zebraWidth": 1.5,
+     "zebraColor": "#000000",
+     "tickLen": 2,
+     "zone": 0,
+     "utmUnit": "m"
+    },
+    "overview": {
+     "source": "",
+     "color": "#e11d48",
+     "width": 0.6,
+     "fill": "#e11d48",
+     "fillOpacity": 0.12,
+     "marker": "rect"
+    }
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "shape_mv2mvele4u7m",
+   "type": "shape",
+   "name": "Panel",
+   "x": 222,
+   "y": 13,
+   "w": 65,
+   "h": 184,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "shape": "rect",
+    "fill": "",
+    "fillOpacity": 1,
+    "stroke": "#000000",
+    "strokeWidth": 0.3,
+    "strokeStyle": "solid",
+    "radius": 3,
+    "shadow": false,
+    "fillType": "solid",
+    "fill2": "#cbd5e1",
+    "gradientAngle": 90,
+    "pattern": "/",
+    "patternColor": "#111111",
+    "patternSpacing": 2,
+    "patternWidth": 0.2,
+    "patternBg": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "text_mv2mvemw59x4",
+   "type": "text",
+   "name": "Title",
+   "x": 224,
+   "y": 15,
+   "w": 61,
+   "h": 13,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "text": "PETA KELERENGAN\nKABUPATEN KUNINGAN",
+    "font": {
+     "family": "Arial",
+     "size": 10.5,
+     "bold": true,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0,
+     "opacity": 1
+    },
+    "align": "center",
+    "valign": "middle",
+    "lineHeight": 1.15,
+    "padding": 1,
+    "background": "",
+    "bgOpacity": 1,
+    "border": {
+     "show": false,
+     "color": "#000000",
+     "width": 0.3,
+     "style": "solid",
+     "radius": 0
+    },
+    "textCase": "none",
+    "halo": false,
+    "haloColor": "#ffffff",
+    "haloWidth": 0.6,
+    "wrap": true,
+    "autoHeight": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "text_mv2mveqr60ot",
+   "type": "text",
+   "name": "Subtitle",
+   "x": 224,
+   "y": 28,
+   "w": 61,
+   "h": 5,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "text": "Provinsi Jawa Barat",
+    "font": {
+     "family": "Arial",
+     "size": 7,
+     "bold": false,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0,
+     "opacity": 1
+    },
+    "align": "center",
+    "valign": "middle",
+    "lineHeight": 1.2,
+    "padding": 1,
+    "background": "",
+    "bgOpacity": 1,
+    "border": {
+     "show": false,
+     "color": "#000000",
+     "width": 0.3,
+     "style": "solid",
+     "radius": 0
+    },
+    "textCase": "none",
+    "halo": false,
+    "haloColor": "#ffffff",
+    "haloWidth": 0.6,
+    "wrap": true,
+    "autoHeight": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "shape_mv2mvetb7axm",
+   "type": "shape",
+   "name": "Rule 1",
+   "x": 222,
+   "y": 35,
+   "w": 65,
+   "h": 0.01,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "shape": "rect",
+    "fill": "",
+    "fillOpacity": 1,
+    "stroke": "#000000",
+    "strokeWidth": 0.15,
+    "strokeStyle": "solid",
+    "radius": 3,
+    "shadow": false,
+    "fillType": "solid",
+    "fill2": "#cbd5e1",
+    "gradientAngle": 90,
+    "pattern": "/",
+    "patternColor": "#111111",
+    "patternSpacing": 2,
+    "patternWidth": 0.2,
+    "patternBg": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "scalebar_mv2mveve89zr",
+   "type": "scalebar",
+   "name": "Numeric scale",
+   "x": 224,
+   "y": 36.5,
+   "w": 61,
+   "h": 4.5,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "style": "numeric",
+    "units": "auto",
+    "segments": 4,
+    "leftSegments": 1,
+    "segmentValue": 0,
+    "barHeight": 2,
+    "color1": "#000000",
+    "color2": "#ffffff",
+    "lineWidth": 0.3,
+    "font": {
+     "family": "Arial",
+     "size": 7,
+     "bold": false,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0
+    },
+    "unitLabel": "",
+    "linkedMap": "map_mv2mve7o396q",
+    "numericPrefix": "Skala ",
+    "dualUnit": "papercm",
+    "dualLabel": "",
+    "secondUnit": "none",
+    "showNumeric": false,
+    "align": "center",
+    "locale": "id"
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "scalebar_mv2mvterxtpu",
+   "type": "scalebar",
+   "name": "Scale bar",
+   "x": 226,
+   "y": 42,
+   "w": 57,
+   "h": 10.5,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "style": "double",
+    "units": "km",
+    "segments": 4,
+    "leftSegments": false,
+    "segmentValue": 0,
+    "barHeight": 1.6,
+    "color1": "#000000",
+    "color2": "#ffffff",
+    "lineWidth": 0.2,
+    "font": {
+     "family": "Arial",
+     "size": 5.5,
+     "bold": false,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0
+    },
+    "unitLabel": "",
+    "linkedMap": "map_mv2mve7o396q",
+    "numericPrefix": "Scale ",
+    "dualUnit": "papercm",
+    "dualLabel": "",
+    "secondUnit": "papercm",
+    "showNumeric": false,
+    "align": "left"
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "north_mv2mvtfy1ve4p",
+   "type": "north",
+   "name": "North arrow",
+   "x": 251.5,
+   "y": 54,
+   "w": 7,
+   "h": 9,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "variant": "classic",
+    "color1": "#111111",
+    "color2": "#ffffff",
+    "label": "U",
+    "fontFamily": "Arial",
+    "rotateWithMap": true,
+    "linkedMap": "map_mv2mve7o396q",
+    "rotation": 0
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "shape_mv2mvtgz27ma1",
+   "type": "shape",
+   "name": "Rule 2",
+   "x": 222,
+   "y": 65,
+   "w": 65,
+   "h": 0.01,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "shape": "rect",
+    "fill": "",
+    "fillOpacity": 1,
+    "stroke": "#000000",
+    "strokeWidth": 0.15,
+    "strokeStyle": "solid",
+    "radius": 3,
+    "shadow": false,
+    "fillType": "solid",
+    "fill2": "#cbd5e1",
+    "gradientAngle": 90,
+    "pattern": "/",
+    "patternColor": "#111111",
+    "patternSpacing": 2,
+    "patternWidth": 0.2,
+    "patternBg": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "legend_mv2mvti3282h5",
+   "type": "legend",
+   "name": "Legend",
+   "x": 224,
+   "y": 66.5,
+   "w": 61,
+   "h": 34.14,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "title": "KETERANGAN",
+    "titleFont": {
+     "family": "Arial",
+     "size": 7.5,
+     "bold": true,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0
+    },
+    "titleAlign": "left",
+    "groupFont": {
+     "family": "Arial",
+     "size": 6,
+     "bold": true,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0
+    },
+    "itemFont": {
+     "family": "Arial",
+     "size": 6,
+     "bold": false,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0
+    },
+    "columns": 1,
+    "colGap": 5,
+    "rowGap": 1.3,
+    "patchW": 6.5,
+    "patchH": 3.6,
+    "padding": 1,
+    "background": "",
+    "bgOpacity": 1,
+    "border": {
+     "show": false,
+     "color": "#333333",
+     "width": 0.3,
+     "radius": 0
+    },
+    "linkedMap": "map_mv2mve7o396q",
+    "showGroups": true,
+    "autoSync": false,
+    "autoHeight": true,
+    "entries": [
+     {
+      "key": "g",
+      "kind": "group",
+      "label": "Kelas lereng (luas)",
+      "manual": true
+     },
+     {
+      "key": "k1",
+      "kind": "item",
+      "label": "0–8 % · Datar (56.486,6 ha)",
+      "patch": {
+       "type": "fill",
+       "fill": "#2E8B22"
+      },
+      "manual": true,
+      "userLabel": true
+     },
+     {
+      "key": "k2",
+      "kind": "item",
+      "label": "8–15 % · Landai (28.044,2 ha)",
+      "patch": {
+       "type": "fill",
+       "fill": "#55D400"
+      },
+      "manual": true,
+      "userLabel": true
+     },
+     {
+      "key": "k3",
+      "kind": "item",
+      "label": "15–25 % · Agak curam (22.934,6 ha)",
+      "patch": {
+       "type": "fill",
+       "fill": "#F2EA1D"
+      },
+      "manual": true,
+      "userLabel": true
+     },
+     {
+      "key": "k4",
+      "kind": "item",
+      "label": "25–40 % · Curam (10.646,0 ha)",
+      "patch": {
+       "type": "fill",
+       "fill": "#FF9A00"
+      },
+      "manual": true,
+      "userLabel": true
+     },
+     {
+      "key": "k5",
+      "kind": "item",
+      "label": "> 40 % · Sangat curam (705,1 ha)",
+      "patch": {
+       "type": "fill",
+       "fill": "#E60000"
+      },
+      "manual": true,
+      "userLabel": true
+     }
+    ]
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "text_mv2mvtl229su1",
+   "type": "text",
+   "name": "Total area",
+   "x": 224,
+   "y": 104.5,
+   "w": 61,
+   "h": 4,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "text": "Total luas: ± 118.816,5 ha",
+    "font": {
+     "family": "Arial",
+     "size": 5.5,
+     "bold": false,
+     "italic": true,
+     "color": "#000000",
+     "spacing": 0,
+     "opacity": 1
+    },
+    "align": "left",
+    "valign": "middle",
+    "lineHeight": 1.2,
+    "padding": 1,
+    "background": "",
+    "bgOpacity": 1,
+    "border": {
+     "show": false,
+     "color": "#000000",
+     "width": 0.3,
+     "style": "solid",
+     "radius": 0
+    },
+    "textCase": "none",
+    "halo": false,
+    "haloColor": "#ffffff",
+    "haloWidth": 0.6,
+    "wrap": true,
+    "autoHeight": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "shape_mv2mvtmt2aagz",
+   "type": "shape",
+   "name": "Rule 3",
+   "x": 222,
+   "y": 110,
+   "w": 65,
+   "h": 0.01,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "shape": "rect",
+    "fill": "",
+    "fillOpacity": 1,
+    "stroke": "#000000",
+    "strokeWidth": 0.15,
+    "strokeStyle": "solid",
+    "radius": 3,
+    "shadow": false,
+    "fillType": "solid",
+    "fill2": "#cbd5e1",
+    "gradientAngle": 90,
+    "pattern": "/",
+    "patternColor": "#111111",
+    "patternSpacing": 2,
+    "patternWidth": 0.2,
+    "patternBg": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "text_mv2mvtnw2b4l8",
+   "type": "text",
+   "name": "Map info",
+   "x": 224,
+   "y": 111,
+   "w": 61,
+   "h": 17,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "text": "Sistem koordinat : Geografis (lintang/bujur)\nDatum : WGS 1984 · EPSG:4326\nGrid : derajat, menit, detik\nSumber data : Peta kelerengan Kabupaten Kuningan; peta dasar OpenFreeMap (© OpenStreetMap contributors)",
+    "font": {
+     "family": "Arial",
+     "size": 5.2,
+     "bold": false,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0,
+     "opacity": 1
+    },
+    "align": "left",
+    "valign": "top",
+    "lineHeight": 1.25,
+    "padding": 1,
+    "background": "",
+    "bgOpacity": 1,
+    "border": {
+     "show": false,
+     "color": "#000000",
+     "width": 0.3,
+     "style": "solid",
+     "radius": 0
+    },
+    "textCase": "none",
+    "halo": false,
+    "haloColor": "#ffffff",
+    "haloWidth": 0.6,
+    "wrap": true,
+    "autoHeight": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "shape_mv2mvtpb2cl4w",
+   "type": "shape",
+   "name": "Rule 4",
+   "x": 222,
+   "y": 129,
+   "w": 65,
+   "h": 0.01,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "shape": "rect",
+    "fill": "",
+    "fillOpacity": 1,
+    "stroke": "#000000",
+    "strokeWidth": 0.15,
+    "strokeStyle": "solid",
+    "radius": 3,
+    "shadow": false,
+    "fillType": "solid",
+    "fill2": "#cbd5e1",
+    "gradientAngle": 90,
+    "pattern": "/",
+    "patternColor": "#111111",
+    "patternSpacing": 2,
+    "patternWidth": 0.2,
+    "patternBg": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "text_mv2mvtqh2dahl",
+   "type": "text",
+   "name": "Key map title",
+   "x": 224,
+   "y": 130,
+   "w": 61,
+   "h": 4.5,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "text": "PETA SITUASI",
+    "font": {
+     "family": "Arial",
+     "size": 7,
+     "bold": true,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0,
+     "opacity": 1
+    },
+    "align": "left",
+    "valign": "middle",
+    "lineHeight": 1.2,
+    "padding": 1,
+    "background": "",
+    "bgOpacity": 1,
+    "border": {
+     "show": false,
+     "color": "#000000",
+     "width": 0.3,
+     "style": "solid",
+     "radius": 0
+    },
+    "textCase": "none",
+    "halo": false,
+    "haloColor": "#ffffff",
+    "haloWidth": 0.6,
+    "wrap": true,
+    "autoHeight": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "map_mv2mvtrp2e63z",
+   "type": "map",
+   "name": "Key map",
+   "x": 229,
+   "y": 136,
+   "w": 54,
+   "h": 40,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "source": "live",
+    "view": {
+     "center": [
+      108.15,
+      -6.95
+     ],
+     "zoom": 6.4,
+     "bearing": 0
+    },
+    "scaleLock": 0,
+    "basemap": "positron",
+    "background": "#ffffff",
+    "frame": {
+     "show": true,
+     "color": "#000000",
+     "width": 0.3
+    },
+    "frameShape": "rect",
+    "frameRadius": 4,
+    "frameImage": "",
+    "grid": {
+     "show": true,
+     "type": "dms",
+     "interval": 1,
+     "lang": "id",
+     "style": "lines",
+     "color": "#BEE8FF",
+     "width": 0.15,
+     "dash": "solid",
+     "opacity": 0.85,
+     "crossSize": 2.5,
+     "labels": {
+      "top": false,
+      "bottom": true,
+      "left": true,
+      "right": false
+     },
+     "labelPos": "outside",
+     "rotateSide": true,
+     "gap": 1,
+     "font": {
+      "family": "Arial",
+      "size": 4,
+      "bold": false,
+      "italic": false,
+      "color": "#000000",
+      "spacing": 0
+     },
+     "decimals": 2,
+     "frameStyle": "none",
+     "zebraWidth": 1.5,
+     "zebraColor": "#000000",
+     "tickLen": 2,
+     "zone": 0,
+     "utmUnit": "m"
+    },
+    "overview": {
+     "source": "map_mv2mve7o396q",
+     "color": "#FF0000",
+     "width": 0.5,
+     "fill": "#FF0000",
+     "fillOpacity": 0.1,
+     "marker": "rect"
+    }
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "shape_mv2mvu6z2fr5u",
+   "type": "shape",
+   "name": "Key map symbol",
+   "x": 229,
+   "y": 180,
+   "w": 4,
+   "h": 2.5,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "shape": "rect",
+    "fill": "#FF0000",
+    "fillOpacity": 0.1,
+    "stroke": "#FF0000",
+    "strokeWidth": 0.5,
+    "strokeStyle": "solid",
+    "radius": 3,
+    "shadow": false,
+    "fillType": "solid",
+    "fill2": "#cbd5e1",
+    "gradientAngle": 90,
+    "pattern": "/",
+    "patternColor": "#111111",
+    "patternSpacing": 2,
+    "patternWidth": 0.2,
+    "patternBg": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "text_mv2mvu9a2g3kb",
+   "type": "text",
+   "name": "Key map label",
+   "x": 234.5,
+   "y": 179.5,
+   "w": 50,
+   "h": 3.5,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "text": "Area yang dipetakan",
+    "font": {
+     "family": "Arial",
+     "size": 5.3,
+     "bold": false,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0,
+     "opacity": 1
+    },
+    "align": "left",
+    "valign": "middle",
+    "lineHeight": 1.2,
+    "padding": 1,
+    "background": "",
+    "bgOpacity": 1,
+    "border": {
+     "show": false,
+     "color": "#000000",
+     "width": 0.3,
+     "style": "solid",
+     "radius": 0
+    },
+    "textCase": "none",
+    "halo": false,
+    "haloColor": "#ffffff",
+    "haloWidth": 0.6,
+    "wrap": true,
+    "autoHeight": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "shape_mv2mvubw2hw0p",
+   "type": "shape",
+   "name": "Rule 5",
+   "x": 222,
+   "y": 185,
+   "w": 65,
+   "h": 0.01,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "shape": "rect",
+    "fill": "",
+    "fillOpacity": 1,
+    "stroke": "#000000",
+    "strokeWidth": 0.15,
+    "strokeStyle": "solid",
+    "radius": 3,
+    "shadow": false,
+    "fillType": "solid",
+    "fill2": "#cbd5e1",
+    "gradientAngle": 90,
+    "pattern": "/",
+    "patternColor": "#111111",
+    "patternSpacing": 2,
+    "patternWidth": 0.2,
+    "patternBg": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  },
+  {
+   "id": "text_mv2mvuez2iamf",
+   "type": "text",
+   "name": "Author",
+   "x": 224,
+   "y": 186,
+   "w": 61,
+   "h": 10,
+   "rot": 0,
+   "opacity": 1,
+   "locked": false,
+   "hidden": false,
+   "props": {
+    "text": "Dibuat oleh: Defani Arman Alfitriansyah\nTahun 2026",
+    "font": {
+     "family": "Arial",
+     "size": 6,
+     "bold": false,
+     "italic": false,
+     "color": "#000000",
+     "spacing": 0,
+     "opacity": 1
+    },
+    "align": "center",
+    "valign": "middle",
+    "lineHeight": 1.3,
+    "padding": 1,
+    "background": "",
+    "bgOpacity": 1,
+    "border": {
+     "show": false,
+     "color": "#000000",
+     "width": 0.3,
+     "style": "solid",
+     "radius": 0
+    },
+    "textCase": "none",
+    "halo": false,
+    "haloColor": "#ffffff",
+    "haloWidth": 0.6,
+    "wrap": true,
+    "autoHeight": false
+   },
+   "fx": {
+    "shadow": {
+     "on": false,
+     "color": "#000000",
+     "opacity": 0.3,
+     "blur": 1.2,
+     "dx": 0.5,
+     "dy": 0.8
+    },
+    "glass": {
+     "on": false,
+     "blur": 3,
+     "tint": "#ffffff",
+     "opacity": 0.45,
+     "radius": 3,
+     "border": true
+    }
+   }
+  }
+ ],
+ "vars": {
+  "title": "Peta Kelerengan Kabupaten Kuningan",
+  "author": "",
+  "organization": "",
+  "source": "",
+  "projection": "WGS 84 / Pseudo-Mercator"
+ },
+ "updated": 1791651264090
+}

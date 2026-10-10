@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Layout Composer — example map</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" />
+<script>document.write('<link rel="stylesheet" href="../plugin/style.css?v=' + Date.now() + '" />')</script>
+<style>
+  :root { --background: 0 0% 100%; --foreground: 222 47% 11%; --card: 210 20% 98%; --border: 214 32% 88%; --muted: 210 40% 96%; --muted-foreground: 215 16% 47%; --accent: 210 40% 94%; --primary: 221 83% 53%; --primary-foreground: 0 0% 100%; }
+  html.dark { --background: 222 47% 8%; --foreground: 210 40% 96%; --card: 222 40% 11%; --border: 217 25% 22%; --muted: 217 30% 15%; --muted-foreground: 215 20% 65%; --accent: 217 30% 18%; --primary: 217 91% 60%; --primary-foreground: 0 0% 100%; }
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #map { position: absolute; inset: 40px 0 0 0; }
+  #bar { height: 40px; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid #ddd; }
+</style>
+</head>
+<body>
+<div id="bar"><b>GeoLibre (mock) — Kelerengan Kabupaten Kuningan</b><button id="open">Open Layout Composer</button></div>
+<div id="map"></div>
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script type="module">
+  // slope classes (gridcode 1-5) in the usual green-to-red ramp
+  const KELAS = [
+    { code: 1, color: "#2E8B22" },
+    { code: 2, color: "#55D400" },
+    { code: 3, color: "#F2EA1D" },
+    { code: 4, color: "#FF9A00" },
+    { code: 5, color: "#E60000" },
+  ];
+  // test/data is not in git: write the slope data there first (see README, Development)
+  const data = await fetch("data/kelerengan_kuningan.geojson").then((r) => r.json());
+  const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/positron", center: [108.55, -6.98], zoom: 9.6, preserveDrawingBuffer: true });
+  const layers = [{ id: "kelerengan", name: "Kelerengan Kabupaten Kuningan", type: "geojson", visible: true }];
+  map.once("style.load", () => {
+    map.addSource("kelerengan", { type: "geojson", data });
+    const match = ["match", ["get", "gridcode"]];
+    for (const k of KELAS) match.push(k.code, k.color);
+    match.push("#cccccc");
+    map.addLayer({ id: "kelerengan-fill", type: "fill", source: "kelerengan", paint: { "fill-color": match, "fill-opacity": 1 } });
+    map.addLayer({ id: "kelerengan-line", type: "line", source: "kelerengan", paint: { "line-color": "#555555", "line-width": 0.2, "line-opacity": 0.4 } });
+  });
+  const app = {
+    getMap: () => map,
+    listLayers: () => layers,
+    getLayerFeatures: (id) => (id === "kelerengan" ? data.features : []),
+    addMapControl: (c, pos) => map.addControl(c, pos),
+    removeMapControl: (c) => map.removeControl(c),
+    registerToolbarMenu: () => () => {},
+    getProjectSnapshot: () => ({ name: "Peta Kelerengan Kabupaten Kuningan", layers }),
+  };
+  const mod = await import("../plugin/index.js?v=" + Date.now());
+  mod.plugin.activate(app);
+  window.__app = app;
+  document.getElementById("open").onclick = () => window.LayoutComposer.open();
+</script>
+<script type="module" src="shots.js"></script>
+</body>
+</html>

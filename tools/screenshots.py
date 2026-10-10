@@ -10,11 +10,11 @@ CHROME = os.environ.get("CHROME", r"C:\Program Files\Google\Chrome\Application\c
 BASE = os.environ.get("BASE", "http://localhost:8791/test/")
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "img")
 SHOTS = [
-    ("klhk.html", "overview", "ui-overview.png"),
-    ("klhk.html", "overview-dark", "ui-overview-dark.png"),
-    ("klhk.html", "text", "ui-text-toolbar.png"),
-    ("klhk.html", "map", "ui-map-panel.png"),
-    ("index.html", "colorbar", "ui-colorbar.png"),
+    ("example.html", "overview", "ui-overview.png"),
+    ("example.html", "overview-dark", "ui-overview-dark.png"),
+    ("example.html", "text", "ui-text-toolbar.png"),
+    ("example.html", "map", "ui-map-panel.png"),
+    ("raster.html", "colorbar", "ui-colorbar.png"),
     ("index.html", "frames", "ui-map-frames.png"),
     ("index.html", "data", "ui-attribute-table.png"),
     ("index.html", "chart", "ui-charts.png"),
@@ -32,8 +32,7 @@ SHOTS = [
     ("index.html", "fonts", "ui-fonts.png"),
     ("index.html", "paper", "ui-page-sizes.png"),
     ("index.html", "export", "ui-export.png"),
-    ("index.html", "ai", "ui-ai-chat.png"),
-    ("klhk.html", "progress", "ui-export-progress.png"),
+    ("example.html", "progress", "ui-export-progress.png"),
     ("index.html", "position", "ui-position.png"),
     ("index.html", "grid", "ui-grid-design.png"),
     ("index.html", "context", "ui-context-menu.png"),
@@ -48,7 +47,7 @@ def main():
     try:
         for _ in range(50):
             try:
-                tabs = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json"))
+                tabs = json.load(urllib.request.urlopen(f"http://localhost:{port}/json"))
                 break
             except Exception:
                 time.sleep(0.3)
@@ -63,7 +62,10 @@ def main():
                 if msg.get("id") == mid[0]:
                     return msg.get("result", {})
         call("Emulation.setDeviceMetricsOverride", width=1600, height=900, deviceScaleFactor=1, mobile=False)
+        only = set(filter(None, os.environ.get("ONLY", "").split(",")))
         for pagefile, shot, name in SHOTS:
+            if only and shot not in only:
+                continue
             call("Page.navigate", url=f"{BASE}{pagefile}?shot={shot}")
             t0 = time.time()
             while time.time() - t0 < 60:
@@ -71,7 +73,7 @@ def main():
                 if r.get("result", {}).get("value") == "READY":
                     break
                 time.sleep(0.5)
-            time.sleep(4)  # let map tiles settle
+            time.sleep(12 if pagefile == "example.html" else 4)  # let map tiles settle (the key map loads its own basemap)
             img = call("Page.captureScreenshot", format="png")
             open(os.path.join(OUT, name), "wb").write(base64.b64decode(img["data"]))
             print("saved", name)
