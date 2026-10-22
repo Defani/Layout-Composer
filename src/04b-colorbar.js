@@ -140,6 +140,7 @@ ITEM_TYPES.colorbar = {
   size: [70, 16],
   defaults: () => ({
     source: "",
+    follow: true, // re-read range + colormap from the source layer whenever the composer opens
     colormap: "viridis",
     reverse: false,
     customColors: "#2c7bb6, #abd9e9, #ffffbf, #fdae61, #d7191c",

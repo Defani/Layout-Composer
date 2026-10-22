@@ -44,7 +44,31 @@ function addAtCenter(tool, variant, after) {
   setTool("select");
   select([item.id]);
   after?.(item);
+  // Canva-style: a new text box is ready to type into, its text selected so the
+  // first keystroke replaces the placeholder.
+  if (item.type === "text" && !after) requestAnimationFrame(() => startInlineEdit(item));
   return item;
+}
+
+// Double-click on an empty part of the page: drop a text box there and type.
+function addTextAt(xMM, yMM) {
+  const pg = S.doc.page;
+  const k = clamp(Math.min(pg.width, pg.height) / 210, 0.6, 3);
+  const size = round(12 * Math.sqrt(k), 1);
+  const h = round(size * PT * 1.2 + 2, 1);
+  const w = round(40 * k, 1);
+  addItemFromTool("text", { x: round(clamp(xMM, 0, pg.width - w), 1), y: round(clamp(yMM - h / 2, 0, pg.height - h), 1), w, h });
+  const item = S.doc.items.at(-1);
+  if (!item || item.type !== "text") return;
+  commit(() => {
+    item.props.text = "";
+    item.props.font = { ...item.props.font, size };
+    item.props.wrap = false;
+    item.props.autoSize = "width";
+  });
+  setTool("select");
+  select([item.id]);
+  requestAnimationFrame(() => startInlineEdit(item));
 }
 
 const TEXT_PRESETS = {
@@ -66,11 +90,12 @@ function startInlineEdit(item) {
   const Z = S.zoom;
   const ta = el("textarea", { class: `${NS}-inline`, spellcheck: "false" });
   ta.value = p.text || "";
+  // Canva: a heading box hugs its text and grows from its anchor (left edge,
+  // centre or right edge) while typing; a paragraph box keeps its width, wraps
+  // and grows downwards. The real box, its frame and handles follow every key.
+  const hug = p.autoSize === "width" || !p.wrap;
+  if (hug) ta.style.whiteSpace = "pre";
   Object.assign(ta.style, {
-    left: `${item.x * Z}px`,
-    top: `${item.y * Z}px`,
-    width: `${Math.max(item.w * Z, 40)}px`,
-    height: `${Math.max(item.h * Z, 20)}px`,
     transform: item.rot ? `rotate(${item.rot}deg)` : "",
     fontFamily: `"${p.font.family}", Arial, sans-serif`,
     fontSize: `${p.font.size * PT * Z}px`,
@@ -80,41 +105,115 @@ function startInlineEdit(item) {
     textAlign: p.align,
     lineHeight: String(p.lineHeight || 1.2),
     padding: `${(p.padding || 0) * Z}px`,
-    background: p.background || "rgba(255,255,255,0.85)",
+    // transparent: the text looks the same while typing as after (Canva)
+    background: p.background || "transparent",
+    letterSpacing: p.font.spacing ? `${(p.font.spacing / 1000) * p.font.size * PT * Z}px` : "",
+    paddingLeft: `${((p.padding || 0) + Math.max(0, p.indent || 0)) * Z}px`,
+    textTransform: { upper: "uppercase", lower: "lowercase", title: "capitalize" }[p.textCase] || "",
+    textDecoration: [p.underline && p.underline !== "none" ? "underline" : "", p.strike ? "line-through" : ""].filter(Boolean).join(" "),
   });
+  const orig = { text: p.text, x: item.x, y: item.y, w: item.w, h: item.h };
+  const ax = p.align === "center" ? item.x + item.w / 2 : p.align === "right" ? item.x + item.w : item.x;
+  const kx = p.align === "center" ? 0.5 : p.align === "right" ? 1 : 0;
+  const ky = p.valign === "middle" ? 0.5 : p.valign === "bottom" ? 1 : 0;
+  const fit = () => {
+    p.text = ta.value;
+    renderPaper([item.id]); // auto-size settles the box from the real text
+    if (hug) item.x = round(ax - item.w * kx, 3);
+    const pad = (p.padding || 0) * Z;
+    let w = item.w * Z;
+    let left = item.x * Z;
+    Object.assign(ta.style, { width: `${w}px`, paddingTop: `${pad}px`, height: "0px" });
+    // font metrics of the page and the editor can differ a hair: never let the
+    // editor scroll its text sideways
+    if (hug && ta.scrollWidth > ta.clientWidth) {
+      const d = ta.scrollWidth - ta.clientWidth + 2;
+      w += d;
+      left -= d * kx;
+      ta.style.width = `${w}px`;
+    }
+    const need = ta.scrollHeight;
+    // a fixed box grows downwards when the text no longer fits (Canva)
+    if (p.autoSize !== "width" && p.autoSize !== "height" && need / Z > item.h) item.h = round(need / Z, 2);
+    const boxH = item.h * Z;
+    Object.assign(ta.style, {
+      left: `${left}px`,
+      top: `${item.y * Z}px`,
+      paddingTop: `${pad + Math.max(0, boxH - need) * ky}px`,
+      height: `${Math.max(boxH, need)}px`,
+    });
+    Object.assign(node.style, { left: `${item.x * Z}px`, height: `${boxH}px` });
+    renderSelection();
+  };
   S.ui.paper.appendChild(ta);
+  S.ui.paper.classList.add(`${NS}-inlineedit`);
   node.style.visibility = "hidden";
-  S.inline = { item, ta, node, before: p.text };
+  S.inline = { item, ta, node, orig };
+  fit();
   ta.focus();
   ta.select();
   ta.addEventListener("keydown", (e) => {
     e.stopPropagation();
-    if (e.key === "Escape") {
-      ta.value = S.inline.before;
+    // Esc or Ctrl+Enter leave the box keeping what was typed (Canva / PowerPoint);
+    // Ctrl+Z afterwards brings the old text back
+    if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) {
+      e.preventDefault();
       finishInlineEdit();
     }
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) finishInlineEdit();
   });
-  ta.addEventListener("input", () => {
-    // grow the box while typing
-    ta.style.height = "auto";
-    ta.style.height = `${Math.max(ta.scrollHeight, item.h * Z)}px`;
-  });
+  ta.addEventListener("input", fit);
   ta.addEventListener("blur", () => finishInlineEdit());
 }
 function finishInlineEdit() {
   const ed = S.inline;
   if (!ed) return;
   S.inline = null;
-  const { item, ta, node, before } = ed;
+  const { item, ta, node, orig } = ed;
   const text = ta.value;
-  const needH = (ta.scrollHeight / S.zoom);
+  const end = { x: item.x, y: item.y, w: item.w, h: item.h };
+  // the live edit changed the item in place: put it back so the undo step
+  // below records the text as it was
+  Object.assign(item, { x: orig.x, y: orig.y, w: orig.w, h: orig.h });
+  item.props.text = orig.text;
   ta.remove();
+  S.ui.paper.classList.remove(`${NS}-inlineedit`);
   node.style.visibility = "";
-  if (text !== before) {
-    commit(() => {
-      item.props.text = text;
-      if (needH > item.h + 0.5) item.h = round(needH, 1);
-    });
+  // an empty new text box is dropped instead of leaving an invisible item
+  if (!text.trim() && !orig.text) {
+    commit(() => (S.doc.items = S.doc.items.filter((i) => i.id !== item.id)));
+    select([]);
+    return;
   }
+  if (text !== orig.text) commit(() => {
+      Object.assign(item, end);
+      item.props.text = text;
+    });
+  else {
+    renderPaper([item.id]);
+    renderSelection();
+  }
+}
+
+// ---------------------------------------------------------------- mini toolbar (Canva)
+// Floats above a single selected item: lock, duplicate, delete and more.
+ICON_PATHS.more = "M5 12h.01M12 12h.01M19 12h.01";
+function miniBar(item) {
+  const act = (fn) => () => {
+    finishInlineEdit();
+    fn();
+  };
+  const bar = el("div", { class: `${NS}-minibar` },
+    iconBtn(item.locked ? "lock" : "unlock", item.locked ? "Unlock" : "Lock", act(() => commit(() => (item.locked = !item.locked))), `${NS}-qbtn`),
+    item.locked ? null : iconBtn("copy", "Duplicate (Ctrl+D)", act(() => duplicateSelection()), `${NS}-qbtn`),
+    item.locked ? null : iconBtn("trash", "Delete (Del)", act(() => deleteSelection()), `${NS}-qbtn`),
+    iconBtn("more", "More", (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      finishInlineEdit();
+      openContextMenu({ preventDefault() {}, clientX: r.left, clientY: r.bottom + 4 });
+    }, `${NS}-qbtn`),
+  );
+  // keep the text box focused while a button is pressed
+  bar.addEventListener("mousedown", (e) => e.preventDefault());
+  if (item.rot) bar.style.transform = `translateX(-50%) rotate(${-item.rot}deg)`;
+  return bar;
 }

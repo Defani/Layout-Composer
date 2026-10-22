@@ -179,7 +179,7 @@ async function exportLayout(fmt, progIn) {
         const pdf = new JsPDF({ orientation: pg.width > pg.height ? "landscape" : "portrait", unit: "mm", format: [pg.width, pg.height], compress: true });
         pdf.setProperties({ title: S.doc.vars?.title || S.doc.name, creator: "Layout Composer" });
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pg.width, pg.height, undefined, "FAST");
-        pdf.save(`${base}.pdf`);
+        downloadBlob(pdf.output("blob"), `${base}.pdf`);
       } else {
         prog.set("Saving image…", 0.92, "save");
         const blob = await new Promise((r) => canvas.toBlob(r, fmt === "jpg" ? "image/jpeg" : "image/png", 0.95));
@@ -188,6 +188,7 @@ async function exportLayout(fmt, progIn) {
       }
     }
     prog.set("Saved", 1);
+    aiExportCard(svg, fmt);
     toast(`${{ vpdf: "Vector PDF", geopdf: "GeoPDF" }[fmt] || fmt.toUpperCase()} export finished`);
     return true;
   } catch (e) {
@@ -240,7 +241,7 @@ async function saveVectorPdf(svgText, base) {
   } finally {
     holder.remove();
   }
-  pdf.save(`${base}.pdf`);
+  downloadBlob(pdf.output("blob"), `${base}.pdf`);
 }
 
 // ---------------------------------------------------------------- GeoPDF

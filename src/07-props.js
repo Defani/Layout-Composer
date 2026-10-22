@@ -282,14 +282,17 @@ function typographyRows(item, path, { text = false } = {}) {
       tog("italic", "<i>I</i>", "Italic", f.italic),
       tog("smallCaps", "<span style='font-variant:small-caps'>Sc</span>", "Small caps", f.smallCaps),
       ...(text ? [
+        // same properties as the Format ribbon (underline style, strike)
         (() => {
-          const b = el("button", { type: "button", class: `${NS}-tog ${p.decoration === "underline" ? "active" : ""}`, title: "Underline", html: "<u>U</u>" });
-          b.addEventListener("click", () => liveSet(item, "props.decoration", p.decoration === "underline" ? "none" : "underline", redo));
+          const on = (p.underline || (p.decoration === "underline" ? "single" : "none")) !== "none";
+          const b = el("button", { type: "button", class: `${NS}-tog ${on ? "active" : ""}`, title: "Underline", html: "<u>U</u>" });
+          b.addEventListener("click", () => commit(() => Object.assign(p, { underline: on ? "none" : "single", strike: !!p.strike || p.decoration === "line-through", decoration: "none" })));
           return b;
         })(),
         (() => {
-          const b = el("button", { type: "button", class: `${NS}-tog ${p.decoration === "line-through" ? "active" : ""}`, title: "Strikethrough", html: "<s>S</s>" });
-          b.addEventListener("click", () => liveSet(item, "props.decoration", p.decoration === "line-through" ? "none" : "line-through", redo));
+          const on = !!p.strike || p.decoration === "line-through";
+          const b = el("button", { type: "button", class: `${NS}-tog ${on ? "active" : ""}`, title: "Strikethrough", html: "<s>S</s>" });
+          b.addEventListener("click", () => commit(() => Object.assign(p, { strike: !on, decoration: "none" })));
           return b;
         })(),
       ] : []),
@@ -357,6 +360,105 @@ function colormapPicker(item) {
       grid.appendChild(b);
     }
     popoverAt(btnEl, el("div", {}, el("div", { class: `${NS}-ptitle` }, "Colormap"), grid), `${NS}-cmappop`);
+  });
+  return btnEl;
+}
+
+// Own north arrows: upload a PNG / SVG; uploads are kept in the library so they
+// can be reused on other layouts. Colors and the letter do not apply to them.
+function customNorthRow(item) {
+  const p = item.props;
+  const saved = (S.library.customNorth = S.library.customNorth || []);
+  const use = (src) => commit(() => {
+    p.variant = "custom";
+    p.customSrc = src;
+  });
+  const upload = () => {
+    const input = el("input", { type: "file", accept: "image/png,image/svg+xml,image/webp,image/jpeg" });
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (!saved.includes(reader.result)) saved.push(reader.result);
+        saveLibrary();
+        use(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+    input.click();
+  };
+  const tiles = saved.map((src, i) => {
+    const b = el("button", { type: "button", class: `${NS}-gitem ${p.variant === "custom" && p.customSrc === src ? "active" : ""}`, title: "Use this arrow" }, el("img", { src, alt: "", style: "width:100%;height:34px;object-fit:contain" }));
+    b.addEventListener("click", () => use(src));
+    b.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      saved.splice(i, 1);
+      saveLibrary();
+      renderProps();
+      toast("Arrow removed from your library");
+    });
+    return b;
+  });
+  return el("div", {},
+    el("div", { class: `${NS}-mhead` }, "Your arrows"),
+    tiles.length ? el("div", { class: `${NS}-gallery` }, ...tiles) : null,
+    btn("Upload PNG / SVG…", upload, { iconName: "image", title: "Use your own north arrow image (right-click a saved arrow to remove it)" }),
+  );
+}
+
+// Mini basemap catalog for map frames and insets: the composer's own basemaps
+// plus every keyless basemap from GeoLibre's catalog, grouped, with a search box.
+// Raster thumbnails are a single zoom-3 tile over Indonesia.
+function basemapThumb(kind) {
+  const c = catalogBasemap(kind);
+  const raster = c?.[3] === "raster" ? c[4].split("|")[0] : RASTER_BASEMAPS[kind]?.tiles[0];
+  if (raster) {
+    const url = raster.replace("{z}", "3").replace("{x}", "6").replace("{y}", "4").replace("{s}", "a");
+    return `<span class="${NS}-bmthumb" style="background-image:url('${esc(url)}')"></span>`;
+  }
+  const tint = { geolibre: "#0d99ff", none: "transparent", klhk: "#c8e6a0", "klhk-hillshade": "#b5c99a", sni: "#f2e6b8" }[kind] || (/dark|fiord|night/i.test(kind) ? "#2b2f36" : "#e8ecef");
+  return `<span class="${NS}-bmthumb ${NS}-bmvec" style="background:${tint}"></span>`;
+}
+function basemapLabel(kind) {
+  return BASEMAP_STYLES[kind] || catalogBasemap(kind)?.[1] || kind;
+}
+function basemapPicker(item) {
+  const p = item.props;
+  const btnEl = el("button", { type: "button", class: `${NS}-cmapbtn ${NS}-bmbtn` });
+  btnEl.innerHTML = `${basemapThumb(p.basemap || "geolibre")}<span>${esc(basemapLabel(p.basemap || "geolibre"))}</span>`;
+  btnEl.addEventListener("click", () => {
+    const list = el("div", { class: `${NS}-bmlist` });
+    const search = el("input", { type: "search", class: `${NS}-input`, placeholder: "Search basemaps…" });
+    const entries = [
+      ...Object.keys(BASEMAP_STYLES).map((k) => [k, BASEMAP_STYLES[k], "Layout Composer"]),
+      ...BASEMAP_CATALOG.map((b) => [`cat:${b[0]}`, b[1], b[2]]),
+    ];
+    const draw = () => {
+      const q = search.value.trim().toLowerCase();
+      list.innerHTML = "";
+      let group = null;
+      let grid = null;
+      for (const [kind, name, g] of entries) {
+        if (q && !`${name} ${g}`.toLowerCase().includes(q)) continue;
+        if (g !== group) {
+          group = g;
+          grid = el("div", { class: `${NS}-bmgrid` });
+          list.append(el("div", { class: `${NS}-mhead` }, g), grid);
+        }
+        const b = el("button", { type: "button", class: `${NS}-bmopt ${(p.basemap || "geolibre") === kind ? "active" : ""}`, title: name, html: `${basemapThumb(kind)}<small>${esc(name)}</small>` });
+        b.addEventListener("click", () => {
+          closePopover();
+          commit(() => (p.basemap = kind));
+        });
+        grid.appendChild(b);
+      }
+      if (!list.children.length) list.append(el("p", { class: `${NS}-muted` }, "No basemap matches."));
+    };
+    search.addEventListener("input", draw);
+    draw();
+    popoverAt(btnEl, el("div", {}, el("div", { class: `${NS}-ptitle` }, "Basemap"), search, list), `${NS}-bmpop`);
+    search.focus();
   });
   return btnEl;
 }
@@ -474,7 +576,7 @@ function emptyState() {
     el("div", { class: `${NS}-keyshead` }, "Shortcuts"),
     el("ul", { class: `${NS}-keys` },
       tip("Double-click", "edit text, or pan a map's content"),
-      tip("Ctrl + scroll", "zoom the canvas"),
+      tip("Scroll", "zoom the canvas (Shift + scroll: sideways)"),
       tip("Space + drag", "pan the canvas"),
       tip("Arrows", "nudge 1 mm (Shift 10 mm)"),
       tip("Alt + drag", "move without snapping"),
@@ -637,10 +739,11 @@ function itemProps(item) {
           scheduleOverlayRefresh();
         });
       };
-      const scaleInput = el("input", { type: "number", class: `${NS}-input`, value: mapScale(item), step: 500, min: 1 });
+      // room for 8-digit scales (1 : 57 024 221 at world view) next to the preset list
+      const scaleInput = el("input", { type: "number", class: `${NS}-input`, value: mapScale(item), step: 500, min: 1, style: { flex: "1 1 auto", minWidth: "96px" } });
       scaleInput.addEventListener("change", () => setScale(parseFloat(scaleInput.value)));
       S.ui.liveScaleInput = scaleInput;
-      const presets = el("select", { class: `${NS}-input ${NS}-sm` }, el("option", { value: "" }, "Preset…"), ...PRESET_SCALES.map((s) => el("option", { value: s }, `1 : ${fmtNumber(s)}`)));
+      const presets = el("select", { class: `${NS}-input ${NS}-sm`, style: { flex: "0 0 84px", width: "84px" } }, el("option", { value: "" }, "Preset…"), ...PRESET_SCALES.map((s) => el("option", { value: s }, `1 : ${fmtNumber(s)}`)));
       presets.addEventListener("change", () => {
         if (!presets.value) return;
         scaleInput.value = presets.value;
@@ -718,7 +821,7 @@ function itemProps(item) {
             return row("Extent", sel);
           })(),
           row("Map rotation", fNum(item, P("view.bearing"), { step: 1, min: -180, max: 360, unit: "°", after: () => { refreshCanvas(); scheduleOverlayRefresh(); } })),
-          row("Basemap", fSelect(item, P("basemap"), Object.entries(BASEMAP_STYLES), { after: () => refreshCanvas() })),
+          row("Basemap", basemapPicker(item)),
           row("Background", fColor(item, P("background"))),
           btn("Reload layers from GeoLibre", () => {
             S.styleEpoch = (S.styleEpoch || 0) + 1;
@@ -745,10 +848,40 @@ function itemProps(item) {
     }
     case "legend": {
       const entriesBox = el("div", { class: `${NS}-entries` });
+      // A group heading and the classes under it form one block; dragging the
+      // heading moves the whole block (ArcGIS table of contents).
+      const blockOf = (i) => {
+        const list = p.entries;
+        if (list[i]?.kind !== "group") return [i, i + 1];
+        // the heading's own classes: same layer, up to the next heading
+        let end = i + 1;
+        while (end < list.length && list[end].kind !== "group" && (!list[i].layerId || list[end].layerId === list[i].layerId)) end++;
+        return [i, end];
+      };
+      const moveEntry = (from, to, above) => {
+        const list = p.entries;
+        const [s, e] = blockOf(from);
+        if (to >= s && to < e) return;
+        let at = above ? to : to + 1;
+        if (list[from].kind === "group") {
+          // a block lands between blocks, never inside another group's classes
+          let g = to;
+          while (g > 0 && list[g].kind !== "group") g--;
+          const [gs, ge] = list[g]?.kind === "group" ? blockOf(g) : [to, to + 1];
+          if (to >= gs && to < ge) at = above && to === gs ? gs : ge;
+        }
+        commit(() => {
+          const moved = list.splice(s, e - s);
+          if (at > s) at -= e - s;
+          list.splice(at, 0, ...moved);
+          p.userOrder = true;
+        });
+      };
       const drawEntries = () => {
         entriesBox.innerHTML = "";
         (p.entries || []).forEach((e, i) => {
-          const r = el("div", { class: `${NS}-entry ${e.kind === "group" ? "group" : ""}` });
+          const r = el("div", { class: `${NS}-entry ${e.kind === "group" ? "group" : ""} ${NS}-sortable`, "data-sort-id": String(i) });
+          pointerSort(r, entriesBox, (tid, above) => moveEntry(i, Number(tid), above));
           const vis = el("input", { type: "checkbox", checked: !e.hidden, title: "Show" });
           vis.addEventListener("change", () => liveSet(e, "hidden", !vis.checked));
           const sw = e.kind === "group" ? el("span", { class: `${NS}-swg`, html: icon("list", 13) }) : el("span", { class: `${NS}-sw`, html: `<svg width="22" height="14" viewBox="0 0 ${p.patchW} ${p.patchH}">${legendPatch(e.patch, 0, 0, p.patchW, p.patchH)}</svg>` });
@@ -762,16 +895,19 @@ function itemProps(item) {
             liveSet(e.patch, e.patch.type === "line" ? "stroke" : "fill", col.value);
             sw.innerHTML = `<svg width="22" height="14" viewBox="0 0 ${p.patchW} ${p.patchH}">${legendPatch(e.patch, 0, 0, p.patchW, p.patchH)}</svg>`;
           });
+          // up / down step over whole blocks when the row is a group heading
           const up = iconBtn("up", "Move up", () => {
             if (i === 0) return;
-            commit(() => ([p.entries[i - 1], p.entries[i]] = [p.entries[i], p.entries[i - 1]]));
+            moveEntry(i, i - 1, true);
           });
           const dn = iconBtn("down", "Move down", () => {
-            if (i >= p.entries.length - 1) return;
-            commit(() => ([p.entries[i + 1], p.entries[i]] = [p.entries[i], p.entries[i + 1]]));
+            const [, end] = blockOf(i);
+            if (end >= p.entries.length) return;
+            moveEntry(i, end, false);
           });
           const del = iconBtn("trash", "Delete entry", () => commit(() => p.entries.splice(i, 1)));
-          r.append(vis, sw, lab, col || el("span"), up, dn, del);
+          const grip = el("span", { class: `${NS}-grip`, title: e.kind === "group" ? "Drag to move this group and its classes" : "Drag to reorder", html: '<svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor"><circle cx="2" cy="3" r="1.2"/><circle cx="6" cy="3" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/><circle cx="2" cy="11" r="1.2"/><circle cx="6" cy="11" r="1.2"/></svg>' });
+          r.append(grip, vis, sw, lab, col || el("span"), up, dn, del);
           entriesBox.appendChild(r);
         });
       };
@@ -806,6 +942,12 @@ function itemProps(item) {
           entriesBox,
           addManual,
           fCheck(item, P("showGroups"), "Show group headings (classified layer names)"),
+          fCheck(item, P("visibleOnly"), "Only show classes visible in the map frame", {
+            after: () => {
+              commit(() => syncLegendEntries(item));
+              renderProps();
+            },
+          }),
           fCheck(item, P("autoSync"), "Auto-sync when the composer opens"),
           fCheck(item, P("autoHeight"), "Box height follows content", { after: () => { refreshCanvas(); renderSelection(); } }),
         ]),
@@ -839,13 +981,22 @@ function itemProps(item) {
           const msg = readColorbarFromLayer(p);
           toast(msg, /no stored|not found|not in the list|RGB composite/.test(msg) ? "warn" : "info");
         });
+      if (p.follow == null) p.follow = true;
+      // typing a range by hand stops the bar from following the layer
+      const manual = () => {
+        if (p.source && p.follow) {
+          p.follow = false;
+          renderProps();
+        }
+      };
       out.push(
         section("Data", [
           row("Values from", fSelect(item, P("source"), sources, { after: () => { if (p.source) read(); else renderProps(); } })),
+          p.source ? fCheck(item, P("follow"), "Follow the layer automatically (range & colormap)", { after: () => { if (p.follow) read(); } }) : null,
           p.source ? btn("Re-read from layer", read, { iconName: "sync" }) : null,
           el("div", { class: `${NS}-grid2` },
-            row("Minimum", fNum(item, P("vmin"), { step: 0.1 })),
-            row("Maximum", fNum(item, P("vmax"), { step: 0.1 })),
+            row("Minimum", fNum(item, P("vmin"), { step: 0.1, after: manual })),
+            row("Maximum", fNum(item, P("vmax"), { step: 0.1, after: manual })),
           ),
           row("Colormap", colormapPicker(item)),
           p.colormap === "custom" ? row("Colors", fArea(item, P("customColors"), { rows: 2 })) : null,
@@ -909,11 +1060,16 @@ function itemProps(item) {
         section("Settings", [
           row("Map", fSelect(item, P("linkedMap"), mapOptions(null))),
           row("Units", fSelect(item, P("units"), [["auto", "Auto"], ["km", "Kilometers"], ["m", "Meters"], ["mi", "Miles"], ["nmi", "Nautical miles"]])),
-          p.style === "dual" ? row("Second unit", fSelect(item, P("dualUnit"), [["papercm", "Centimeters on paper"], ["km", "Kilometers"], ["m", "Meters"], ["mi", "Miles"], ["nmi", "Nautical miles"]])) : null,
-          p.style === "dual" ? row("Second label", fText(item, P("dualLabel"), { placeholder: "cm (auto)" })) : null,
-          el("div", { class: `${NS}-grid2` }, row("Segments", fNum(item, P("segments"), { min: 1, max: 12, step: 1 })), row("Value/segment", fNum(item, P("segmentValue"), { min: 0, step: 0.5 }))),
-          el("p", { class: `${NS}-muted` }, "Value/segment 0 = fit the box width automatically."),
-          fCheck(item, P("leftSegments"), "Subdivided left segment (classic)"),
+          row("Second unit", fSelect(item, P("secondUnit"), [["none", p.style === "dual" ? "Default (cm on paper)" : "None"], ["papercm", "Centimeters on paper"], ["km", "Kilometers"], ["m", "Meters"], ["mi", "Miles"], ["nmi", "Nautical miles"]])),
+          scaleSecondUnit(p) ? row("Second label", fText(item, P("dualLabel"), { placeholder: `${SCALE_UNITS[scaleSecondUnit(p)].label} (auto)` })) : null,
+          p.style === "dual"
+            ? row("Bar divided by", fSeg(item, P("dualBase"), [["paper", "cm on paper (KLHK)"], ["ground", "Round km / m"]]))
+            : null,
+          el("div", { class: `${NS}-grid2` }, row("Segments", fNum(item, P("segments"), { min: 1, max: 12, step: 1 })), row(p.style === "dual" && (p.dualBase || "paper") === "paper" ? "cm/segment" : "Value/segment", fNum(item, P("segmentValue"), { min: 0, step: 0.5 }))),
+          el("p", { class: `${NS}-muted` }, p.style === "dual" && (p.dualBase || "paper") === "paper" ? "cm/segment 0 = fit the box width automatically (1, 2, 2.5, 5 cm…). Both rows start at 0 and share the same ticks." : "Value/segment 0 = fit the box width automatically."),
+          p.style === "dual" && (p.dualBase || "paper") === "paper"
+            ? fCheck(item, P("dualSplit"), "Split the first segment in halves (0 · 1 · 2 · 4 …)")
+            : fCheck(item, P("leftSegments"), "Subdivided left segment (classic)"),
           row("Unit label", fText(item, P("unitLabel"), { placeholder: "km / m (auto)" })),
           el("div", { class: `${NS}-grid2` }, row("Bar height", fNum(item, P("barHeight"), { min: 0.3, step: 0.1, unit: "mm" })), row("Line width", fNum(item, P("lineWidth"), { min: 0.05, step: 0.05, unit: "mm" }))),
           el("div", { class: `${NS}-grid2` }, row("Color 1", fColor(item, P("color1"))), row("Color 2", fColor(item, P("color2")))),
@@ -925,11 +1081,13 @@ function itemProps(item) {
       );
       break;
     case "north":
+      if (p.labelScale == null) p.labelScale = 1;
       out.push(
-        section("North Arrow Style", [galleryGrid("north", p.variant, (id) => commit(() => (p.variant = id)))]),
+        section("North Arrow Style", [galleryGrid("north", p.variant, (id) => commit(() => (p.variant = id))), customNorthRow(item)]),
         section("Settings", [
           el("div", { class: `${NS}-grid2` }, row("Primary color", fColor(item, P("color1"))), row("Secondary color", fColor(item, P("color2")))),
           row("Letter", fSelect(item, P("label"), [["N", "N"], ["U", "U (Indonesian)"], ["", "No letter"]])),
+          row("Letter size", fRange(item, P("labelScale"), 0.5, 2.5, 0.05)),
           row("Letter font", fontPicker(p.fontFamily || "Arial", (n) => liveSet(item, P("fontFamily"), n, () => {
             refreshCanvas();
             renderProps();
@@ -1109,6 +1267,45 @@ function itemProps(item) {
   return out;
 }
 
+// ArcGIS-style interval entry: degrees / minutes / seconds columns for a
+// graticule, metres for a measured (UTM) grid. All zero = automatic.
+function gridIntervalRow(item, rerender) {
+  const g = item.props.grid;
+  const box = (value, unit, max, title) => {
+    const input = el("input", { type: "number", class: `${NS}-input`, value, min: 0, max, step: 1, title });
+    return [input, el("span", { class: `${NS}-unitwrap` }, input, el("span", { class: `${NS}-unit` }, unit))];
+  };
+  const set = (v) => liveSet(item, "props.grid.interval", v, () => refreshCanvas());
+  if (g.type === "utm") {
+    const [m, wrap] = box(g.interval || 0, "m", undefined, "Grid spacing in meters (0 = auto)");
+    m.step = 100;
+    m.addEventListener("change", () => {
+      set(Math.max(0, parseFloat(m.value) || 0));
+      rerender();
+    });
+    return row("Interval", el("div", { class: `${NS}-dmsrow` }, wrap, el("span", { class: `${NS}-muted` }, g.interval ? "" : "auto")));
+  }
+  // split the stored interval (degrees) into d / m / s
+  const totalS = Math.round((g.interval || 0) * 3600 * 1000) / 1000;
+  const d0 = Math.floor(totalS / 3600);
+  const m0 = Math.floor((totalS - d0 * 3600) / 60);
+  const s0 = round(totalS - d0 * 3600 - m0 * 60, 3);
+  const [di, dw] = box(d0, "°", 90, "Degrees");
+  const [mi, mw] = box(m0, "'", 59, "Minutes");
+  const [si, sw] = box(s0, '"', 59.999, "Seconds");
+  si.step = "any";
+  const apply = () => {
+    const v = (parseFloat(di.value) || 0) + (parseFloat(mi.value) || 0) / 60 + (parseFloat(si.value) || 0) / 3600;
+    set(v > 0 ? v : 0);
+    rerender();
+  };
+  for (const i of [di, mi, si]) i.addEventListener("change", apply);
+  return el("div", {},
+    row("Interval", el("div", { class: `${NS}-dmsrow` }, dw, mw, sw)),
+    g.interval ? null : el("p", { class: `${NS}-muted` }, "All zero = automatic interval."),
+  );
+}
+
 function gridSection(item) {
   const p = item.props;
   const g = p.grid;
@@ -1126,8 +1323,14 @@ function gridSection(item) {
   };
   return section("Coordinate Grid / Graticule", [
     fCheck(item, P("show"), "Show coordinate grid"),
-    row("System", fSelect(item, P("type"), [["dms", "Degrees Minutes Seconds (DMS)"], ["dm", "Degrees Minutes (DM)"], ["dd", "Decimal degrees (DD)"], ["utm", "UTM (meters)"]], { after: () => { g.interval = 0; rerender(); } })),
-    row("Interval", fSelect(item, P("interval"), g.type === "utm" ? utmIntervals : geoIntervals)),
+    row("System", fSelect(item, P("type"), [["dms", "Graticule · Degrees Minutes Seconds"], ["dm", "Graticule · Degrees Minutes"], ["dd", "Graticule · Decimal degrees"], ["utm", "Measured grid · UTM (meters)"]], { after: () => { g.interval = 0; rerender(); } })),
+    gridIntervalRow(item, rerender),
+    (() => {
+      const list = g.type === "utm" ? utmIntervals : geoIntervals;
+      // a typed value that is not a preset shows as "Custom"
+      const known = list.some(([v]) => Math.abs(v - (g.interval || 0)) < 1e-9);
+      return row("Presets", fSelect(item, P("interval"), known ? list : [...list, [g.interval, "Custom"]], { after: rerender }));
+    })(),
     g.type === "utm" ? row("UTM zone", fNum(item, P("zone"), { min: 0, max: 60, step: 1 })) : null,
     g.type === "utm" ? row("Label units", fSeg(item, P("utmUnit"), [["m", "Meters"], ["km", "Kilometers"]])) : null,
     g.type === "utm" ? el("p", { class: `${NS}-muted` }, `Zone 0 = automatic (zone ${UTM.zoneOf(p.view.center[0])}${p.view.center[1] < 0 ? "S" : "N"}).`) : null,

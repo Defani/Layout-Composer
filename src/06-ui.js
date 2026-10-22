@@ -67,6 +67,11 @@ const ICON_PATHS = {
   menu: "M4 7h16M4 12h16M4 17h16",
   sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z",
   send: "M4 12l16-8-6 16-2.5-6.5zM11.5 13.5L20 4",
+  dockside: "M4 5h16v14H4zM15 5v14",
+  history: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2",
+  bell: "M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0",
+  belloff: "M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l1.5 2H8M10 20.5a2 2 0 0 0 4 0M4 4l16 16",
+  dockfloat: "M4 5h16v14H4zM7 12h10v4H7z",
   chart: "M4 20V10M10 20V4M16 20v-7M21 20H3",
   donut: "M12 3a9 9 0 1 0 9 9h-5a4 4 0 1 1-4-4zM15 3.5A9 9 0 0 1 20.5 9H15z",
   qgis: "M4 4h16v16H4zM8 9h8M8 13h5M8 17h3M15 15l3 3",
@@ -127,8 +132,8 @@ function iconBtn(name, title, onClick, extraClass = "") {
 // ---------------------------------------------------------------- shell
 const TOOLS = [
   { id: "select", icon: "select", short: "Select", label: "Select / move (V)" },
-  { id: "pan", icon: "pan", short: "Pan", label: "Pan canvas (H, or hold Space)" },
-  { id: "content", icon: "movecontent", short: "Content", label: "Move map content (C): drag inside any map frame to pan, scroll to zoom, right-drag to rotate" },
+  // the hand moves what is inside a map frame; outside a frame it pans the page
+  { id: "content", icon: "pan", short: "Hand", label: "Hand (H): drag inside a map to move its content, scroll to zoom it, right-drag to rotate · drag outside a map to pan the page (or hold Space)" },
   { sep: true },
   { id: "map", icon: "map", short: "Map", label: "Add map frame" },
   { id: "inset", icon: "inset", short: "Inset", label: "Add inset / key map" },
@@ -139,20 +144,10 @@ const TOOLS = [
 
 // Insert menus in the top bar: each opens a small menu or gallery, then arms a tool.
 const INSERT_MENUS = [
-  {
-    id: "text", icon: "text", label: "Text", tools: ["title", "text", "table", "latex"],
-    items: [
-      ["heading", "title", "Heading", "26 pt bold"],
-      ["subheading", "title", "Subheading", "15 pt bold"],
-      ["body", "text", "Body text", "Wrapped paragraph"],
-      ["caption", "text", "Caption", "Small italic note"],
-      ["maplabel", "text", "Map label", "Spaced capitals with halo"],
-      ["callout", "text", "Callout", "Text on a colored box"],
-      ["title", "title", "Map title", "Uses the {title} variable"],
-      ["table", "table", "Table / info box", "Rows and columns, e.g. a title block"],
-      ["latex", "sigma", "Formula (LaTeX)", "MathJax formula"],
-    ],
-  },
+  // plain text straight away: bold, headings and the rest come from the dock on top
+  { id: "text", icon: "text", label: "Text", tools: ["text", "title"], tool: "text", direct: true },
+  { id: "latex", icon: "sigma", label: "LaTeX", tools: ["latex"], tool: "latex", direct: true },
+  { id: "table", icon: "table", label: "Table", tools: ["table"], tool: "table", direct: true },
   {
     id: "data", icon: "chart", label: "Data", tools: ["attrtable", "chart"],
     items: [
@@ -169,26 +164,36 @@ const INSERT_MENUS = [
   { id: "symbols", icon: "marker", label: "Symbols", tools: ["marker"], symbols: true },
   { id: "scalebar", icon: "scalebar", label: "Scale bar", tools: ["scalebar"], gallery: "scalebar", tool: "scalebar" },
 ];
+// What an Insert entry does when clicked (b = the button, for menus and galleries).
+function runInsert(m, b) {
+  if (m.direct) return setTool(S.tool === m.tool ? "select" : m.tool);
+  if (m.tool === "image") {
+    // a picture from a file or from a web link
+    const list = el("div", { class: `${NS}-menu` },
+      el("button", { type: "button", class: `${NS}-menuitem`, html: `${icon("image", 15)}<span>From file…</span><small>PNG, JPG, SVG on this computer</small>`, onclick: () => { closePopover(); addAtCenter("image"); } }),
+      el("button", { type: "button", class: `${NS}-menuitem`, html: `${icon("link", 15)}<span>From link…</span><small>Paste a picture URL</small>`, onclick: () => openImageLinkDialog(null) }),
+    );
+    return popoverAt(b, list);
+  }
+  if (m.gallery) return openToolGallery({ id: m.tool, gallery: m.gallery }, b);
+  if (m.symbols) return openSymbolsMenu(b);
+  const list = el("div", { class: `${NS}-menu` });
+  for (const [tool, ic, name, hint] of m.items) {
+    const it = el("button", { type: "button", class: `${NS}-menuitem`, html: `${icon(ic, 15)}<span>${esc(name)}</span><small>${esc(hint)}</small>` });
+    it.addEventListener("click", () => {
+      closePopover();
+      const [t, v] = tool.split(":");
+      addAtCenter(t, v);
+    });
+    list.appendChild(it);
+  }
+  popoverAt(b, list);
+}
 function buildInsertBar() {
   const grp = el("div", { class: `${NS}-grp ${NS}-insert` });
   for (const m of INSERT_MENUS) {
-    const b = el("button", { type: "button", class: `${NS}-ins`, "data-tools": m.tools.join(" "), title: m.label, html: `${icon(m.icon, 16)}<span>${esc(m.label)}</span>${m.tool === "image" ? "" : '<svg class="glc-caret" width="8" height="8" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>'}` });
-    b.addEventListener("click", () => {
-      if (m.tool === "image") return addAtCenter("image");
-      if (m.gallery) return openToolGallery({ id: m.tool, gallery: m.gallery }, b);
-      if (m.symbols) return openSymbolsMenu(b);
-      const list = el("div", { class: `${NS}-menu` });
-      for (const [tool, ic, name, hint] of m.items) {
-        const it = el("button", { type: "button", class: `${NS}-menuitem`, html: `${icon(ic, 15)}<span>${esc(name)}</span><small>${esc(hint)}</small>` });
-        it.addEventListener("click", () => {
-          closePopover();
-          const [t, v] = tool.split(":");
-          addAtCenter(t, v);
-        });
-        list.appendChild(it);
-      }
-      popoverAt(b, list);
-    });
+    const b = el("button", { type: "button", class: `${NS}-ins`, "data-tools": m.tools.join(" "), "data-tool": m.direct ? m.tool : null, title: m.direct ? `${m.label} (drag a box on the page, or click)` : m.label, html: `${icon(m.icon, 16)}<span>${esc(m.label)}</span>${m.tool === "image" || m.direct ? "" : '<svg class="glc-caret" width="8" height="8" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>'}` });
+    b.addEventListener("click", () => runInsert(m, b));
     grp.appendChild(b);
   }
   return grp;
@@ -230,16 +235,14 @@ function buildShell() {
   let pill = el("div", { class: `${NS}-pill`, role: "toolbar", "aria-label": "Tools" });
   tools.appendChild(pill);
   for (const t of TOOLS) {
-    if (t.sep) {
-      pill = el("div", { class: `${NS}-pill`, role: "toolbar", "aria-label": "Map elements" });
-      tools.appendChild(pill);
-      continue;
-    }
+    // only the modes stay on the thin left rail; map elements live on the Insert tab
+    if (t.sep) break;
     const b = el("button", { type: "button", class: `${NS}-tool`, "data-tool": t.id, title: t.label, "aria-label": t.label, html: icon(t.icon, 17) });
     b.addEventListener("click", () => {
       if (t.action) t.action(b);
       else if (t.gallery) openToolGallery(t, b);
-      else if (["map", "inset", "legend", "colorbar"].includes(t.id)) addAtCenter(t.id);
+      // map elements are drawn: arm the tool, then drag a box on the page
+      // (a plain click drops a default-sized item at that point)
       else setTool(t.id);
     });
     pill.appendChild(b);
@@ -251,7 +254,8 @@ function buildShell() {
     el("div", { class: `${NS}-topl` },
       el("div", { class: `${NS}-brand`, title: "Layout Composer", html: `${icon("layout", 16)}` }),
       iconBtn("menu", "Main menu", (e) => openMainMenu(e.currentTarget), `${NS}-mainmenu`),
-      iconBtn("dockleft", "Show / hide the Layers panel", () => toggleDock("left"), `${NS}-docktog`),
+      // layers are a drop-down list, not a side panel
+      el("button", { type: "button", class: `${NS}-layersbtn`, title: "Layers (drag to reorder)", html: `${icon("layers", 15)}<span>Layers</span>`, onclick: () => toggleLayersMenu() }),
       vsep(),
       el("div", { class: `${NS}-layoutpick` },
         layoutSel,
@@ -260,8 +264,15 @@ function buildShell() {
       vsep(),
       iconBtn("undo", "Undo (Ctrl+Z)", undo),
       iconBtn("redo", "Redo (Ctrl+Y)", redo),
+      vsep(),
+      // modes: select, pan, move map content
+      tools,
     ),
-    el("div", { class: `${NS}-topc` }, tools, buildInsertBar()),
+    // ribbon tabs (Word): Insert holds every element, Format the selection's settings
+    el("div", { class: `${NS}-topc ${NS}-rtabs`, role: "tablist" },
+      ...[["insert", "Insert"], ["format", "Format"], ["layout2", "Table Layout"], ["maptools", "Map Tools"]].map(([id, label]) =>
+        el("button", { type: "button", class: `${NS}-rtab`, role: "tab", "data-rtab": id, onclick: () => setRibbonTab(id) }, label)),
+    ),
     el("div", { class: `${NS}-topr` },
       el("div", { class: `${NS}-zoompill` },
         iconBtn("zout", "Zoom out (Ctrl+−)", () => setZoom(S.zoom / 1.2)),
@@ -271,6 +282,7 @@ function buildShell() {
       iconBtn("fit", "Fit page (Ctrl+0)", () => fitPage()),
       vsep(),
       iconBtn("save", "Save layout file (.json)", () => exportJSON()),
+      iconBtn("help", "Tour: how this works", () => startTour("layout", true), `${NS}-helpbtn`),
       iconBtn("sparkle", "Ask AI", () => setAiOpen(!AI.open), `${NS}-aitoggle`),
       iconBtn("download", "Export", () => openExportDialog(), `${NS}-exportbtn`),
       iconBtn("dockright", "Show / hide the Properties panel", () => toggleDock("right"), `${NS}-docktog`),
@@ -279,13 +291,14 @@ function buildShell() {
   );
 
   const left = el("aside", { class: `${NS}-left` },
-    el("div", { class: `${NS}-phead` }, el("span", { class: `${NS}-pheadt`, html: `${icon("layers", 14)}<span>Layers</span>` }), el("span", { class: `${NS}-count` })),
+    el("div", { class: `${NS}-phead` }, el("span", { class: `${NS}-pheadt`, html: `${icon("layers", 14)}<span>${S.embedded ? "Contents" : "Layers"}</span>` }), el("span", { class: `${NS}-count` })),
     el("div", { class: `${NS}-itemsearch` }, el("input", { type: "search", class: `${NS}-input`, placeholder: "Search layers…", oninput: (e) => { S.itemFilter = e.target.value; renderItemList(); } })),
     el("div", { class: `${NS}-itemlist` }),
   );
 
+  // Office-style ribbon under the top bar: its controls follow the selection.
+  const ribbon = el("div", { class: `${NS}-quick ${NS}-ribbon`, role: "toolbar", "aria-label": "Format" });
   const stage = el("main", { class: `${NS}-stage` },
-    el("div", { class: `${NS}-quick`, style: { display: "none" } }),
     buildAiChat(),
     el("div", { class: `${NS}-rcorner` }),
     el("canvas", { class: `${NS}-rtop` }),
@@ -302,11 +315,11 @@ function buildShell() {
     el("div", { class: `${NS}-props` }),
   );
 
-  const status = el("footer", { class: `${NS}-status` }, el("span", { class: `${NS}-pos` }, "x –  y –"), el("span", { class: `${NS}-selinfo` }), el("span", { class: `${NS}-hint` }), el("span", { class: `${NS}-viewtoggles` }, viewToggle("grid", "Canvas grid"), viewToggle("guides", "Guides"), viewToggle("snap", "Snap")), el("span", { class: `${NS}-zoomwrap` }, buildZoomSlider()));
-  root.append(top, el("div", { class: `${NS}-body` }, left, stage, right), status, el("div", { class: `${NS}-toasts` }));
+  const status = el("footer", { class: `${NS}-status` }, el("span", { class: `${NS}-pos` }, "x –  y –"), el("span", { class: `${NS}-selinfo` }), el("span", { class: `${NS}-hint` }), el("span", { class: `${NS}-seriesnav` }), el("span", { class: `${NS}-viewtoggles ${NS}-pagetools` }), el("span", { class: `${NS}-viewtoggles` }, viewToggle("grid", "Canvas grid"), viewToggle("guides", "Guides"), viewToggle("snap", "Snap"), el("button", { type: "button", class: `${NS}-vtog ${NS}-selframebtn`, title: "Selection frame: color and line style", onclick: (e) => openSelFrameMenu(e.currentTarget) }, "Selection")));
+  root.append(top, ribbon, el("div", { class: `${NS}-body` }, left, stage, right), status, el("div", { class: `${NS}-toasts` }));
 
   S.ui.root = root;
-  S.ui.quick = stage.querySelector(`.${NS}-quick`);
+  S.ui.quick = ribbon;
   S.ui.scroll = stage.querySelector(`.${NS}-scroll`);
   S.ui.canvas = stage.querySelector(`.${NS}-canvas`);
   S.ui.paper = stage.querySelector(`.${NS}-paper`);
@@ -334,6 +347,9 @@ function buildShell() {
   S.ui.canvas.addEventListener("dblclick", onDblClick);
   S.ui.canvas.addEventListener("pointermove", onHoverMove);
   S.ui.canvas.addEventListener("contextmenu", openContextMenu);
+  // middle button pans the page: stop Windows' auto-scroll cursor from taking over
+  S.ui.scroll.addEventListener("mousedown", (e) => e.button === 1 && e.preventDefault());
+  S.ui.scroll.addEventListener("auxclick", (e) => e.button === 1 && e.preventDefault());
   bindRulerGuides();
   let lastW = 0;
   const ro = new ResizeObserver(() => {
@@ -365,8 +381,11 @@ function openMainMenu(anchor) {
     menuItem("Import QGIS template (.qpt)…", () => importQpt(), { iconName: "qgis" }),
     menuItem("Export as QGIS template (.qpt)", () => exportQpt(), { iconName: "qgis" }),
     sep(),
-    menuItem("Layers panel", () => toggleDock("left"), { iconName: "dockleft" }),
+    menuItem("Layers", () => toggleLayersMenu(true), { iconName: "layers" }),
     menuItem("Properties panel", () => toggleDock("right"), { iconName: "dockright" }),
+    sep(),
+    menuItem("Take the tour", () => startTour("layout", true), { iconName: "help" }),
+    menuItem("Keyboard shortcuts", () => openShortcuts(), { iconName: "keyboard" }),
     sep(),
     menuItem("Close Layout Composer", () => closeComposer(), { iconName: "close" }),
   );
@@ -563,11 +582,13 @@ function setTool(id, variant) {
   const hints = {
     select: "Click to select · Shift+click to multi-select · Double-click a map to pan its content · Arrows = nudge 1 mm (Shift 10 mm)",
     pan: "Drag to pan the canvas",
-    content: "Drag inside a map frame to move its content · scroll to zoom · right-drag to rotate · V to return to Select",
+    content: "Hand: drag inside a map to move its content · scroll to zoom it · right-drag to rotate · drag outside a map to pan the page · V to return to Select",
     pen: "Click to add points · Shift = 45° · click the first point to close · double-click or Enter to finish · Backspace removes a point · Esc cancels",
   };
   if (id === "pen") hints.pen = (DRAW_MODES.find((m) => m.id === (variant || "polyline")) || DRAW_MODES[0]).hint + " · Esc cancels";
   S.ui.hint.textContent = hints[id] || "Click-drag on the paper to draw the item box, or click once for the default size. Esc to cancel.";
+  // the Insert tab shows the armed element as pressed
+  if (S.doc) renderQuickBar();
 }
 
 // ---------------------------------------------------------------- tool galleries
@@ -650,9 +671,9 @@ function openToolGallery(tool, anchor) {
   const titles = { north: "Choose a north arrow style", shape: "Choose a shape", scalebar: "Choose a scale bar style", draw: "Draw", marker: "Choose a marker symbol" };
   const pop = popoverAt(anchor, el("div", {}, el("div", { class: `${NS}-ptitle` }, titles[tool.gallery]), galleryGrid(tool.gallery, null, (id) => {
     closePopover();
-    // drawing needs the pointer; everything else drops straight onto the page
-    if (tool.id === "pen") setTool("pen", id);
-    else addAtCenter(tool.id, id);
+    // every gallery pick is drawn with the pointer: drag a box on the page
+    setTool(tool.id === "pen" ? "pen" : tool.id, id);
+    if (tool.id !== "pen") toast("Drag on the page to draw it (or click for the default size)");
   })), `${NS}-galpop`);
   return pop;
 }
@@ -714,10 +735,12 @@ function layoutCanvas() {
 }
 function onWheel(e) {
   if (S.contentMode && e.target.closest(`.${NS}-item[data-id="${S.contentMode}"]`)) return; // map handles its own wheel
-  if (e.ctrlKey || e.metaKey) {
-    e.preventDefault();
-    setZoom(S.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12), { x: e.clientX, y: e.clientY });
-  }
+  // Shift + wheel keeps native horizontal scrolling; the plain wheel zooms toward the cursor
+  if (e.shiftKey) return;
+  e.preventDefault();
+  // trackpads send many small deltas: scale the step by the delta so zooming stays smooth
+  const f = 1 + 0.12 * Math.min(Math.abs(e.deltaY) / 100 || 1, 1);
+  setZoom(S.zoom * (e.deltaY < 0 ? f : 1 / f), { x: e.clientX, y: e.clientY });
 }
 // client px -> page mm
 function toMM(e) {
@@ -890,6 +913,7 @@ function renderPageDecor() {
 function renderPaper(onlyIds) {
   const Z = S.zoom;
   const seen = new Set();
+  let resized = false;
   S.doc.items.forEach((item, idx) => {
     if (onlyIds && !onlyIds.includes(item.id)) {
       seen.add(item.id);
@@ -921,12 +945,24 @@ function renderPaper(onlyIds) {
     node.classList.toggle("locked", !!item.locked);
     applyFxPreview(node, item);
     node.classList.toggle("content", S.contentMode === item.id);
-    const svg = node.querySelector("svg");
+    // the item's own overlay: a map frame also holds SVGs inside its live map box
+    const svg = node.querySelector(":scope > svg");
     svg.setAttribute("width", item.w * Z);
     svg.setAttribute("height", item.h * Z);
     svg.setAttribute("viewBox", `0 0 ${item.w} ${item.h}`);
     svg.setAttribute("overflow", "visible");
+    const w0 = item.w;
+    const h0 = item.h;
     svg.innerHTML = renderItem(item, { export: false });
+    // auto-sized text and tables settle their size while rendering: resize the
+    // box and its overlay to match, so outline and selection never sit apart
+    if (item.w !== w0 || item.h !== h0) {
+      Object.assign(node.style, { width: `${item.w * Z}px`, height: `${item.h * Z}px` });
+      svg.setAttribute("width", item.w * Z);
+      svg.setAttribute("height", item.h * Z);
+      svg.setAttribute("viewBox", `0 0 ${item.w} ${item.h}`);
+      if (S.selection.includes(item.id)) resized = true;
+    }
     if (item.type === "map") {
       const box = node.querySelector(`.${NS}-mapbox`);
       box.style.background = item.props.background || "#fff";
@@ -954,6 +990,7 @@ function renderPaper(onlyIds) {
       }
     }
   }
+  if (resized) renderSelection();
 }
 // Re-render SVG overlays (scale bars, insets, grids) after a map moved.
 let overlayRaf = 0;
@@ -965,7 +1002,7 @@ function scheduleOverlayRefresh() {
       const node = S.ui.itemEls.get(item.id);
       if (!node || item.hidden) continue;
       if (item.type === "image" || item.type === "shape") continue;
-      node.querySelector("svg").innerHTML = renderItem(item, { export: false });
+      node.querySelector(":scope > svg").innerHTML = renderItem(item, { export: false });
     }
     if (S.ui.liveScaleInput && document.activeElement !== S.ui.liveScaleInput) {
       const it = selectedItems()[0];
@@ -979,6 +1016,8 @@ function renderSelection() {
   host.innerHTML = "";
   const Z = S.zoom;
   const items = selectedItems();
+  // a selected item shows only the selection frame, not the hover outline as well
+  for (const [id, node] of S.ui.itemEls) node.classList.toggle("sel", S.selection.includes(id));
   for (const item of items) {
     const box = el("div", { class: `${NS}-selbox ${item.locked ? "locked" : ""}`, "data-id": item.id });
     Object.assign(box.style, {
@@ -993,6 +1032,7 @@ function renderSelection() {
       box.appendChild(el("div", { class: `${NS}-rothandle`, title: "Rotate (Shift = 15° steps)" }));
       box.appendChild(el("div", { class: `${NS}-sizebadge` }, `${round(item.w, 1)} × ${round(item.h, 1)}`));
     }
+    if (items.length === 1 && S.contentMode !== item.id) box.appendChild(miniBar(item));
     host.appendChild(box);
   }
   const info = items.length === 1 ? `${items[0].name} · ${round(items[0].w, 1)} × ${round(items[0].h, 1)} mm` : items.length ? `${items.length} items selected` : "";
@@ -1004,6 +1044,62 @@ function renderLayoutSelect() {
   sel.innerHTML = "";
   const list = Object.values(S.library.layouts).sort((a, b) => a.name.localeCompare(b.name));
   for (const d of list) sel.appendChild(el("option", { value: d.id, selected: d.id === S.doc.id }, d.name));
+}
+
+// Drag a row up or down with the pointer (Photoshop / ArcGIS layer list).
+// Pointer events rather than HTML5 drag-and-drop, which the desktop webview
+// hands to its own file-drop handler. Rows carry data-sort-id; onDrop gets the
+// id of the row it was dropped on and whether it landed above it.
+function pointerSort(row, host, onDrop) {
+  row.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target.closest("button, input, select, textarea, label")) return;
+    const sy = e.clientY;
+    let active = false;
+    let target = null;
+    let above = false;
+    const clear = () => host.querySelectorAll("[data-sort-id]").forEach((r) => r.classList.remove("drop-above", "drop-below"));
+    const move = (ev) => {
+      if (!active) {
+        if (Math.abs(ev.clientY - sy) < 4) return;
+        active = true;
+        row.classList.add("dragging");
+        document.documentElement.classList.add(`${NS}-grabbing`);
+      }
+      ev.preventDefault();
+      clear();
+      const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[data-sort-id]");
+      target = over && over !== row && host.contains(over) ? over : null;
+      if (target) {
+        const r = target.getBoundingClientRect();
+        above = ev.clientY < r.top + r.height / 2;
+        target.classList.add(above ? "drop-above" : "drop-below");
+      }
+      // scroll the list while dragging near its edges
+      const hr = host.getBoundingClientRect();
+      if (ev.clientY < hr.top + 24) host.scrollTop -= 10;
+      else if (ev.clientY > hr.bottom - 24) host.scrollTop += 10;
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+      row.classList.remove("dragging");
+      document.documentElement.classList.remove(`${NS}-grabbing`);
+      clear();
+      if (!active) return;
+      // the click that follows a drag must not re-select
+      const eat = (ce) => {
+        ce.stopPropagation();
+        ce.preventDefault();
+      };
+      window.addEventListener("click", eat, true);
+      setTimeout(() => window.removeEventListener("click", eat, true), 0);
+      if (target) onDrop(target.dataset.sortId, above);
+    };
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+  });
 }
 
 function renderItemList() {
@@ -1045,6 +1141,21 @@ function renderItemList() {
       if (e.shiftKey || e.ctrlKey || e.metaKey) toggleSelect(item.id);
       else select([item.id]);
     });
+    // Photoshop / ArcGIS-style reordering: drag a row up or down; the top row draws in front.
+    if (!q) {
+      row.dataset.sortId = item.id;
+      row.classList.add(`${NS}-sortable`);
+      pointerSort(row, host, (targetId, above) => {
+        commit(() => {
+          const list = S.doc.items;
+          list.splice(list.indexOf(item), 1);
+          // the panel lists items top-first (reversed): "above" means later in the array
+          const t = list.findIndex((i) => i.id === targetId);
+          list.splice(above ? t + 1 : t, 0, item);
+        });
+        select([item.id]);
+      });
+    }
     host.appendChild(row);
   }
 }
@@ -1129,7 +1240,8 @@ function snapTargets(excludeIds) {
 }
 function showGuides(gx, gy) {
   const host = S.ui.guides;
-  host.innerHTML = "";
+  // remove only the snap lines: the draw box and its size badge live here too
+  for (const g of host.querySelectorAll(`.${NS}-guide`)) g.remove();
   const Z = S.zoom;
   for (const x of gx) host.appendChild(el("div", { class: `${NS}-guide v`, style: { left: `${x * Z}px` } }));
   for (const y of gy) host.appendChild(el("div", { class: `${NS}-guide h`, style: { top: `${y * Z}px` } }));
@@ -1182,9 +1294,12 @@ function onPointerDown(e) {
       const it = findItem(mapNode.dataset.id);
       if (it?.props.source === "snapshot") toast("Captured frames can't be panned — recapture GeoLibre instead.", "warn");
       else if (it && !S.selection.includes(it.id)) select([it.id]);
+      return;
     }
-    return;
+    // outside any map frame the hand pans the page
+    return startPan(e);
   }
+  if (target.closest(`.${NS}-minibar`)) return; // its buttons handle the click
   const ug = target.closest(`.${NS}-uguide`);
   if (ug && S.tool === "select") return startGuideDrag(e, ug.dataset.axis, Number(ug.dataset.i));
   const [mx, my] = toMM(e);
@@ -1215,18 +1330,29 @@ function onPointerDown(e) {
 
 function capture(e, move, up) {
   const el0 = S.ui.canvas;
-  el0.setPointerCapture?.(e.pointerId);
+  try {
+    el0.setPointerCapture?.(e.pointerId);
+  } catch {}
+  let done = false;
   const onMove = (ev) => move(ev);
+  // also ends when the capture is lost (window blur, alt-tab, a dialog), so a
+  // drag or draw never stays stuck to the pointer
   const onUp = (ev) => {
+    if (done) return;
+    done = true;
     el0.removeEventListener("pointermove", onMove);
     el0.removeEventListener("pointerup", onUp);
     el0.removeEventListener("pointercancel", onUp);
-    el0.releasePointerCapture?.(e.pointerId);
+    el0.removeEventListener("lostpointercapture", onUp);
+    try {
+      el0.releasePointerCapture?.(e.pointerId);
+    } catch {}
     up(ev);
   };
   el0.addEventListener("pointermove", onMove);
   el0.addEventListener("pointerup", onUp);
   el0.addEventListener("pointercancel", onUp);
+  el0.addEventListener("lostpointercapture", onUp);
 }
 
 function startPan(e) {
@@ -1309,6 +1435,12 @@ function startResize(e, h) {
   const ratio = o.w / o.h;
   const snapshot = JSON.stringify(S.doc);
   let changed = false;
+  // Canva / Fabric.js behaviour: a corner scales in proportion (never skews),
+  // and on text it scales the lettering too; a side handle only resizes the
+  // frame. Shift on a corner frees the proportions.
+  const corner = h.length === 2;
+  const tp = item.type === "text" ? item.props : null;
+  const t0 = tp && { size: tp.font.size, padding: tp.padding || 0, paraSpacing: tp.paraSpacing || 0, indent: tp.indent || 0, border: tp.border?.width || 0 };
   capture(
     e,
     (ev) => {
@@ -1330,14 +1462,29 @@ function startResize(e, h) {
         nh = Math.max(1, o.y + o.h - y);
         ny = o.y + o.h - nh;
       }
-      const keepRatio = ev.shiftKey || item.type === "north" || (item.type === "image" && !ev.ctrlKey && item.props.fit !== "fill" && false);
-      if (keepRatio && h.length === 2) {
+      const keepRatio = corner && (!ev.shiftKey || item.type === "north");
+      if (keepRatio) {
         if (nw / nh > ratio) nh = nw / ratio;
         else nw = nh * ratio;
         if (h.includes("w")) nx = o.x + o.w - nw;
         if (h.includes("n")) ny = o.y + o.h - nh;
       }
       Object.assign(item, { x: round(nx, 3), y: round(ny, 3), w: round(nw, 3), h: round(nh, 3) });
+      if (t0) {
+        // corner on text: the lettering follows the box; sides leave it alone
+        const k = keepRatio ? nw / o.w : 1;
+        tp.font.size = round(Math.max(1, t0.size * k), 2);
+        tp.padding = round(t0.padding * k, 3);
+        tp.paraSpacing = round(t0.paraSpacing * k, 3);
+        tp.indent = round(t0.indent * k, 3);
+        if (tp.border) tp.border.width = round(t0.border * k, 3);
+        // width / corner drags keep the frame hugging the text (height follows);
+        // pulling the top or bottom edge frees it so extra room can be dragged in
+        if (h === "n" || h === "s") tp.autoSize = "fixed";
+        else if (tp.autoSize === "width") tp.autoSize = "height";
+        // a side handle sets the line length: the text wraps to it (Canva)
+        if (h === "e" || h === "w") tp.wrap = true;
+      }
       changed = true;
       renderPaper([item.id, ...dependentsOf(item.id)]);
       renderSelection();
@@ -1391,35 +1538,78 @@ function startMarquee(e, mx, my) {
   );
 }
 
+// Drag-to-draw like Canva / Figma: a live frame with its size while dragging,
+// Shift keeps the item's default proportions, Alt draws from the centre, Esc
+// cancels, and a plain click drops a default-size item centred on the click.
 function startDraw(e, mx, my) {
-  const box = el("div", { class: `${NS}-marquee draw` });
-  S.ui.guides.appendChild(box);
+  const tool = S.tool;
+  const variant = S.toolVariant;
+  const type = tool === "inset" ? "map" : tool === "title" ? "text" : tool;
+  const defSize = ITEM_TYPES[type]?.size || [40, 30];
+  const box = el("div", { class: `${NS}-marquee draw ${type === "map" ? "map" : ""}` });
+  const badge = el("div", { class: `${NS}-drawsize` });
+  S.ui.guides.append(box, badge);
   const Z = S.zoom;
   const s0 = snapPoint(mx, my, []);
-  let x2 = s0.x;
-  let y2 = s0.y;
+  const sx = e.clientX;
+  const sy = e.clientY;
+  let rect = null;
+  let dragged = false;
+  let cancelled = false;
+  const onKey = (ev) => {
+    if (ev.key !== "Escape") return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    cancelled = true;
+    box.remove();
+    badge.remove();
+    showGuides([], []);
+  };
+  window.addEventListener("keydown", onKey, true);
   capture(
     e,
     (ev) => {
+      if (cancelled) return;
+      if (!dragged && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+      dragged = true;
       const [x, y] = toMM(ev);
-      const s = snapPoint(x, y, []);
-      x2 = s.x;
-      y2 = s.y;
+      const s = ev.altKey ? { x, y, gx: [], gy: [] } : snapPoint(x, y, []);
+      let dx = s.x - s0.x;
+      let dy = s.y - s0.y;
+      if (ev.shiftKey) {
+        // keep the item's default proportions (a square for shapes / icons)
+        const ratio = defSize[0] / defSize[1] || 1;
+        if (Math.abs(dx) / ratio > Math.abs(dy)) dy = Math.sign(dy || 1) * Math.abs(dx) / ratio;
+        else dx = Math.sign(dx || 1) * Math.abs(dy) * ratio;
+      }
+      let x1 = s0.x;
+      let y1 = s0.y;
+      let w = Math.abs(dx);
+      let h = Math.abs(dy);
+      if (ev.altKey) {
+        x1 = s0.x - w;
+        y1 = s0.y - h;
+        w *= 2;
+        h *= 2;
+      } else {
+        x1 = dx < 0 ? s0.x + dx : s0.x;
+        y1 = dy < 0 ? s0.y + dy : s0.y;
+      }
+      rect = { x: x1, y: y1, w, h };
       showGuides(s.gx, s.gy);
-      Object.assign(box.style, {
-        left: `${Math.min(s0.x, x2) * Z}px`,
-        top: `${Math.min(s0.y, y2) * Z}px`,
-        width: `${Math.abs(x2 - s0.x) * Z}px`,
-        height: `${Math.abs(y2 - s0.y) * Z}px`,
-      });
+      Object.assign(box.style, { left: `${x1 * Z}px`, top: `${y1 * Z}px`, width: `${w * Z}px`, height: `${h * Z}px`, display: "block" });
+      badge.textContent = `${fmtNumber(w, 1)} × ${fmtNumber(h, 1)} mm`;
+      Object.assign(badge.style, { left: `${(x1 + w / 2) * Z}px`, top: `${(y1 + h) * Z + 8}px`, display: "block" });
     },
     () => {
+      window.removeEventListener("keydown", onKey, true);
       box.remove();
+      badge.remove();
       showGuides([], []);
-      const w = Math.abs(x2 - s0.x);
-      const h = Math.abs(y2 - s0.y);
-      const rect = w > 2 && h > 2 ? { x: Math.min(s0.x, x2), y: Math.min(s0.y, y2), w, h } : { x: s0.x, y: s0.y };
-      addItemFromTool(S.tool, rect, S.toolVariant);
+      if (cancelled) return;
+      // plain click: the tool's default size, centred on the click point
+      const r = dragged && rect && rect.w * Z > 6 && rect.h * Z > 6 ? rect : { x: s0.x, y: s0.y, center: true };
+      addItemFromTool(tool, r, variant);
       setTool("select");
     },
   );
@@ -1454,6 +1644,8 @@ function addItemFromTool(tool, rect, variant) {
   if (tool === "marker" && variant) item.props.symbol = variant;
   if (type === "map") {
     viewFromGeoLibre(item);
+    // a new main map frame comes with its coordinate grid and labels
+    if (tool !== "inset") item.props.grid.show = true;
     if (tool === "inset") {
       item.name = `Inset Map ${mapItems().length}`;
       if (!rect.w) {
@@ -1472,7 +1664,9 @@ function addItemFromTool(tool, rect, variant) {
   }
   if (type === "latex") loadMathJax().catch(() => {});
   if (type === "colorbar") {
-    const src = colorbarSourceOptions().find(([id]) => id);
+    const opts = colorbarSourceOptions().filter(([id]) => id);
+    // a raster first (its range + colormap), else a graduated vector layer
+    const src = opts.find(([, l]) => / \(raster\)$/.test(l)) || opts[0];
     if (src) {
       item.props.source = src[0];
       readColorbarFromLayer(item.props);
@@ -1490,6 +1684,14 @@ function addItemFromTool(tool, rect, variant) {
     initDataItem(item);
     if (type === "chart" && variant) item.props.kind = variant;
     if (type === "chart" && (variant === "bar" || variant === "hbar")) item.props.colorMode = "layer";
+    // no vector layer to count: start from the sample rows so the chart shows at once
+    if (type === "chart" && !item.props.layer) item.props.dataSource = "manual";
+  }
+  if (rect.center) {
+    // click-to-place: centre the default-sized item on the click, inside the page
+    const pg = S.doc.page;
+    item.x = round(clamp(rect.x - item.w / 2, 0, Math.max(0, pg.width - item.w)), 2);
+    item.y = round(clamp(rect.y - item.h / 2, 0, Math.max(0, pg.height - item.h)), 2);
   }
   commit(() => S.doc.items.push(item));
   select([item.id]);
@@ -1512,14 +1714,27 @@ function onDblClick(e) {
   }
   const node = e.target.closest(`.${NS}-item`) || itemNodeAt(e.clientX, e.clientY);
   const item = node && findItem(node.dataset.id);
-  if (!item) return;
+  if (!item) {
+    // empty page: type a new text right where the user double-clicked
+    // (the canvas holds pointer capture, so the target is the canvas: test the point)
+    const onPaper = document.elementsFromPoint(e.clientX, e.clientY).some((n) => n === S.ui.paper);
+    if (S.tool === "select" && onPaper) {
+      const [x, y] = toMM(e);
+      if (x >= 0 && y >= 0 && x <= S.doc.page.width && y <= S.doc.page.height) addTextAt(x, y);
+    }
+    return;
+  }
   if (item.type === "map") enterContentMode(item.id);
   else if (item.type === "text") {
     select([item.id]);
     startInlineEdit(item);
   } else if (item.type === "table") {
+    // cell-by-cell editor right at the table (the side panel is usually closed)
     select([item.id]);
-    setTimeout(() => S.ui.props.querySelector("textarea")?.focus(), 30);
+    openTableEditor(item, node);
+  } else if (item.type === "html" || item.type === "mermaid") {
+    select([item.id]);
+    openCodeEditor(item);
   } else if (item.type === "image") pickImage(item);
 }
 
@@ -1527,6 +1742,8 @@ function onDblClick(e) {
 function onKey(e) {
   if (!S.open) return;
   const t = e.target;
+  // keys typed in a Map Tools dialog are not layout shortcuts
+  if (t?.closest?.(`.${NS}-mtroot`)) return;
   const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
   if (e.key === " " && !typing) {
     if (e.type === "keydown") {
@@ -1574,17 +1791,19 @@ function onKey(e) {
   else if (ctrl && k === "c") S.clipboard = JSON.stringify(selectedItems());
   else if (ctrl && k === "v") pasteClipboard();
   else if (ctrl && k === "a") select(S.doc.items.filter((i) => !i.hidden && !i.locked).map((i) => i.id));
-  else if (ctrl && (k === "=" || k === "+")) setZoom(S.zoom * 1.2);
-  else if (ctrl && k === "-") setZoom(S.zoom / 1.2);
-  else if (ctrl && k === "0") fitPage();
+  else if ((ctrl && (k === "=" || k === "+")) || e.code === "NumpadAdd") setZoom(S.zoom * 1.2);
+  else if ((ctrl && (k === "-" || k === "_")) || e.code === "NumpadSubtract") setZoom(S.zoom / 1.2);
+  else if (ctrl && (k === "0" || e.code === "Numpad0")) fitPage();
+  else if (ctrl && (k === "1" || e.code === "Numpad1")) setZoom(PX96);
   else if (e.shiftKey && (k === "2" || k === "@")) zoomToSelection();
   else if (e.shiftKey && (k === "1" || k === "!")) fitPage();
   else if (ctrl && k === "s") exportJSON();
+  else if (k === "pageup" && seriesOn()) seriesStep(-1);
+  else if (k === "pagedown" && seriesOn()) seriesStep(1);
   else if (k === "enter" && selectedItems().length === 1 && selectedItems()[0].type === "text") startInlineEdit(selectedItems()[0]);
   else if (k === "delete" || k === "backspace") deleteSelection();
   else if (k === "v") setTool("select");
-  else if (k === "h") setTool("pan");
-  else if (k === "c" && !ctrl) setTool("content");
+  else if (k === "h" || (k === "c" && !ctrl)) setTool("content");
   else if (k.startsWith("arrow")) {
     const items = selectedItems().filter((i) => !i.locked);
     if (!items.length) return;

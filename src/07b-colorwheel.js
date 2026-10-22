@@ -172,68 +172,233 @@ function quickFontPath(item) {
 function renderQuickBar() {
   const host = S.ui.quick;
   if (!host) return;
+  const keep = host.scrollLeft;
+  renderQuickBarGroups();
+  // when the groups do not fit (narrow windows): ‹ › buttons at the edges and
+  // the mouse wheel scrolls the ribbon sideways — never a scrollbar
+  if (host.scrollWidth > host.clientWidth + 2) {
+    const step = () => Math.max(160, host.clientWidth * 0.6);
+    const l = el("button", { type: "button", class: `${NS}-rscroll left`, title: "More on the left", html: icon("chevron", 14), onclick: () => host.scrollBy({ left: -step(), behavior: "smooth" }) });
+    const r = el("button", { type: "button", class: `${NS}-rscroll right`, title: "More on the right", html: icon("chevron", 14), onclick: () => host.scrollBy({ left: step(), behavior: "smooth" }) });
+    host.prepend(l);
+    host.append(r);
+    host.scrollLeft = keep;
+    const sync = () => {
+      l.hidden = host.scrollLeft < 2;
+      r.hidden = host.scrollLeft + host.clientWidth >= host.scrollWidth - 2;
+    };
+    host.onscroll = sync;
+    sync();
+  } else host.onscroll = null;
+  if (!host.dataset.wheel) {
+    host.dataset.wheel = "1";
+    window.addEventListener("resize", debounce(() => S.open && renderQuickBar(), 150));
+    host.addEventListener("wheel", (e) => {
+      if (host.scrollWidth <= host.clientWidth + 2 || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      host.scrollLeft += e.deltaY;
+    }, { passive: false });
+  }
+}
+function renderQuickBarGroups() {
+  const host = S.ui.quick;
   host.innerHTML = "";
   const items = selectedItems();
   const item = items.length === 1 ? items[0] : null;
   const isShape = item && (item.type === "shape" || item.type === "path");
-  const fp = item && ["text", "table"].includes(item.type) ? quickFontPath(item) : null;
-  host.style.display = fp || isShape ? "" : "none";
-  if (isShape) {
-    host.append(...shapeQuickTools(item));
+  const fp = item ? quickFontPath(item) : null;
+  host.style.display = "";
+  renderStatusPageTools();
+  renderSeriesNav();
+  // Insert tab: shown with nothing selected, or when picked while the selection
+  // stays the same; selecting something else brings Format back
+  const selKey = S.selection.join(",");
+  if ((S.ribbonTab === "insert" || S.ribbonTab === "maptools") && items.length && S.ribbonSel !== selKey) S.ribbonTab = "format";
+  // a table gets Word's two contextual tabs: Table Design (Format) and Table Layout
+  const isTable = item?.type === "table";
+  const isMap = item?.type === "map";
+  if (S.ribbonTab === "layout2" && !isTable && !isMap) S.ribbonTab = "format";
+  const tab = S.ribbonTab === "maptools" ? "maptools" : !items.length && S.ribbonTab !== "format" ? "insert" : S.ribbonTab || "format";
+  for (const b of S.ui.root.querySelectorAll(`.${NS}-rtab`)) {
+    b.classList.toggle("active", b.dataset.rtab === tab);
+    if (b.dataset.rtab === "format") b.textContent = isTable ? "Table Design" : isMap ? "Map Frame" : "Format";
+    if (b.dataset.rtab === "layout2") {
+      b.hidden = !isTable && !isMap;
+      b.textContent = isMap ? "Grid" : "Table Layout";
+    }
+  }
+  if (isMap && tab !== "insert") {
+    host.append(...mapRibbon(item, tab === "layout2" ? "grid" : "frame"), ...(tab === "layout2" ? [] : [seriesRibbonGroup()]), ...itemTailGroups(item));
     return;
   }
-  if (!fp) return;
-  const rerender = () => {
+  if (isTable) {
+    if (tab === "layout2") {
+      host.append(...textRibbon(item, fp), ...tableRibbon(item, "layout"), ...itemTailGroups(item));
+      return;
+    }
+    if (tab === "format") {
+      host.append(...tableRibbon(item, "design"), ...itemTailGroups(item));
+      return;
+    }
+  }
+  if (tab === "insert") {
+    host.append(...insertRibbon());
+    return;
+  }
+  // every Map Tools group (they act on GeoLibre's map and its layers)
+  if (tab === "maptools") {
+    // "Layout View" is where we already are
+    host.append(...mtGroups().filter((g) => g.querySelector(`.${NS}-rcap`)?.textContent !== "Layout"));
+    return;
+  }
+  // Word-style dock: every element gets its settings as captioned two-row groups
+  if (!items.length) {
+    host.append(...dimGroup("text"));
+    return;
+  }
+  if (!item) {
+    host.append(...multiRibbonGroups(items));
+    return;
+  }
+  // type groups + Position & Size, Effects, Arrange, Align, Item: the bar runs to the end
+  const arrange = itemTailGroups(item);
+  if (isShape) {
+    host.append(ribbonGroup(ITEM_TYPES[item.type].label, shapeQuickTools(item)), ...arrange);
+    return;
+  }
+  if (item.type === "map") {
+    host.append(ribbonGroup("Map view", mapQuickTools(item)), ribbonGroup("Grid", gridRibbonTools(item)), ...arrange);
+    return;
+  }
+  if (!fp) {
+    if (item.type === "html" || item.type === "mermaid") host.append(...codeItemRibbon(item));
+    if (item.type === "image") host.append(...imageRibbon(item));
+    if (item.type === "chart") host.append(...chartRibbon(item));
+    host.append(...arrange);
+    return;
+  }
+  host.append(...textRibbon(item, fp), ...arrange);
+}
+
+function setRibbonTab(id) {
+  S.ribbonTab = id;
+  S.ribbonSel = S.selection.join(",");
+  renderQuickBar();
+}
+
+// The Insert tab: large buttons (icon over label) in captioned groups.
+function insertRibbon() {
+  const tool = (id) => TOOLS.find((t) => t.id === id);
+  const menu = (id) => INSERT_MENUS.find((m) => m.id === id);
+  const big = (iconName, label, title, onClick, active) => {
+    const b = el("button", { type: "button", class: `${NS}-rbig ${active ? "active" : ""}`, title, html: `${icon(iconName, 22)}<span>${esc(label)}</span>` });
+    b.addEventListener("click", () => onClick(b));
+    return b;
+  };
+  const fromTool = (id) => {
+    const t = tool(id);
+    return big(t.icon, t.short, t.label, (b) => (t.gallery ? openToolGallery(t, b) : setTool(S.tool === t.id ? "select" : t.id)), S.tool === t.id);
+  };
+  const fromMenu = (id) => {
+    const m = menu(id);
+    return big(m.icon, m.label, m.label, (b) => runInsert(m, b), m.tools.includes(S.tool));
+  };
+  const grp = (caption, ...buttons) => el("div", { class: `${NS}-rgroup` }, el("div", { class: `${NS}-rrow ${NS}-rbigrow` }, ...buttons), el("div", { class: `${NS}-rcap` }, caption));
+  return [
+    grp("Map", fromTool("map"), fromTool("inset")),
+    grp("Map elements", fromTool("legend"), fromTool("colorbar"), fromTool("north"), fromMenu("scalebar")),
+    grp("Text", fromMenu("text"), fromMenu("latex"), fromMenu("table"), big("sigma", "Symbol", "Insert a symbol (Unicode, symbol fonts, special characters)", () => openSymbolDialog(), false)),
+    grp("Code", big("code", "HTML", "HTML block (drag a box on the page, or click)", () => setTool(S.tool === "html" ? "select" : "html"), S.tool === "html"), big("flow", "Mermaid", "Mermaid diagram: flowchart, gantt, pie… (drag a box, or click)", () => setTool(S.tool === "mermaid" ? "select" : "mermaid"), S.tool === "mermaid")),
+    grp("Data", fromMenu("data")),
+    grp("Graphics", fromMenu("draw"), fromMenu("shape"), fromMenu("image"), fromMenu("symbols")),
+  ];
+}
+
+// A flat list of ribbon controls as a Word group: two rows and a caption. A
+// leading label becomes the caption; separators are dropped.
+function ribbonGroup(caption, parts) {
+  const list = parts.filter((n) => n && !n.classList?.contains(`${NS}-qsep`));
+  if (list[0]?.classList?.contains(`${NS}-qlabel`)) list.shift();
+  // split by approximate width so both rows end up about as long
+  const width = (n) => (n.matches?.("select, input, .glc-fontbtn, .glc-colorwrap, .glc-unitwrap, .glc-range") ? 90 : n.classList?.contains(`${NS}-qtxt`) ? 60 : n.classList?.contains(`${NS}-qtag`) ? 30 : 28);
+  const total = list.reduce((a, n) => a + width(n), 0);
+  const r1 = el("div", { class: `${NS}-rrow` });
+  const r2 = el("div", { class: `${NS}-rrow` });
+  let acc = 0;
+  for (const n of list) {
+    // a tag stays with the control after it
+    (acc < total / 2 ? r1 : r2).appendChild(n);
+    acc += width(n);
+  }
+  return el("div", { class: `${NS}-rgroup` }, el("div", { class: `${NS}-rrows` }, r1, r2), el("div", { class: `${NS}-rcap` }, caption));
+}
+
+// The text and shape groups stay on the ribbon like in Office: greyed out
+// until an item they apply to is selected.
+function dimGroup(kind) {
+  const probe = newItem(kind, 0, 0);
+  const dim = (g) => {
+    g.classList.add(`${NS}-qdim`);
+    g.title = kind === "text" ? "Select a text item to format it" : "Select a shape to format it";
+    g.querySelectorAll("button, input, select").forEach((c) => (c.disabled = true));
+    return g;
+  };
+  if (kind === "text") return textRibbon(probe, "props.font").map(dim);
+  return dim(ribbonGroup("Shape", shapeQuickTools(probe)));
+}
+
+// Page orientation and border sit in the status bar, next to grid / guides / snap.
+function renderStatusPageTools() {
+  const host = S.ui.root?.querySelector(`.${NS}-pagetools`);
+  if (!host || !S.doc) return;
+  const pg = S.doc.page;
+  host.innerHTML = "";
+  host.append(
+    el("span", { class: `${NS}-pagesize` }, `${fmtNumber(round(pg.width, 1))} × ${fmtNumber(round(pg.height, 1))} mm`),
+    el("button", { type: "button", class: `${NS}-vtog ${pg.width < pg.height ? "active" : ""}`, onclick: () => commit(() => pg.width > pg.height && ([pg.width, pg.height] = [pg.height, pg.width])) }, "Portrait"),
+    el("button", { type: "button", class: `${NS}-vtog ${pg.width > pg.height ? "active" : ""}`, onclick: () => commit(() => pg.width < pg.height && ([pg.width, pg.height] = [pg.height, pg.width])) }, "Landscape"),
+    el("button", { type: "button", class: `${NS}-vtog ${pg.border?.show ? "active" : ""}`, title: "Page border (neatline)", onclick: () => commit(() => (pg.border.show = !pg.border.show)) }, "Border"),
+  );
+}
+
+// ---------------------------------------------------------------- ribbon groups for the page, several items and map grids
+function ribbonToggle(label, on, onClick, title) {
+  return el("button", { type: "button", class: `${NS}-qbtn ${NS}-qtxt ${on ? "active" : ""}`, title: title || label, onclick: onClick }, label);
+}
+function arrangeRibbonTools() {
+  return [
+    iconBtn("alL", "Align left", () => align("left"), `${NS}-qbtn`),
+    iconBtn("alC", "Center horizontally", () => align("hcenter"), `${NS}-qbtn`),
+    iconBtn("alR", "Align right", () => align("right"), `${NS}-qbtn`),
+    iconBtn("alT", "Align top", () => align("top"), `${NS}-qbtn`),
+    iconBtn("alM", "Center vertically", () => align("vcenter"), `${NS}-qbtn`),
+    iconBtn("alB", "Align bottom", () => align("bottom"), `${NS}-qbtn`),
+    iconBtn("disH", "Distribute horizontally", () => align("distH"), `${NS}-qbtn`),
+    iconBtn("disV", "Distribute vertically", () => align("distV"), `${NS}-qbtn`),
+    iconBtn("copy", "Duplicate", () => duplicateSelection(), `${NS}-qbtn`),
+    iconBtn("trash", "Delete", () => deleteSelection(), `${NS}-qbtn`),
+  ];
+}
+function gridRibbonTools(item) {
+  const g = item.props.grid;
+  const set = (path, v) => liveSet(item, `props.grid.${path}`, v, () => {
     refreshCanvas();
     renderProps();
     renderQuickBar();
-  };
-  const f = getPath(item, fp);
-  const fam = fontPicker(f.family, (n) => liveSet(item, `${fp}.family`, n, rerender), { cls: `${NS}-qfam` });
-  const size = el("input", { type: "number", class: `${NS}-input ${NS}-qsize`, value: f.size, min: 2, max: 400, step: 0.5, title: "Font size (pt)" });
-  size.addEventListener("input", () => {
-    const v = parseFloat(size.value);
-    if (v > 0) liveSet(item, `${fp}.size`, v, () => refreshCanvas());
   });
-  const tog = (key, html, title) => {
-    const b = el("button", { type: "button", class: `${NS}-qbtn ${f[key] ? "active" : ""}`, title, html });
-    b.addEventListener("click", () => liveSet(item, `${fp}.${key}`, !getPath(item, `${fp}.${key}`), rerender));
-    return b;
+  const sel = (path, opts, title) => {
+    const s = el("select", { class: `${NS}-input ${NS}-qcase`, title }, ...opts.map(([v, l]) => el("option", { value: v, selected: String(getPath(item, `props.grid.${path}`)) === String(v) }, l)));
+    s.addEventListener("change", () => set(path, s.value));
+    return s;
   };
-  const parts = [el("span", { class: `${NS}-qlabel` }, ITEM_TYPES[item.type].label), fam, size, tog("bold", "<b>B</b>", "Bold"), tog("italic", "<i>I</i>", "Italic")];
-  if (item.type === "text") {
-    const u = el("button", { type: "button", class: `${NS}-qbtn ${item.props.decoration === "underline" ? "active" : ""}`, title: "Underline", html: "<u>U</u>" });
-    u.addEventListener("click", () => liveSet(item, "props.decoration", item.props.decoration === "underline" ? "none" : "underline", rerender));
-    parts.push(u);
-  }
-  parts.push(fColor(item, `${fp}.color`, { after: () => refreshCanvas() }));
-  if (item.type === "text" || item.type === "table") {
-    const alignKey = "props.align";
-    for (const [v, ic] of [["left", "alL"], ["center", "alC"], ["right", "alR"]]) {
-      const b = iconBtn(ic, `Align ${v}`, () => liveSet(item, alignKey, v, rerender), `${NS}-qbtn ${getPath(item, alignKey) === v ? "active" : ""}`);
-      parts.push(b);
-    }
-  }
-  if (item.type === "text") {
-    const wrapMath = (tpl) => () => {
-      const ta = S.ui.textArea;
-      if (ta && document.body.contains(ta)) insertAtCaret(ta, tpl);
-      else commit(() => (item.props.text = `${item.props.text || ""}${tpl.replace("|", "2")}`));
-    };
-    parts.push(
-      el("button", { type: "button", class: `${NS}-qbtn`, title: "Superscript (LaTeX $^{}$)", html: "x<sup>2</sup>", onclick: wrapMath("$^{|}$") }),
-      el("button", { type: "button", class: `${NS}-qbtn`, title: "Subscript (LaTeX $_{}$)", html: "x<sub>2</sub>", onclick: wrapMath("$_{|}$") }),
-      el("button", { type: "button", class: `${NS}-qbtn`, title: "Insert formula $…$", html: "∑", onclick: wrapMath("$|$") }),
-    );
-    const ef = el("select", { class: `${NS}-input ${NS}-qcase`, title: "Text effect" }, ...Object.entries(TEXT_EFFECTS).map(([v, l]) => el("option", { value: v, selected: (item.props.effect || "none") === v }, l)));
-    ef.addEventListener("change", () => liveSet(item, "props.effect", ef.value, rerender));
-    parts.push(ef);
-    const cs = el("select", { class: `${NS}-input ${NS}-qcase`, title: "Letter case" }, ...[["none", "Aa"], ["upper", "AA"], ["lower", "aa"], ["title", "Ab"]].map(([v, l]) => el("option", { value: v, selected: item.props.textCase === v }, l)));
-    cs.addEventListener("change", () => liveSet(item, "props.textCase", cs.value, rerender));
-    parts.push(cs);
-  }
-  parts.push(...commonQuickActions(item));
-  host.append(...parts);
+  return [
+    el("span", { class: `${NS}-qlabel` }, "Grid"),
+    ribbonToggle("Show", !!g.show, () => set("show", !g.show), "Show coordinate grid"),
+    sel("type", [["dms", "DMS"], ["dm", "DM"], ["dd", "DD"], ["utm", "UTM"]], "Coordinate system"),
+    sel("style", [["lines", "Lines"], ["cross", "Crosses"], ["dots", "Points"], ["none", "Labels only"]], "Grid lines"),
+    sel("frameStyle", [["none", "Plain frame"], ["zebra", "Zebra"], ["ticks-in", "Ticks in"], ["ticks-out", "Ticks out"], ["ticks-cross", "Double tick"]], "Grid frame"),
+    sel("lang", [["en", "E/W N/S"], ["id", "BT/LS"]], "Hemisphere labels"),
+  ];
 }
 
 // ---------------------------------------------------------------- map view tools (quick bar for map frames)
@@ -358,7 +523,7 @@ function shapeQuickTools(item) {
   const fx = itemFx(item);
   const sh = el("button", { type: "button", class: `${NS}-qbtn ${fx.shadow.on ? "active" : ""}`, title: "Drop shadow", html: icon("fx", 15) });
   sh.addEventListener("click", () => liveSet(fx, "shadow.on", !fx.shadow.on, rer));
-  parts.push(sh, ...commonQuickActions(item));
+  parts.push(sh);
   return parts;
 }
 
@@ -371,5 +536,10 @@ function commonQuickActions(item) {
     iconBtn("copy", "Duplicate (Ctrl+D)", () => duplicateSelection(), `${NS}-qbtn`),
     iconBtn(item.locked ? "lock" : "unlock", item.locked ? "Unlock" : "Lock", () => commit(() => (item.locked = !item.locked)), `${NS}-qbtn`),
     iconBtn("trash", "Delete", () => deleteSelection(), `${NS}-qbtn`),
+    // every remaining setting of the item, in the side panel
+    iconBtn("dockright", "All properties (side panel)", () => {
+      if (S.ui.root.classList.contains("hide-right")) toggleDock("right");
+      setTab("item");
+    }, `${NS}-qbtn`),
   ];
 }

@@ -1,8 +1,8 @@
 # Layout Composer
 
-**Cartographic layout designer for [GeoLibre](https://plugins.geolibre.app)**. Design publication-ready maps with map frames, coordinate grids, legends, matplotlib-style color bars, attribute tables and charts from your layers, LaTeX formulas, icon catalogs, GeoPDF export and QGIS template exchange, without leaving GeoLibre.
+**Cartographic layout designer for [GeoLibre](https://plugins.geolibre.app)**. Design publication-ready maps in a Word-style workspace — map frames, coordinate grids, legends, matplotlib-style color bars, attribute tables and Plotly charts from your layers, Mermaid diagrams, LaTeX formulas, symbols and icon catalogs, GeoPDF export and QGIS template exchange — without leaving GeoLibre.
 
-![Version](https://img.shields.io/badge/version-1.9.0-0d99ff)
+![Version](https://img.shields.io/badge/version-1.11.0-0d99ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![GeoLibre plugin](https://img.shields.io/badge/GeoLibre-plugin-4e8a2e)
 ![Category: Cartography](https://img.shields.io/badge/category-Cartography-6a3d9a)
@@ -11,6 +11,8 @@
 ![MathJax](https://img.shields.io/badge/MathJax-3.2.2-1B3E6F)
 ![jsPDF](https://img.shields.io/badge/jsPDF-2.5.1-c0392b)
 ![svg2pdf.js](https://img.shields.io/badge/svg2pdf.js-2.2.4-8e44ad)
+![Plotly.js](https://img.shields.io/badge/Plotly.js-2.35.2-3F4F75?logo=plotly&logoColor=white)
+![Mermaid](https://img.shields.io/badge/Mermaid-11.4.1-FF3670?logo=mermaid&logoColor=white)
 ![Maki](https://img.shields.io/badge/icons-Maki%20CC0-1f78b4)
 ![Temaki](https://img.shields.io/badge/icons-Temaki%20CC0-1f78b4)
 ![Material Symbols](https://img.shields.io/badge/icons-Material%20Symbols%20Apache--2.0-4285F4?logo=google&logoColor=white)
@@ -38,6 +40,7 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Development](#development)
 - [Licenses and third-party notices](#licenses-and-third-party-notices)
+- [Changelog](CHANGELOG.md)
 
 ---
 
@@ -45,6 +48,15 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 
 | Area | What you get |
 |---|---|
+| **Workspace (new in 1.11)** | A **ribbon like Microsoft Word**: the *Insert* tab holds every element as large buttons; the *Format* tab shows the selection's settings in two-row groups with captions — no side panel needed, no scrollbar. Contextual tabs *Table Design / Table Layout* for tables and *Map Frame / Grid* for map frames. Layers open as a drop-down over the canvas (drag to reorder); the full property panel and Ask AI stay closed until opened, so the page gets the whole width. Page orientation, border, grid, guides, snap and the selection-frame look (color, solid / dashed / dotted, width) sit in the status bar. Canva / Figma-style drawing with a live size badge, proportional corner resize (text scales its lettering), and a Hand tool that moves the content of map frames. On the desktop app, *Save* and *Export* open a **Save as** dialog to pick the folder. |
+| **Text like Word** | Font, size, grow / shrink, change case, clear formatting, bold, italic, six underline styles, strikethrough, sub / superscript, effects, highlight and font colors; **bullets and numbering** (1. · 1) · (1) · a. · a) · A. · i. · I. · 1.1) with a hanging indent, indent, sort, alignment incl. justify, line / paragraph spacing, shading, borders and a quick **Styles** gallery. Text boxes hug their text. A **Symbol dialog** with 28 Unicode subsets (incl. a *Map & GIS* set), symbol fonts, character codes, recent symbols and special characters. |
+| **Charts (Plotly)** | Bundled **Plotly.js**: donut, pie, column, bar, line, area, dots, lollipop, bubble, funnel, funnel area, treemap, sunburst, icicle, rose, radar, waterfall, histogram, box, violin and heat strip; Plotly, White, Minimal, Seaborn, ggplot2 and Dark styles; data from a layer (count, area, length, sum or average per class, in the layer's class colors) or typed rows; exported as vector SVG. |
+| **Diagrams & HTML** | **Mermaid** diagrams (flowchart, sequence, Gantt, pie, mind map, timeline, class, state…) with templates and themes, drawn as plain SVG. **HTML blocks** with your own HTML + CSS (sanitised, CSS scoped to the box), redrawn as SVG for export. |
+| **Tables like Word** | Header / total row, first / last column, banded rows / columns, 8 table styles, border style, width, pen color and which borders, shading; a cell editor that inserts or deletes rows and columns at the chosen cell; AutoFit, distribute columns, 3 × 3 alignment, cell margins. |
+| **Map Series (atlas)** | One layout, one page per feature of an index layer: the map frame zooms to each feature (or keeps its scale), text uses `{series_name}`, `{series_page}`, `{series_count}`, `{series:FIELD}`; page navigation in the ribbon and status bar; export the whole series as one multi-page PDF or one image per page. |
+| **Category Colors** | Colour a GeoLibre layer by class from its own data: Distinct 200 (non-gradient), official KLHK class colours, Plotly, Tableau, ColorBrewer; opacity 100 % by default, outline, per-class edits; saved with the project and followed by the legends. |
+| **Map Tools** | A **Map Tools** submenu of the Layout Composer menu (and a ribbon over the map) with the workflows of *ArcGIS Pro Map Fundamentals*: coordinates in DD · DMS · DDM · UTM · **MGRS** (typed or pasted in any format, conversion window, right-click copy with a custom template, cursor readout); go to coordinate, zoom to scale or layer; points, lines and polygons from coordinate lists, CSV / spreadsheet rows, WKT or GeoJSON — into a new or an **existing** layer; move or delete selected features; **map chips** as PNG + world file; image footprints and images covering a point. |
+| **Pictures** | From a file or **from a link**; **Remove background** with remove.bg (your own API key); fit, fill, stretch, opacity, border, filters and masks. |
 | **Page** | Size catalog grouped by type — ISO A0–A6, ISO B0–B5, Letter/Legal/Tabloid/ANSI/Arch, F4, Indonesian minimum sizes per map scale, posters, photo prints, presentation (16:9, 4:3, 16:10, 4K) and social media (Instagram post/portrait/story, TikTok/Reels, Facebook, X, LinkedIn, YouTube, Pinterest, WhatsApp). Units mm · cm · in · pt · px (px at a chosen pixels-per-inch), orientation, single/double neatline, margins, canvas grid, ruler guides, smart snapping. |
 | **Map frames** | Live MapLibre map per frame, WYSIWYG at print scale, pan/zoom content (double-click), set or lock scale 1:n, rotation, zoom to layer, per-frame basemap (same as GeoLibre, streets, light, bright, satellite, topographic, none), **GeoLibre capture** mode that includes raster/COG layers.; **frame shapes**: rectangle, rounded, circle/ellipse, triangle, diamond, pentagon, hexagon, octagon, star, heart, shield, arch, or **any image as a mask** (PNG/SVG silhouette).; **layers per frame**: each frame shows its own set of GeoLibre layers (e.g. an inset with only the boundary), and linked legends follow. |
 | **Coordinate grids** | DMS · DM · DD · UTM (m or km, auto zone), lines/crosses/dots, zebra or inside/outside ticks, labels inside/outside, BT/LS or E/W–N/S. |
@@ -53,8 +65,8 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 | **Attribute tables** | Built from a layer's features: **summary by class** (area in ha or km², length in km, count, sum or average of a field, with count and percent columns and a total row) or a **feature list** with chosen columns; filter (`=`, `≠`, `>`, `<`, contains), sort, top N with "Other", decimals and number format (`1,234.56` or `1.234,56`). Area and length are measured on the ellipsoid. Values update when the data changes. |
 | **Charts** | Pie, donut (total in the centre), column and bar charts with the same data options; colors from the layer's GeoLibre symbology, a palette or one color; labels as percent, value or class; legend beside the chart; axis ticks that never overlap. |
 | **Color bar** | matplotlib-style: 39 colormaps + custom colors, reverse, continuous or classed, horizontal/vertical, **pointed or square extensions** (min/max/both), even/rounded/custom ticks with tick count, decimals, prefix/suffix, LaTeX title, reads min/max/colormap from GeoLibre raster (`rasterState.rescale`) or graduated layers.; **values from a raster**: min/max and colormap (incl. `_r` reversed) read from the layer's stretch or statistics, with round tick values. |
-| **Scale bars** | 11 styles incl. **dual units** (km below, paper cm / m / mi / nmi above), numeric 1:n. |
-| **North arrows** | 26 styles, follow map rotation, letter U/N. |
+| **Scale bars** | 11 styles incl. **dual units** — by default the KLHK / topographic layout: round paper centimetres on top, kilometres below at the same ticks, every 0 aligned on the left, equal segments (first segment split on request) — numeric 1:n. |
+| **North arrows** | 26 styles plus **your own PNG / SVG** (kept in a reusable library), follow map rotation, letter U/N with adjustable size. |
 | **Canva-style editing** | One click adds any item at the centre of the view (no box to draw); double-click or Enter edits text right on the page; text presets (heading, subheading, body, caption, map label, callout); text effects (shadow, lift, hollow, outline, highlight, neon, echo) and underline/strike/overline; flip horizontal/vertical for every item; image filters (brightness, contrast, saturation, grayscale, sepia, hue, blur + presets Mono, Vivid, Warm, Faded, Dramatic) and masks (circle, hexagon, star, heart, blob). |
 | **Text & LaTeX** | Text boxes with variables (`{title}`, `{date}`, `{scale}`…), `$…$` math anywhere (text, legend, color bar title, markers), formula item with 104-symbol catalog, structure templates and recent formulas (MathJax 3, vector output). Quick text bar: font (incl. installed fonts), size, bold, italic, color, alignment, superscript/subscript.; **fonts**: a searchable font picker with every **Google Font** (about 2,000 families, filter by sans, serif, display, script, mono, previewed in their own face) plus the fonts installed on your computer. Google Fonts are embedded in PNG, JPG, PDF and SVG exports.; **typography**: weight 100 to 900 (the weights each Google font really has), size, color and opacity, italic, small caps, underline, strikethrough, case, line height, letter spacing, paragraph gap, padding, left / centre / right / **justified** alignment, vertical alignment, and **auto size** (fixed box, auto height, or auto width). |
 | **Drawing** | Polyline, polygon, Bézier pen (click = corner, drag = curve), freehand (simplified + smoothed), arrow line; 33 shapes; fills: solid, gradient, hatch patterns (/ \ × − \| + ·); 6 dash styles. |
@@ -101,15 +113,15 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 
 ## Install
 
-1. Download `layout-composer-1.8.2.zip` from [Releases](https://github.com/Defani/Layout-Composer/releases) (or build it with `sh build.sh             # or: python tools/build.py --release`).
+1. Download `layout-composer-1.11.0.zip` from [Releases](https://github.com/Defani/Layout-Composer/releases) (or build it with `python tools/build.py --release`).
 2. GeoLibre Desktop: copy the zip into `%APPDATA%\org.geolibre.desktop\plugins` (Windows) and restart GeoLibre — or install it from **Manage Plugins** in Settings once it is in the registry.
-3. Enable **Layout Composer** in the **Plugins** menu, then open it with **Open Layout Composer** in the Layout menu or the layout button at the top right of the map.
+3. Enable **Layout Composer** in the **Plugins** menu. A **Layout Composer** menu with the plugin's icon appears in GeoLibre's menu bar: *Open Layout Composer* to design a print map, *Back to the Map* to return, plus Map Tools, the Map Tools ribbon and the tour.
 
 ## Quick start
 
-1. Pick a **page size** on the *Page* tab (catalog button).
-2. Click **Map** in the top bar; the frame appears in the middle of the view. Set the scale in the panel on the right, or double-click the frame to pan its content.
-3. Add **Inset, Legend, Color bar, North** and **Text, Data (tables and charts), Draw, Shape, Image, Symbols, Scale bar**, all from the top bar. Each item's settings appear on the right, grouped into Content, Style and Arrange tabs. The left panel lists the layers of the page.
+1. Set the page in the status bar (Portrait / Landscape) or in the *Page* tab of the property panel (size catalog).
+2. On the **Insert** tab click **Map**, then drag a box on the page (or click once for the default size). The **Map Frame** and **Grid** tabs appear: set the scale, basemap, frame and the coordinate grid there. Use the **Hand** to move what is inside the frame.
+3. Add **Legend, Color bar, North, Scale bar, Text, LaTeX, Table, Symbol, HTML, Mermaid, Data (tables and charts), Draw, Shape, Image, Symbols** from the **Insert** tab. The **Format** tab shows the settings of whatever is selected; **All properties** (Arrange group) opens the full side panel.
 4. Click the **Export** icon at the top right. A window opens with the format (PNG, JPG, PDF, Vector PDF, GeoPDF, SVG), resolution, background and file name; a bar shows the progress from left to right. To continue in QGIS, use **Export as QGIS template (.qpt)** in the main menu.
 
 ## Architecture
@@ -230,9 +242,11 @@ A slope map of Kabupaten Kuningan made with Layout Composer from real data (five
 
 | Keys | Action |
 |---|---|
-| `V` / `H` / `C` | Select / pan canvas (or hold `Space`) / move map content |
+| `V` / `H` (or `C`) | Select / Hand: move map content, pan the page outside a map (or hold `Space`) |
 | Shift + 1 / Shift + 2 | Fit page / zoom to selection |
-| Ctrl + scroll, Ctrl + `+` / `−` / `0` | Zoom canvas / fit page |
+| Scroll (Shift + scroll: sideways), Ctrl + `+` / `−` / `0` / `1`, numpad `+` / `−` | Zoom canvas / fit page / 100 % |
+| Middle mouse drag · right click | Pan the page · select and open the context menu |
+| While drawing an item: Shift · Alt · Esc | Keep proportions · draw from the centre · cancel |
 | Arrows (Shift ×10, Alt ×0.1) | Nudge 1 mm |
 | Ctrl + Z / Y | Undo / redo |
 | Ctrl + C / V / D | Copy / paste / duplicate |
@@ -254,16 +268,21 @@ src/            sources (JavaScript and style.css), bundled and minified into pl
   04c-latex.js      MathJax formulas, symbol catalog
   04d…04h           fills/paths, dual scale bar, effects/markers, icon catalog data/UI (04g2: Material Symbols)
   04i-data.js       attribute tables and charts (aggregation, ellipsoidal area and length)
+  04k-plotly.js     Plotly charts (21 kinds, styles, cached SVG)
   05-maps.js        MapLibre frames, legend from styles, capture
   06-ui.js, 06b, 06c   editor shell, interactions, draw tools, templates
   06d, 06e          Canva-style adding and inline editing; Google Fonts and the font picker
-  07-props.js, 07b, 07c  property panels, color wheel + quick text bar, page sizes
+  07-props.js, 07b, 07c  property panels, color wheel + ribbon (Insert / Format tabs), page sizes
+  07b2…07b8         ribbon groups: text (Word), tables, symbols dialog, map frame / grid, HTML + Mermaid, pictures + remove.bg, charts
   07d-dataprops.js  panels for tables, charts and layers per map frame
   08-export.js      PNG/JPG/PDF/vector PDF/GeoPDF/SVG
   08b-qpt.js        QGIS .qpt template import and export
+  08c-mapseries.js  Map Series (atlas): pages per feature, variables, multi-page export
   09-plugin.js      GeoLibre plugin entry
+  10b-palette.js    Category Colors: Distinct 200 / KLHK / ColorBrewer palettes applied to a layer
+  10-maptools.js    Map Tools ribbon and menu: MGRS/UTM/DMS coordinates, features from coordinates and tables, map chips
 plugin/         plugin.json, LICENSE, NOTICE.md; index.js and style.css are built
-vendor/         jsPDF, svg2pdf.js and MathJax as released, embedded in the bundle
+vendor/         jsPDF, svg2pdf.js, MathJax, Mermaid and Plotly.js as released, embedded in the bundle
 tools/          build.py (bundle, minify, zip), build_catalog.py (groups Maki/Temaki icons by type), build_material.py (Material Symbols by category), screenshots.py (README images)
 test/           HTML test harnesses (MapLibre + mock GeoLibre API)
 examples/       sample layouts
@@ -273,7 +292,7 @@ examples/       sample layouts
 sh build.sh
 ```
 
-Builds a single minified ES module (`plugin/index.js`, esbuild) and `plugin/style.css`, then zips them as `layout-composer.zip`; `--release` also writes `dist/layout-composer-<version>.zip` with its SHA-256. Put the esbuild binary on `PATH`, in `tools/bin/`, or set `ESBUILD`. The plugin loads no code from other hosts: jsPDF, svg2pdf.js and MathJax are embedded and started from a Blob URL the first time they are needed. To test without GeoLibre, serve the folder (`python -m http.server`) and open `test/index.html`.
+Builds a single minified ES module (`plugin/index.js`, esbuild) and `plugin/style.css`, then zips them as `layout-composer.zip`; `--release` also writes `dist/layout-composer-<version>.zip` with its SHA-256. Put the esbuild binary on `PATH`, in `tools/bin/`, or set `ESBUILD`. The plugin loads no code from other hosts: jsPDF, svg2pdf.js, MathJax, Mermaid and Plotly.js are embedded and started from a Blob URL the first time they are needed. To test without GeoLibre, serve the folder (`python -m http.server`) and open `test/index.html`.
 
 ## Licenses and third-party notices
 
@@ -285,6 +304,9 @@ Builds a single minified ES module (`plugin/index.js`, esbuild) and `plugin/styl
 | MathJax 3.2.2 | Renders LaTeX as SVG (bundled, started on first use) | [mathjax.org](https://www.mathjax.org) | Apache-2.0 |
 | jsPDF 2.5.1 | PDF / GeoPDF output (bundled, started on export) | [github.com/parallax/jsPDF](https://github.com/parallax/jsPDF) | MIT |
 | svg2pdf.js 2.2.4 | Vector PDF (bundled, started on export) | [github.com/yWorks/svg2pdf.js](https://github.com/yWorks/svg2pdf.js) | MIT |
+| Plotly.js 2.35.2 (plotly.js-dist-min) | Charts (bundled, started on first chart) | [github.com/plotly/plotly.js](https://github.com/plotly/plotly.js) | MIT |
+| Mermaid 11.4.1 | Diagrams (bundled, started on first diagram) | [github.com/mermaid-js/mermaid](https://github.com/mermaid-js/mermaid) | MIT |
+| remove.bg API | *Remove background* on pictures (online, only when clicked, with your own API key) | [remove.bg/api](https://www.remove.bg/api) | remove.bg terms of service |
 | Maki 8.2.0 icons | Icon catalog | [github.com/mapbox/maki](https://github.com/mapbox/maki) | CC0-1.0 |
 | Temaki 5.13.0 icons | Icon catalog | [github.com/rapideditor/temaki](https://github.com/rapideditor/temaki) | CC0-1.0 |
 | Material Symbols (@material-symbols/svg-400 0.47.4) | Icon catalog, Google tab (loaded from jsDelivr on use) | [fonts.google.com/icons](https://fonts.google.com/icons), [github.com/google/material-design-icons](https://github.com/google/material-design-icons) | Apache-2.0 |

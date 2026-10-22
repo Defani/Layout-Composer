@@ -79,6 +79,13 @@ function userLayerParts(mainStyle) {
       if (l.source && mainStyle.sources?.[l.source]) sources[l.source] = mainStyle.sources[l.source];
     }
   }
+  // overlays added straight to GeoLibre's map (national base-map tiles "pd-*" or metadata "glc:overlay")
+  for (const l of mainStyle.layers || []) {
+    if (seen.has(l.id) || !(/^pd-/.test(l.id) || l.metadata?.["glc:overlay"])) continue;
+    seen.add(l.id);
+    layers.push(l);
+    if (l.source && mainStyle.sources?.[l.source]) sources[l.source] = mainStyle.sources[l.source];
+  }
   // keep the main style's draw order
   const order = new Map((mainStyle.layers || []).map((l, i) => [l.id, i]));
   layers.sort((a, b) => order.get(a.id) - order.get(b.id));
@@ -92,15 +99,26 @@ async function buildStyle(item) {
   if (kind === "geolibre") return hideFrameLayers(main, item);
   const user = userLayerParts(main);
   let base;
-  if (BASEMAP_URLS[kind]) {
+  if (kind === "klhk" || kind === "klhk-hillshade" || kind === "sni") {
+    base = klhkBasemapStyle(kind === "sni" ? "sni" : "klhk", { hillshade: kind === "klhk-hillshade" });
+  } else if (BASEMAP_URLS[kind]) {
     try {
       base = await fetchStyle(BASEMAP_URLS[kind]);
     } catch (e) {
       console.warn("[Layout Composer] basemap failed to load", e);
       toast(`Basemap ${BASEMAP_STYLES[kind]} failed to load; using no basemap.`, "warn");
     }
-  } else if (RASTER_BASEMAPS[kind]) {
-    const r = RASTER_BASEMAPS[kind];
+  } else if (catalogBasemap(kind)?.[3] === "style") {
+    const c = catalogBasemap(kind);
+    try {
+      base = await fetchStyle(c[4]);
+    } catch (e) {
+      console.warn("[Layout Composer] basemap failed to load", e);
+      toast(`Basemap ${c[1]} failed to load; using no basemap.`, "warn");
+    }
+  } else if (RASTER_BASEMAPS[kind] || catalogBasemap(kind)) {
+    const c = catalogBasemap(kind);
+    const r = RASTER_BASEMAPS[kind] || { tiles: c[4].split("|"), attribution: c[5] };
     base = {
       version: 8,
       glyphs: main.glyphs,
@@ -124,7 +142,10 @@ async function buildStyle(item) {
   return hideFrameLayers(base, item);
 }
 // Layers switched off for one map frame (props.hiddenLayers) are hidden in its style.
+// Frames are always flat Web Mercator: GeoLibre's globe view would draw a ball
+// under the grid, scale bar and coordinates, which are all Mercator.
 function hideFrameLayers(style, item) {
+  style.projection = { type: "mercator" };
   const hidden = item.props.hiddenLayers || [];
   for (const id of hidden) {
     for (const l of styleLayersFor(style, id)) l.layout = { ...(l.layout || {}), visibility: "none" };
@@ -161,6 +182,23 @@ function placeLiveMap(item, rec) {
     for (const k2 of ["maskSize", "webkitMaskSize"]) c.style[k2] = mk ? "100% 100%" : "";
     for (const k2 of ["maskRepeat", "webkitMaskRepeat"]) c.style[k2] = mk ? "no-repeat" : "";
   }
+  // The frame (neatline) is drawn above the live map; otherwise the map canvas
+  // covers the item's own frame stroke and the map looks frameless.
+  let fr = rec.frameEl;
+  if (!fr) {
+    fr = rec.frameEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    fr.setAttribute("class", `${NS}-mapframe-line`);
+    fr.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5;overflow:visible";
+    c.appendChild(fr);
+  }
+  if (p.frame?.show && !mapFrameIsImage(p)) {
+    const sw = Math.max(0.5, (p.frame.width || 0.5) * PX96);
+    const col = esc(p.frame.color || "#000000");
+    fr.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    fr.innerHTML = d
+      ? `<path d="${d}" fill="none" stroke="${col}" stroke-width="${sw * 2}" stroke-linejoin="round"/>`
+      : `<rect x="${sw / 2}" y="${sw / 2}" width="${W - sw}" height="${H - sw}" fill="none" stroke="${col}" stroke-width="${sw}"/>`;
+  } else fr.innerHTML = "";
   const ratio = (window.devicePixelRatio || 1) * clamp(k, 0.5, 3);
   if (rec.map && rec.ratio !== ratio && typeof rec.map.setPixelRatio === "function") {
     rec.ratio = ratio;
@@ -218,6 +256,7 @@ async function ensureLiveMap(item, host) {
   }
   rec.pending = false;
   rec.map.on("move", () => onLiveMapMove(item.id));
+  rec.map.on("idle", () => refreshFrameLegends(item.id));
   rec.map.on("error", (e) => console.debug("[Layout Composer] map error", e?.error?.message || e));
   return rec;
 }
@@ -550,18 +589,105 @@ function legendFromMap() {
   return entries;
 }
 
+// ---------------------------------------------------------------- legend: only what the frame shows
+// "#rgb", "#rrggbb", "rgb()/rgba()" or a MapLibre Color ({r,g,b} 0-1) as "#rrggbb".
+function colorKey(c) {
+  if (!c) return null;
+  if (typeof c === "object" && typeof c.r === "number") {
+    const h = (v) => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, "0");
+    return `#${h(c.r)}${h(c.g)}${h(c.b)}`;
+  }
+  const s = String(c).trim().toLowerCase();
+  let m = /^#([0-9a-f]{3})$/.exec(s);
+  if (m) return `#${m[1].split("").map((x) => x + x).join("")}`;
+  if (/^#[0-9a-f]{6}/.test(s)) return s.slice(0, 7);
+  m = /^rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)/.exec(s);
+  if (m) return `#${[m[1], m[2], m[3]].map((v) => Math.round(+v).toString(16).padStart(2, "0")).join("")}`;
+  return null;
+}
+// What the legend's map frame actually draws: the GeoLibre layer ids with at
+// least one rendered feature, and per layer the colours those features use.
+// Returns null while the frame has no live map yet (then nothing is filtered).
+function renderedInFrame(item) {
+  const frame = linkedMapOf(item);
+  const map = frame && S.maps.get(frame.id)?.map;
+  if (!map || !map.isStyleLoaded?.()) return null;
+  const style = map.getStyle();
+  const layers = new Set();
+  const colors = new Map();
+  for (const gl of allProjectLayers()) {
+    if (isDataRaster(gl) || isTileLayer(gl)) {
+      layers.add(gl.id); // rasters and tiles cannot be queried: keep them
+      continue;
+    }
+    const ids = styleLayersFor(style, gl.id).map((l) => l.id).filter((id) => map.getLayer(id));
+    if (!ids.length) continue;
+    let feats = [];
+    try {
+      feats = map.queryRenderedFeatures({ layers: ids });
+    } catch {
+      feats = [];
+    }
+    if (!feats.length) continue;
+    layers.add(gl.id);
+    const set = new Set();
+    for (const f of feats) {
+      const p = f.layer?.paint || {};
+      for (const k of ["fill-color", "fill-extrusion-color", "circle-color", "line-color", "icon-color", "text-color"]) {
+        const key = colorKey(p[k]);
+        if (key) set.add(key);
+      }
+    }
+    colors.set(gl.id, set);
+  }
+  return { layers, colors };
+}
+function filterLegendToFrame(item, entries) {
+  const seen = renderedInFrame(item);
+  if (!seen) return entries;
+  const kept = entries.filter((e) => {
+    if (!seen.layers.has(e.layerId)) return false;
+    if (e.kind !== "item" || !e.key.includes("::")) return true; // single-symbol layer
+    const want = colorKey(e.patch?.fill || e.patch?.stroke);
+    const got = seen.colors.get(e.layerId);
+    return !want || !got || got.has(want);
+  });
+  // drop a group heading whose classes were all filtered out
+  return kept.filter((e, i) => e.kind !== "group" || kept.slice(i + 1).some((n) => n.layerId === e.layerId && n.kind === "item"));
+}
+// Re-sync "visible in frame" legends after their frame finishes redrawing.
+function refreshFrameLegends(frameId) {
+  clearTimeout(refreshFrameLegends.t);
+  refreshFrameLegends.t = setTimeout(() => {
+    if (!S.doc) return;
+    let changed = false;
+    for (const l of S.doc.items.filter((i) => i.type === "legend" && i.props.visibleOnly && linkedMapOf(i)?.id === frameId)) {
+      const before = JSON.stringify(l.props.entries);
+      syncLegendEntries(l);
+      if (JSON.stringify(l.props.entries) !== before) changed = true;
+    }
+    if (changed) refreshCanvas();
+  }, 250);
+}
+
 // Merge freshly generated entries with user edits (renamed/hidden labels).
 function syncLegendEntries(item) {
   const hidden = new Set(linkedMapOf(item)?.props.hiddenLayers || []);
-  const fresh = legendFromMap().filter((e) => !hidden.has(e.layerId));
+  let fresh = legendFromMap().filter((e) => !hidden.has(e.layerId));
+  if (item.props.visibleOnly) fresh = filterLegendToFrame(item, fresh);
   const old = new Map((item.props.entries || []).map((e) => [e.key, e]));
   const manual = (item.props.entries || []).filter((e) => e.manual);
-  item.props.entries = [
-    ...fresh.map((e) => {
-      const o = old.get(e.key);
-      return o ? { ...e, label: o.userLabel ? o.label : e.label, userLabel: o.userLabel, hidden: o.hidden } : e;
-    }),
-    ...manual,
-  ];
+  const merged = fresh.map((e) => {
+    const o = old.get(e.key);
+    return o ? { ...e, label: o.userLabel ? o.label : e.label, userLabel: o.userLabel, hidden: o.hidden } : e;
+  });
+  if (item.props.userOrder) {
+    // keep the order the user dragged: known entries (and manual ones) where
+    // they were, entries new to the map at the end
+    const byKey = new Map(merged.map((e) => [e.key, e]));
+    const kept = (item.props.entries || []).map((e) => (e.manual ? e : byKey.get(e.key))).filter(Boolean);
+    const seen = new Set(kept.map((e) => e.key));
+    item.props.entries = [...kept, ...merged.filter((e) => !seen.has(e.key))];
+  } else item.props.entries = [...merged, ...manual];
   return fresh.length;
 }

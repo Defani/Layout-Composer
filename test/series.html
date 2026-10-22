@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<title>Layout Composer — raster series</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" />
+<script>document.write('<link rel="stylesheet" href="../plugin/style.css?v=' + Date.now() + '" />')</script>
+<style>
+  :root { --background: 0 0% 100%; --foreground: 222 47% 11%; --card: 210 20% 98%; --border: 214 32% 88%; --muted: 210 40% 96%; --muted-foreground: 215 16% 47%; --accent: 210 40% 94%; --primary: 221 83% 53%; --primary-foreground: 0 0% 100%; }
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #map { position: absolute; inset: 40px 0 0 0; }
+  #bar { height: 40px; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid #ddd; }
+</style>
+</head>
+<body>
+<div id="bar"><b>GeoLibre (mock) — NBR+ series</b></div>
+<div id="map"></div>
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script type="module">
+  // README shots show the released UI: floating AI dock (hidden), both side panels open
+  localStorage.setItem("glc:aidock", "float");
+  localStorage.setItem("glc:docks", JSON.stringify({ left: true, right: true }));
+  localStorage.removeItem("glc:layouts:v1");
+  // Sentinel-2 fire analysis (D:\NBRPLUS) rendered with the jet colormap to test/data/nbr/*.png (not in git).
+  const BOUNDS = [111.1737029, -7.6476275, 111.243502, -7.5558197];
+  const R = [
+    ["ndvi", "NDVI", 0.4, 0.9],
+    ["nbr_pre", "NBR+ sebelum kebakaran", -0.8, 0.2],
+    ["nbr_post", "NBR+ sesudah kebakaran", -0.8, 0.2],
+    ["burn", "Area terbakar (dNBR+)", 0.3, 0.8],
+  ];
+  const style = { version: 8, glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf", sources: {}, layers: [{ id: "bg", type: "background", paint: { "background-color": "#ffffff" } }] };
+  const map = new maplibregl.Map({ container: "map", style, center: [(BOUNDS[0] + BOUNDS[2]) / 2, (BOUNDS[1] + BOUNDS[3]) / 2], zoom: 12.5, preserveDrawingBuffer: true });
+  const layers = R.map(([id, name, lo, hi]) => ({ id, name, type: "raster", visible: true, metadata: { rasterState: { bands: [1], colormap: "jet", stats: [{ min: lo, max: hi }] } } }));
+  map.once("style.load", () => {
+    const [w, s, e, n] = BOUNDS;
+    for (const [id] of R) {
+      map.addSource(id, { type: "image", url: `data/nbr/${id}.png`, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
+      map.addLayer({ id, type: "raster", source: id, paint: { "raster-resampling": "nearest", "raster-fade-duration": 0 } });
+    }
+  });
+  const app = {
+    getMap: () => map,
+    listLayers: () => layers,
+    addMapControl: (c, pos) => map.addControl(c, pos),
+    removeMapControl: (c) => map.removeControl(c),
+    registerToolbarMenu: () => () => {},
+    getLayerFeatures: () => [],
+    getProjectSnapshot: () => ({ name: "Analisis Kebakaran NBR+", layers }),
+  };
+  const mod = await import("../plugin/index.js?v=" + Date.now());
+  mod.plugin.activate(app);
+  window.__app = app;
+  window.__bounds = BOUNDS;
+  window.__R = R;
+  map.once("idle", () => (document.title = "LOADED"));
+</script>
+</body>
+</html>

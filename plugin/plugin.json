@@ -1,7 +1,7 @@
 {
   "id": "layout-composer",
   "name": "Layout Composer",
-  "version": "1.9.0",
+  "version": "1.11.0",
   "entry": "index.js",
   "style": "style.css",
   "author": "Defani Arman Alfitriansyah",
@@ -19,7 +19,7 @@
     "charts",
     "qgis"
   ],
-  "description": "Cartographic print layout designer for GeoLibre: page-size catalog in mm/cm/in/pt/px, live map frames with locked scale, custom shapes and per-frame layers, DMS/DD/UTM grids, inset maps, legends for vector, raster and tile layers, attribute tables and charts from layer data, matplotlib-style color bars, dual-unit scale bars, 26 north arrows, LaTeX, drawing tools, Google Fonts and Material Symbols, Maki and Temaki icons, layout grids and precise editing, QGIS .qpt import/export, user templates, and PNG/JPG/PDF/vector PDF/GeoPDF/SVG export.",
+  "description": "Cartographic print layout designer for GeoLibre: page-size catalog in mm/cm/in/pt/px, live map frames with locked scale, custom shapes and per-frame layers, DMS/DD/UTM grids, inset maps, legends for vector, raster and tile layers, a Word-style ribbon (Insert, Format, Table Design/Layout, Map Frame, Grid), attribute tables and Plotly charts (21 kinds) from layer data, Mermaid diagrams, HTML blocks, a Symbol dialog, matplotlib-style color bars, dual-unit scale bars, 26 north arrows, LaTeX, drawing tools, Google Fonts and Material Symbols, Maki and Temaki icons, layout grids and precise editing, QGIS .qpt import/export, user templates, and PNG/JPG/PDF/vector PDF/GeoPDF/SVG export.",
   "engines": [
     "maplibre"
   ]

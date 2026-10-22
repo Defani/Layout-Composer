@@ -14,7 +14,7 @@ import hashlib, json, os, shutil, subprocess, sys, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC, PLUGIN, VENDOR = (os.path.join(ROOT, d) for d in ("src", "plugin", "vendor"))
-VENDOR_FILES = {"jspdf": "jspdf.umd.min.js", "svg2pdf": "svg2pdf.umd.min.js", "mathjax": "tex-svg.js"}
+VENDOR_FILES = {"jspdf": "jspdf.umd.min.js", "svg2pdf": "svg2pdf.umd.min.js", "mathjax": "tex-svg.js", "mermaid": "mermaid.min.js", "plotly": "plotly.min.js"}
 SCREENSHOTS = [
     ("docs/img/ui-overview.png", "screenshots/overview.png"),
     ("docs/img/kelerengan-kuningan.png", "screenshots/example-map.png"),
@@ -38,7 +38,8 @@ def run(*args):
 def main():
     release = "--release" in sys.argv
     os.makedirs(os.path.join(ROOT, "build"), exist_ok=True)
-    vendor = {k: open(os.path.join(VENDOR, f), encoding="utf8").read() for k, f in VENDOR_FILES.items()}
+    # optional libraries (e.g. Mermaid) are bundled only when present in vendor/
+    vendor = {k: open(os.path.join(VENDOR, f), encoding="utf8").read() for k, f in VENDOR_FILES.items() if os.path.exists(os.path.join(VENDOR, f))}
     parts = ["// Third-party libraries (see README, Licenses): started from a Blob URL on first use.\n",
              "const VENDOR_SRC = " + json.dumps(vendor, ensure_ascii=True) + ";\n"]
     for name in sorted(os.listdir(SRC)):

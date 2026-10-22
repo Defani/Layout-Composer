@@ -8,7 +8,7 @@
 
 const PLUGIN_ID = "layout-composer";
 const PLUGIN_NAME = "Layout Composer";
-const PLUGIN_VERSION = "1.9.0";
+const PLUGIN_VERSION = "1.11.0";
 const NS = "glc"; // CSS class prefix
 const STORE_KEY = "glc:layouts:v1";
 const PX96 = 96 / 25.4; // CSS px per mm at 96 dpi
@@ -58,6 +58,9 @@ const BASEMAP_STYLES = {
   bright: "Bright streets",
   satellite: "Satellite imagery",
   topo: "Topographic",
+  klhk: "KLHK / RBI (SK 399)",
+  "klhk-hillshade": "KLHK / RBI + hillshade",
+  sni: "RBI (SNI 6502)",
   none: "None (layers only)",
 };
 const BASEMAP_URLS = {
@@ -142,10 +145,48 @@ function debounce(fn, ms) {
 function fmtNumber(n, decimals = 0) {
   return Number(n).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
+// map scale denominator; locale "id" groups thousands with dots (1 : 640.229)
+function fmtScale(n, p) {
+  const s = fmtNumber(n);
+  return p?.locale === "id" ? s.replace(/,/g, ".") : s;
+}
 function todayStr() {
   return new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
+// Desktop GeoLibre (Tauri / WebView2): a real "Save as" dialog to pick the folder.
+// The web build keeps the browser's normal download.
+const IS_DESKTOP = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window || /Tauri|Electron/i.test(navigator.userAgent));
+const SAVE_TYPES = {
+  png: ["PNG image", "image/png"], jpg: ["JPEG image", "image/jpeg"], jpeg: ["JPEG image", "image/jpeg"], pdf: ["PDF document", "application/pdf"],
+  svg: ["SVG image", "image/svg+xml"], json: ["Layout file", "application/json"], qpt: ["QGIS layout template", "application/xml"], tif: ["GeoTIFF", "image/tiff"], zip: ["ZIP archive", "application/zip"],
+};
+async function saveWithDialog(blob, filename) {
+  const ext = (filename.split(".").pop() || "").toLowerCase();
+  const t = SAVE_TYPES[ext];
+  const handle = await window.showSaveFilePicker({
+    suggestedName: filename,
+    id: "glc-save", // the dialog reopens in the folder used last time
+    startIn: "documents",
+    types: t ? [{ description: t[0], accept: { [t[1]]: [`.${ext}`] } }] : undefined,
+  });
+  const w = await handle.createWritable();
+  await w.write(blob);
+  await w.close();
+  toast(`Saved: ${handle.name}`);
+}
 function downloadBlob(blob, filename) {
+  S.lastDownload = { blob, filename, time: Date.now() }; // for the export card in Ask AI
+  if (IS_DESKTOP && typeof window.showSaveFilePicker === "function") {
+    saveWithDialog(blob, filename).catch((e) => {
+      if (e?.name === "AbortError") return; // the user closed the dialog
+      console.warn("[Layout Composer] save dialog", e);
+      browserDownload(blob, filename);
+    });
+    return;
+  }
+  browserDownload(blob, filename);
+}
+function browserDownload(blob, filename) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = filename;
@@ -247,7 +288,36 @@ function applyCase(text, mode) {
   if (mode === "upper") return String(text).toUpperCase();
   if (mode === "lower") return String(text).toLowerCase();
   if (mode === "title") return String(text).replace(/\w\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());
+  // Word's "Sentence case." and "tOGGLE cASE"
+  if (mode === "sentence") return String(text).toLowerCase().replace(/(^\s*|[.!?]\s+|\n\s*)(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+  if (mode === "toggle") return [...String(text)].map((c) => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase())).join("");
   return text;
+}
+// Numbering formats and bullet characters of text lists (Word's libraries).
+const LIST_NUMBERING = ["1.", "1)", "(1)", "a.", "a)", "A.", "A)", "i.", "i)", "I.", "1.1"];
+const LIST_BULLETS = ["•", "◦", "▪", "■", "➢", "✓", "–", "★", "❖", "➤", "○", "◆"];
+function romanNumeral(n) {
+  const R = [[1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"], [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]];
+  let s = "";
+  for (const [v, r] of R) {
+    while (n >= v) {
+      s += r;
+      n -= v;
+    }
+  }
+  return s;
+}
+function alphaNumeral(n) {
+  let s = "";
+  for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(97 + ((n - 1) % 26)) + s;
+  return s;
+}
+function listMarker(n, style) {
+  const s = style.replace(/^\(/, "");
+  const core = s[0] === "a" ? alphaNumeral(n) : s[0] === "A" ? alphaNumeral(n).toUpperCase() : s[0] === "i" ? romanNumeral(n) : s[0] === "I" ? romanNumeral(n).toUpperCase() : style === "1.1" ? `1.${n}` : String(n);
+  if (style.startsWith("(")) return `(${core})`;
+  if (style.endsWith(")")) return `${core})`;
+  return style === "1.1" ? core : `${core}.`;
 }
 function dashArray(style, w) {
   const s = Math.max(w, 0.2);
@@ -256,6 +326,10 @@ function dashArray(style, w) {
   if (style === "longdash") return `${s * 9} ${s * 3}`;
   if (style === "longdashdot") return `${s * 9} ${s * 3} ${s * 0.1} ${s * 3}`;
   if (style === "dashdot") return `${s * 4} ${s * 2} ${s * 0.1} ${s * 2}`;
+  // RBI / KLHK administrative boundaries (SNI 8743:2019 look)
+  if (style === "negara") return `${s * 2.2} ${s * 1.8}`;
+  if (style === "provinsi") return `${s * 6} ${s * 1.6} ${s * 2} ${s * 1.6}`;
+  if (style === "kabupaten") return `${s * 5} ${s * 1.6} ${s * 0.6} ${s * 1.6}`;
   return "";
 }
 
@@ -373,7 +447,8 @@ function mapItems() {
 }
 function toast(msg, kind = "info") {
   const host = S.root?.querySelector(`.${NS}-toasts`);
-  if (!host) return;
+  // composer closed (Data View): show it with the Map Tools toasts instead
+  if (!host || !S.open || !S.root?.isConnected) return typeof mtToast === "function" ? mtToast(msg, kind === "info" ? "info" : "warn") : undefined;
   const t = el("div", { class: `${NS}-toast ${NS}-toast-${kind}` }, msg);
   host.appendChild(t);
   setTimeout(() => t.classList.add("out"), 3200);
@@ -403,6 +478,11 @@ function resolveVar(m, key, arg) {
       return target ? `1 : ${fmtNumber(mapScale(target))}` : "1 : -";
     }
     if (k === "halaman" || k === "page") return S.doc.page.size;
+    // map series: {series_name} {series_page} {series_count} {series:FIELD}
+    if (k.startsWith("series") || k === "nama_seri") {
+      const v = typeof seriesVar === "function" ? seriesVar(k, arg) : null;
+      if (v != null) return v;
+    }
     if (S.doc.vars && k in S.doc.vars) return S.doc.vars[k];
     return m;
   }

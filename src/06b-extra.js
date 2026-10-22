@@ -1,17 +1,9 @@
 // ---------------------------------------------------------------- guides, context menu, groups, pen, rotation, templates
 
-// ---- zoom readout + slider
+// ---- zoom readout
 function updateZoomUI() {
   const pct = Math.round((S.zoom / PX96) * 100);
   if (S.ui.zoomLbl) S.ui.zoomLbl.textContent = `${pct}%`;
-  if (S.ui.zoomSlider && document.activeElement !== S.ui.zoomSlider) S.ui.zoomSlider.value = String(Math.round(Math.log2(pct / 100) * 100));
-}
-function buildZoomSlider() {
-  // logarithmic slider: −300 … +300 → 12.5 % … 800 %
-  const r = el("input", { type: "range", class: `${NS}-zoomslider`, min: -300, max: 300, step: 5, title: "Canvas zoom" });
-  r.addEventListener("input", () => setZoom(PX96 * 2 ** (Number(r.value) / 100)));
-  S.ui.zoomSlider = r;
-  return r;
 }
 
 // ---- view toggles in the status bar (grid / guides / snapping)
@@ -301,6 +293,21 @@ function openNewMenu(anchor) {
   const m = el("div", { class: `${NS}-menu ${NS}-newmenu` });
   m.append(menuItem("Blank layout", () => newLayout(), { iconName: "plus" }));
   m.append(menuItem("Duplicate this layout", duplicateLayout, { iconName: "copy" }));
+  // official KLHK layouts (SK MENLHK 399/2024): one row per scale, three signature variants
+  m.append(el("div", { class: `${NS}-msep` }), el("div", { class: `${NS}-mhead` }, "KLHK (SK 399/2024)"));
+  for (const sz of KLHK_SPEC.sizes) {
+    const go = (signers) => () => {
+      closePopover();
+      klhkNewLayout({ scale: sz.scale, signers, name: `KLHK 1:${fmtNumber(sz.scale).replace(/,/g, ".")}` });
+    };
+    const chip = (label, signers, title) => el("button", { type: "button", class: `${NS}-klhkchip`, title, onclick: go(signers) }, label);
+    m.append(el("div", { class: `${NS}-klhkrow` },
+      el("span", {}, `1:${fmtNumber(sz.scale).replace(/,/g, ".")}`, el("small", {}, ` ${sz.paper[0] / 10}×${sz.paper[1] / 10} cm`)),
+      chip("1 TTD", 1, "Signed by one official (or an SK attachment)"),
+      chip("4 TTD", 4, "Signed by two to four officials"),
+      chip("Pihak", "parties", "Signed by several parties (+15 cm)"),
+    ));
+  }
   const list = Object.values(loadTemplates()).sort((a, b) => b.saved - a.saved);
   m.append(el("div", { class: `${NS}-msep` }), el("div", { class: `${NS}-mhead` }, "My templates"));
   if (!list.length) m.append(el("div", { class: `${NS}-mnote` }, "No templates yet. Design a layout, then use “Save as template”."));
@@ -422,8 +429,11 @@ function applyDocks() {
   try {
     d = JSON.parse(localStorage.getItem(DOCK_KEY) || "{}");
   } catch {}
-  if (d.left == null) d.left = window.innerWidth >= 1100;
-  if (d.right == null) d.right = window.innerWidth >= 900;
+  // no docked layers panel any more: layers open as a drop-down (toggleLayersMenu)
+  d.left = false;
+  // the Format tab on top covers everyday settings: the full property panel
+  // stays closed until asked for, so the page gets the whole width
+  if (d.right == null) d.right = false;
   S.ui.root.classList.toggle("hide-left", !d.left);
   S.ui.root.classList.toggle("hide-right", !d.right);
   for (const b of S.ui.root.querySelectorAll(`.${NS}-docktog`)) {
@@ -434,6 +444,11 @@ function applyDocks() {
 }
 function toggleDock(side) {
   const d = applyDocks();
+  // in AI focus mode the panels are hidden: close the chat and show the panel
+  if (S.ui.root.classList.contains("ai-focus")) {
+    setAiOpen(false);
+    d[side] = false;
+  }
   d[side] = !d[side];
   try {
     localStorage.setItem(DOCK_KEY, JSON.stringify(d));
@@ -443,4 +458,56 @@ function toggleDock(side) {
     drawRulers();
     fitPage();
   });
+}
+// Selection frame look (color, line style, width), kept per user in this browser.
+const SELFRAME_KEY = "glc:selframe";
+const SELFRAME_COLORS = ["#0d99ff", "#e11d48", "#f97316", "#eab308", "#16a34a", "#9333ea", "#ec4899", "#111111", "#ffffff"];
+function selFrame() {
+  try {
+    return { color: "#0d99ff", style: "solid", width: 1, ...JSON.parse(localStorage.getItem(SELFRAME_KEY) || "{}") };
+  } catch {
+    return { color: "#0d99ff", style: "solid", width: 1 };
+  }
+}
+function applySelFrame() {
+  const f = selFrame();
+  const st = S.ui.root?.style;
+  if (!st) return;
+  st.setProperty("--glc-frame-color", f.color);
+  st.setProperty("--glc-frame-style", f.style);
+  st.setProperty("--glc-frame-width", `${f.width}px`);
+}
+function openSelFrameMenu(anchor) {
+  const f = selFrame();
+  const save = (patch) => {
+    try {
+      localStorage.setItem(SELFRAME_KEY, JSON.stringify({ ...selFrame(), ...patch }));
+    } catch {}
+    applySelFrame();
+    openSelFrameMenu(anchor);
+  };
+  const seg = (items, cur, key) => el("div", { class: `${NS}-seg` }, ...items.map(([v, l]) => el("button", { type: "button", class: String(cur) === String(v) ? "active" : "", onclick: () => save({ [key]: v }) }, l)));
+  popoverAt(anchor, el("div", { class: `${NS}-selframepop` },
+    el("div", { class: `${NS}-ptitle` }, "Selection frame"),
+    el("div", { class: `${NS}-ddswatches` }, ...SELFRAME_COLORS.map((c) => el("button", { type: "button", class: `${NS}-ddsw ${f.color === c ? "active" : ""}`, title: c, style: { background: c }, onclick: () => save({ color: c }) }))),
+    seg([["solid", "Solid"], ["dashed", "Dashed"], ["dotted", "Dotted"]], f.style, "style"),
+    seg([[1, "Thin"], [1.5, "Medium"], [2, "Thick"]], f.width, "width"),
+  ), `${NS}-ddpop`);
+}
+
+// Layers as a drop-down under the top bar's Layers button; it floats over the
+// canvas, so opening it never narrows the page. Closes on a click outside.
+function toggleLayersMenu(open) {
+  const root = S.ui.root;
+  const on = open ?? !root.classList.contains(`${NS}-layers-open`);
+  root.classList.toggle(`${NS}-layers-open`, on);
+  root.querySelector(`.${NS}-layersbtn`)?.classList.toggle("on", on);
+  document.removeEventListener("pointerdown", toggleLayersMenu.off, true);
+  if (!on) return;
+  renderItemList();
+  toggleLayersMenu.off = (e) => {
+    if (!e.target.isConnected || e.target.closest(`.${NS}-left, .${NS}-layersbtn, .${NS}-popover`)) return;
+    toggleLayersMenu(false);
+  };
+  setTimeout(() => document.addEventListener("pointerdown", toggleLayersMenu.off, true), 0);
 }

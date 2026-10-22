@@ -90,6 +90,12 @@ const ITEM_TYPES = {
       numericPrefix: "Scale ",
       dualUnit: "papercm",
       dualLabel: "",
+      // Dual units: "paper" = round cm on paper, ground labelled at the same
+      // ticks (KLHK style, 0 aligned); "ground" = round km/m on the bar.
+      dualBase: "paper",
+      // Split the first segment in halves (0 · ½ · 1 · 2 …); off = equal segments.
+      dualSplit: false,
+      secondUnit: "none",
       showNumeric: false,
       align: "left",
     }),
@@ -103,6 +109,7 @@ const ITEM_TYPES = {
       color1: "#111111",
       color2: "#ffffff",
       label: "N",
+      labelScale: 1, // letter size relative to the style's own (0.5 – 2.5)
       fontFamily: "Arial",
       rotateWithMap: true,
       linkedMap: "",
@@ -116,6 +123,8 @@ const ITEM_TYPES = {
     defaults: () => ({
       text: "New text",
       font: font({ size: 11 }),
+      // the frame hugs the text (Canva): width is the user's, height follows the lines
+      autoSize: "height",
       align: "left",
       valign: "middle",
       lineHeight: 1.2,
@@ -433,7 +442,7 @@ const RENDERERS = {
     const f = p.font;
     const fh = f.size * PT;
     if (p.style === "numeric") {
-      const txt = `${p.numericPrefix || ""}1 : ${fmtNumber(scale)}`;
+      const txt = `${p.numericPrefix || ""}1 : ${fmtScale(scale, p)}`;
       const x = p.align === "center" ? item.w / 2 : p.align === "right" ? item.w : 0;
       const anchor = p.align === "center" ? "middle" : p.align === "right" ? "end" : "start";
       return `<text x="${x}" y="${item.h / 2}" text-anchor="${anchor}" dominant-baseline="central" ${fontAttrs(f)}>${esc(txt)}</text>`;
@@ -460,7 +469,10 @@ const RENDERERS = {
     const c1 = esc(p.color1);
     const c2 = esc(p.color2);
     const labelAbove = ["line-down"].includes(p.style);
-    const barY = labelAbove ? fh + 1.2 : 0.4;
+    // optional second unit: an axis on the side the labels don't use
+    const second = scaleSecondUnit(p);
+    const axisH = second ? scaleAxisHeight(p) : 0;
+    const barY = (labelAbove ? fh + 1.2 : 0.4) + (labelAbove ? 0 : axisH);
     const labelY = labelAbove ? fh * 0.8 : barY + bh + 1 + fh * 0.8;
     let out = "";
     const lbl = (x, v, anchor = "middle") =>
@@ -555,9 +567,10 @@ const RENDERERS = {
         out += `<text x="${round(x0 + segLen * i + tw / 2 + 1, 3)}" y="${round(labelY, 3)}" text-anchor="start" ${fontAttrs(f)}>${esc(unitTxt)}</text>`;
       }
     }
+    if (second) out += scaleSecondAxis(p, second, mPerMm, x0, segLen * segs, labelAbove ? barY + bh : barY, labelAbove ? "bottom" : "top");
     if (p.showNumeric) {
-      const ny = Math.max(labelY, barY + bh) + fh * 1.3;
-      out += `<text x="${round((segLen * total) / 2, 3)}" y="${round(ny, 3)}" text-anchor="middle" ${fontAttrs(f)}>${esc(`${p.numericPrefix || ""}1 : ${fmtNumber(scale)}`)}</text>`;
+      const ny = Math.max(labelY, barY + bh + (labelAbove ? axisH : 0)) + fh * 1.3;
+      out += `<text x="${round((segLen * total) / 2, 3)}" y="${round(ny, 3)}" text-anchor="middle" ${fontAttrs(f)}>${esc(`${p.numericPrefix || ""}1 : ${fmtScale(scale, p)}`)}</text>`;
     }
     return out;
   },
@@ -571,9 +584,15 @@ const RENDERERS = {
       const map = linkedMapOf(item);
       if (map) rot -= map.props.view.bearing || 0;
     }
+    // a user's own PNG / SVG arrow, kept as a data URL
+    nLabelScale = p.labelScale > 0 ? p.labelScale : 1;
+    const body = p.variant === "custom" && p.customSrc
+      ? `<image href="${esc(p.customSrc)}" width="100" height="100" preserveAspectRatio="xMidYMid meet"/>`
+      : variant.svg(esc(p.color1), esc(p.color2), p.label, p.fontFamily || "Arial");
+    nLabelScale = 1;
     return (
       `<svg x="0" y="0" width="${item.w}" height="${item.h}" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" overflow="visible">` +
-      `<g transform="rotate(${round(rot, 2)} 50 50)">${variant.svg(esc(p.color1), esc(p.color2), p.label, p.fontFamily || "Arial")}</g></svg>`
+      `<g transform="rotate(${round(rot, 2)} 50 50)">${body}</g></svg>`
     );
   },
 
@@ -587,13 +606,27 @@ const RENDERERS = {
     if (p.background) out += `<rect width="${item.w}" height="${item.h}" rx="${r}" fill="${esc(p.background)}" fill-opacity="${p.bgOpacity ?? 1}"/>`;
     const content = applyCase(resolveVars(p.text, item), p.textCase);
     const auto = p.autoSize || "fixed";
-    const wrapW = p.wrap && auto !== "width" ? item.w - pad * 2 : 0;
+    // Word-style lists and left indent. Left / justified text gets a hanging
+    // indent (marker in its own column, wrapped lines aligned with the text);
+    // centred / right text carries the marker inline.
+    const list = p.list?.kind && p.list.kind !== "none" ? p.list : null;
+    const indent = Math.max(0, p.indent || 0);
+    const paras = content.split("\n");
+    let num = 0;
+    const markers = paras.map((t) => (!list || !t.trim() ? "" : list.kind === "bullet" ? list.style || "•" : listMarker(++num, list.style || "1.")));
+    const leftLike = !p.align || p.align === "left" || p.align === "justify";
+    const markW = list && leftLike ? Math.max(0, ...markers.map((m) => (m ? textWidthMm(m, f) : 0))) + f.size * PT * 0.55 : 0;
+    const textX0 = pad + indent + markW;
+    const wrapW = p.wrap && auto !== "width" ? Math.max(1, item.w - pad - textX0) : 0;
     // lines with their paragraph ends (for paragraph spacing and justify)
     const laid = [];
-    for (const para of content.split("\n")) {
-      const ls = hasMath(para) ? [para] : wrapText(para, f, wrapW);
-      ls.forEach((t, i) => laid.push({ t, end: i === ls.length - 1 }));
-    }
+    paras.forEach((para, pi) => {
+      const src = !leftLike && markers[pi] ? `${markers[pi]} ${para}` : para;
+      const ls = hasMath(src) ? [src] : wrapText(src, f, wrapW);
+      // like Word, spaces at the end of a line take no room, so typing one
+      // does not nudge a centred / right-aligned line sideways
+      ls.forEach((t, i) => laid.push({ t: p.align && p.align !== "left" ? t.replace(/\s+$/, "") : t, end: i === ls.length - 1, mark: leftLike && i === 0 ? markers[pi] : "" }));
+    });
     const lines = laid.map((l) => l.t);
     const lh = f.size * PT * (p.lineHeight || 1.2);
     const ps = p.paraSpacing || 0;
@@ -605,7 +638,7 @@ const RENDERERS = {
     });
     const blockH = acc - (laid.length && laid[laid.length - 1].end ? ps : 0);
     if (auto === "width" && !hasMath(content)) {
-      const need = round(Math.max(...lines.map((t) => textWidthMm(t, f)), 2) + pad * 2 + 0.6, 2);
+      const need = round(Math.max(...lines.map((t) => textWidthMm(t, f)), 2) + pad * 2 + indent + markW + 0.6, 2);
       if (Math.abs(item.w - need) > 0.2) item.w = need;
     }
     if (auto === "height" || auto === "width") {
@@ -616,26 +649,66 @@ const RENDERERS = {
     let y0 = pad + asc + (lh - f.size * PT) / 2;
     if (p.valign === "middle") y0 = (item.h - blockH) / 2 + asc + (lh - f.size * PT) / 2;
     if (p.valign === "bottom") y0 = item.h - pad - blockH + asc + (lh - f.size * PT) / 2;
-    const x = p.align === "center" ? item.w / 2 : p.align === "right" ? item.w - pad : pad;
+    const x = p.align === "center" ? pad + indent + (item.w - pad * 2 - indent) / 2 : p.align === "right" ? item.w - pad : textX0;
     const anchor = p.align === "center" ? "middle" : p.align === "right" ? "end" : "start";
     const tfx = textEffect(item, lines, x, y0, lh, anchor);
     const lineY = (i) => y0 + (offs[i] ?? i * lh);
+    const fullW = item.w - pad - textX0;
+    const math = hasMath(content);
+    // where each line starts and how wide it is (highlight, underline, strikethrough)
+    const span = (ln, i) => {
+      const w = p.align === "justify" && !laid[i].end && ln.trim().includes(" ") ? fullW : textWidthMm(ln, f);
+      return [anchor === "middle" ? x - w / 2 : anchor === "end" ? x - w : x, w];
+    };
+    const fs = f.size * PT;
+    if (p.highlight && !math) {
+      lines.forEach((ln, i) => {
+        if (!ln.trim()) return;
+        const [sx, w] = span(ln, i);
+        out += `<rect x="${round(sx - fs * 0.06, 3)}" y="${round(lineY(i) - fs * 0.86, 3)}" width="${round(w + fs * 0.12, 3)}" height="${round(fs * 1.12, 3)}" fill="${esc(p.highlight)}"/>`;
+      });
+    }
     out += tfx.defs + tfx.before + `<g${tfx.groupAttr}>`;
-    if (hasMath(content)) {
+    if (math) {
       // $...$ math: one MathJax line per text line (no automatic wrapping)
       lines.forEach((ln, i) => {
+        if (laid[i].mark) out += `<text x="${round(pad + indent, 3)}" y="${round(lineY(i), 3)}" ${fontAttrs(f)}>${esc(laid[i].mark)}</text>`;
         out += richLine(ln, x, lineY(i), f, anchor, tfx.textAttr || haloAttrs({ ...p, halo: p.halo })).svg;
       });
     } else {
-      const deco = p.decoration && p.decoration !== "none" ? ` text-decoration="${p.decoration}"` : "";
-      out += `<text text-anchor="${anchor}" ${fontAttrs(f)}${deco} ${tfx.textAttr || haloAttrs({ ...p, halo: p.halo })}>`;
-      const fullW = item.w - pad * 2;
+      out += `<text text-anchor="${anchor}" ${fontAttrs(f)} ${tfx.textAttr || haloAttrs({ ...p, halo: p.halo })}>`;
       lines.forEach((ln, i) => {
+        if (laid[i].mark) out += `<tspan x="${round(pad + indent, 3)}" y="${round(lineY(i), 3)}" text-anchor="start">${esc(laid[i].mark)}</tspan>`;
         // justify: stretch every line except the last of a paragraph
         const just = p.align === "justify" && !laid[i].end && ln.trim().includes(" ") ? ` textLength="${round(fullW, 3)}" lengthAdjust="spacing"` : "";
         out += `<tspan x="${round(x, 3)}" y="${round(lineY(i), 3)}"${just}>${esc(ln) || " "}</tspan>`;
       });
       out += `</text>`;
+      // underline / strikethrough drawn as lines so every style looks the same on screen and in exports
+      const ul = p.underline || (p.decoration === "underline" ? "single" : "none");
+      const t = Math.max(0.06, fs * 0.055);
+      const col = esc(f.color || "#000");
+      lines.forEach((ln, i) => {
+        if (!ln.trim()) return;
+        const [sx, w] = span(ln, i);
+        const ex = sx + w;
+        const P = (v) => round(v, 3);
+        if (ul !== "none") {
+          const uy = lineY(i) + fs * 0.13;
+          const ln2 = (y, sw, dash = "") => `<line x1="${P(sx)}" y1="${P(y)}" x2="${P(ex)}" y2="${P(y)}" stroke="${col}" stroke-width="${P(sw)}"${dash}/>`;
+          if (ul === "double") out += ln2(uy, t) + ln2(uy + t * 2.4, t);
+          else if (ul === "thick") out += ln2(uy + t * 0.4, t * 2);
+          else if (ul === "dotted") out += ln2(uy, t * 1.3, ` stroke-dasharray="0 ${P(t * 2.6)}" stroke-linecap="round"`);
+          else if (ul === "dash") out += ln2(uy, t, ` stroke-dasharray="${P(t * 5)} ${P(t * 3)}"`);
+          else if (ul === "wavy") {
+            const step = t * 3.2;
+            let d = `M${P(sx)},${P(uy)}`;
+            for (let wx = sx, k = 0; wx < ex; wx += step, k++) d += ` Q${P(wx + step / 2)},${P(uy + (k % 2 ? t * 1.6 : -t * 1.6))} ${P(Math.min(wx + step, ex))},${P(uy)}`;
+            out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${P(t)}"/>`;
+          } else out += ln2(uy, t);
+        }
+        if (p.strike || p.decoration === "line-through") out += `<line x1="${P(sx)}" y1="${P(lineY(i) - fs * 0.27)}" x2="${P(ex)}" y2="${P(lineY(i) - fs * 0.27)}" stroke="${col}" stroke-width="${P(t)}"/>`;
+      });
     }
     out += `</g>`;
     if (p.border?.show) out += `<rect width="${item.w}" height="${item.h}" rx="${r}" fill="none" ${strokeAttrs(p.border.color, p.border.width, p.border.style)}/>`;
@@ -705,13 +778,19 @@ const RENDERERS = {
     const pad = p.padding;
     // row heights from wrapped text
     const isFooter = (ri) => p.footer && ri === rows.length - 1;
+    // Word's table style options: first / last column in bold
+    const strong = (ci) => (p.firstCol && ci === 0) || (p.lastCol && ci === nCols - 1);
     const rowsLaid = rows.map((r, ri) => {
       const f = p.header && ri === 0 ? p.headerFont : isFooter(ri) ? { ...p.font, bold: true } : p.font;
-      const cells = colW.map((cw, ci) => wrapText(p.vars === false ? String(r[ci] ?? "") : resolveVars(r[ci] ?? "", item), f, cw - pad * 2));
+      const fonts = colW.map((cw, ci) => (strong(ci) && f === p.font ? { ...f, bold: true } : f));
+      const cells = colW.map((cw, ci) => wrapText(p.vars === false ? String(r[ci] ?? "") : resolveVars(r[ci] ?? "", item), fonts[ci], cw - pad * 2));
       const lh = f.size * PT * 1.25;
       const height = Math.max(...cells.map((c) => c.length)) * lh + pad * 2;
-      return { cells, f, lh, height };
+      return { cells, f, fonts, lh, height };
     });
+    const innerH = p.innerH ?? p.innerBorder;
+    const innerV = p.innerV ?? p.innerBorder;
+    const dash = p.borderStyle && p.borderStyle !== "solid" ? ` stroke-dasharray="${dashArray(p.borderStyle, p.borderWidth)}"` : "";
     const natural = rowsLaid.reduce((a, r) => a + r.height, 0);
     const stretch = natural < item.h ? item.h / natural : 1;
     let out = p.background ? `<rect width="${item.w}" height="${item.h}" fill="${esc(p.background)}"/>` : "";
@@ -724,21 +803,24 @@ const RENDERERS = {
       let x = 0;
       row.cells.forEach((lines, ci) => {
         const cw = colW[ci];
+        // banded columns (skipped on the header row)
+        if (p.bandCols && ci % 2 === 1 && !(p.header && ri === 0)) out += `<rect x="${round(x, 3)}" y="${round(y, 3)}" width="${round(cw, 3)}" height="${round(rh, 3)}" fill="${esc(p.zebraColor)}" fill-opacity="0.7"/>`;
         const al = p.colAlign?.[ci] || p.align;
         const anchor = al === "center" ? "middle" : al === "right" ? "end" : "start";
         const tx = al === "center" ? x + cw / 2 : al === "right" ? x + cw - pad : x + pad;
         const textH = lines.length * row.lh;
-        const ty = y + (rh - textH) / 2 + row.f.size * PT * 0.85;
-        out += `<text text-anchor="${anchor}" ${fontAttrs(row.f)}>`;
+        const asc = row.f.size * PT * 0.85;
+        const ty = p.valign === "top" ? y + pad + asc : p.valign === "bottom" ? y + rh - pad - textH + asc : y + (rh - textH) / 2 + asc;
+        out += `<text text-anchor="${anchor}" ${fontAttrs(row.fonts[ci])}>`;
         lines.forEach((ln, li) => (out += `<tspan x="${round(tx, 3)}" y="${round(ty + li * row.lh, 3)}">${esc(ln) || " "}</tspan>`));
         out += `</text>`;
-        if (p.innerBorder && ci > 0) out += `<line x1="${round(x, 3)}" y1="${round(y, 3)}" x2="${round(x, 3)}" y2="${round(y + rh, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth}"/>`;
+        if (innerV && ci > 0) out += `<line x1="${round(x, 3)}" y1="${round(y, 3)}" x2="${round(x, 3)}" y2="${round(y + rh, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth}"${dash}/>`;
         x += cw;
       });
-      if (p.innerBorder && ri > 0) out += `<line x1="0" y1="${round(y, 3)}" x2="${item.w}" y2="${round(y, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${isFooter(ri) ? p.borderWidth * 2.5 : p.borderWidth}"/>`;
+      if (innerH && ri > 0) out += `<line x1="0" y1="${round(y, 3)}" x2="${item.w}" y2="${round(y, 3)}" stroke="${esc(p.borderColor)}" stroke-width="${isFooter(ri) || (p.header && ri === 1 && p.headerRule) ? p.borderWidth * 2.5 : p.borderWidth}"${dash}/>`;
       y += rh;
     });
-    if (p.outerBorder) out += `<rect width="${item.w}" height="${round(Math.max(y, item.h), 3)}" fill="none" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth * 1.6}"/>`;
+    if (p.outerBorder) out += `<rect width="${item.w}" height="${round(Math.max(y, item.h), 3)}" fill="none" stroke="${esc(p.borderColor)}" stroke-width="${p.borderWidth * 1.6}"${dash}/>`;
     S.legendCache.set(item.id, natural);
     return out;
   },
@@ -959,6 +1041,40 @@ function legendPatch(patch, x, y, pw, ph) {
     }
     case "raster":
       return `<rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="${esc(patch.fill || "#9ca3af")}" stroke="#666" stroke-width="0.15"/><path d="M${P(x)},${P(y + ph)}L${P(x + pw * 0.4)},${P(y + ph * 0.35)}L${P(x + pw * 0.6)},${P(y + ph * 0.65)}L${P(x + pw)},${P(y)}" fill="none" stroke="#fff" stroke-width="0.25" opacity="0.6"/>`;
+    // RBI-style legend symbols used on KLHK maps
+    case "river": {
+      const sw = patch.strokeWidth ?? 0.45;
+      const m = y + ph / 2;
+      const a = ph * 0.32;
+      return `<path d="M${P(x)},${P(m + a * 0.4)}C${P(x + pw * 0.2)},${P(m - a)} ${P(x + pw * 0.35)},${P(m + a)} ${P(x + pw * 0.55)},${P(m)}S${P(x + pw * 0.85)},${P(m - a * 1.1)} ${P(x + pw)},${P(m - a * 0.2)}" fill="none" stroke="${esc(patch.stroke || "#00A4E5")}" stroke-width="${sw}" stroke-linecap="round"/>`;
+    }
+    case "lake": {
+      const d = `M${P(x + pw * 0.05)},${P(y + ph * 0.55)}C${P(x + pw * 0.05)},${P(y + ph * 0.1)} ${P(x + pw * 0.45)},${P(y + ph * 0.05)} ${P(x + pw * 0.62)},${P(y + ph * 0.18)}S${P(x + pw * 0.98)},${P(y + ph * 0.12)} ${P(x + pw * 0.96)},${P(y + ph * 0.5)}S${P(x + pw * 0.75)},${P(y + ph * 0.98)} ${P(x + pw * 0.5)},${P(y + ph * 0.86)}S${P(x + pw * 0.05)},${P(y + ph * 0.95)} ${P(x + pw * 0.05)},${P(y + ph * 0.55)}Z`;
+      return `<path d="${d}" fill="${esc(patch.fill || "#BEE8FF")}" stroke="${esc(patch.stroke || "#00A4E5")}" stroke-width="${patch.strokeWidth ?? 0.15}"/>`;
+    }
+    case "capital": {
+      const r = clamp(patch.radius ?? ph * 0.36, 0.6, ph / 2);
+      return `<circle cx="${P(x + pw / 2)}" cy="${P(y + ph / 2)}" r="${P(r)}" fill="${esc(patch.fill || "#FF0000")}" stroke="${esc(patch.stroke || "#000000")}" stroke-width="0.12"/><circle cx="${P(x + pw / 2)}" cy="${P(y + ph / 2)}" r="${P(r * 0.22)}" fill="#000000"/>`;
+    }
+    case "hatch": {
+      // fill (optional) + parallel lines at an angle, clipped to the patch
+      const id = `lh${Math.random().toString(36).slice(2, 8)}`;
+      const sp = Math.max(0.5, patch.spacing ?? 1.2);
+      const ang = ((patch.angle ?? 45) * Math.PI) / 180;
+      const L = Math.hypot(pw, ph);
+      const cx = x + pw / 2;
+      const cy = y + ph / 2;
+      let lines = "";
+      for (let k = -L; k <= L; k += sp) {
+        const ox = -Math.sin(ang) * k;
+        const oy = Math.cos(ang) * k;
+        const dx = Math.cos(ang) * L;
+        const dy = -Math.sin(ang) * L;
+        lines += `<line x1="${P(cx + ox - dx)}" y1="${P(cy + oy - dy)}" x2="${P(cx + ox + dx)}" y2="${P(cy + oy + dy)}"/>`;
+      }
+      const sw = patch.stroke ? clamp(patch.strokeWidth ?? 0.15, 0.05, 1) : 0;
+      return `<defs><clipPath id="${id}"><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}"/></clipPath></defs><rect x="${P(x)}" y="${P(y)}" width="${P(pw)}" height="${P(ph)}" fill="${esc(patch.fill || "none")}"/><g clip-path="url(#${id})" stroke="${esc(patch.hatchColor || "#000000")}" stroke-width="${patch.hatchWidth ?? 0.15}">${lines}</g>${sw ? `<rect x="${P(x + sw / 2)}" y="${P(y + sw / 2)}" width="${P(pw - sw)}" height="${P(ph - sw)}" fill="none" stroke="${esc(patch.stroke)}" stroke-width="${sw}"/>` : ""}`;
+    }
     default: {
       const sw = patch.stroke ? clamp(patch.strokeWidth ?? 0.3, 0.1, 1) : 0;
       return `<rect x="${P(x + sw / 2)}" y="${P(y + sw / 2)}" width="${P(pw - sw)}" height="${P(ph - sw)}" fill="${esc(patch.fill || "none")}" fill-opacity="${patch.fillOpacity ?? 1}" stroke="${esc(patch.stroke || "none")}" stroke-width="${sw}"/>`;

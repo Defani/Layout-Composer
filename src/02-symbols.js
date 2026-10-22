@@ -22,9 +22,11 @@ function splitPoint(deg, len, half, c1, c2, sw = 0.8) {
     `<polygon points="50,50 ${p(tip)} ${p(r)}" fill="${c2}" stroke="${c1}" stroke-width="${sw}" stroke-linejoin="round"/>`
   );
 }
+// Letter size factor of the arrow being drawn (north item's labelScale, set by its renderer).
+let nLabelScale = 1;
 function nLabel(L, F, c1, x = 50, y = 13, size = 16, weight = "bold") {
   if (!L) return "";
-  return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central" font-family="${esc(F)}, Arial, sans-serif" font-size="${size}" font-weight="${weight}" fill="${c1}">${esc(L)}</text>`;
+  return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central" font-family="${esc(F)}, Arial, sans-serif" font-size="${round(size * nLabelScale, 2)}" font-weight="${weight}" fill="${c1}">${esc(L)}</text>`;
 }
 
 const NORTH_ARROWS = [
