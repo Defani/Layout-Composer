@@ -16,7 +16,7 @@ const TOURS = {
     { sel: `.${NS}-paper`, pad: 4, title: "The page", text: "Drag items to move them. Corner handles resize in proportion (text grows with them); side handles change the frame only. Double-click text to type, a map to move its content." },
     { sel: `.${NS}-top .${NS}-toolgrp`, title: "Select and Hand", text: "Select (V) picks and moves items. The Hand (H) moves what is inside a map frame — drag to pan, scroll to zoom — and pans the page outside a frame." },
     { sel: `.${NS}-layersbtn`, title: "Layers", text: "The list of everything on the page. Drag rows up or down to change what is drawn on top; hide or lock items with the eye and lock." },
-    { sel: `.${NS}-rtab[data-rtab="maptools"]`, title: "Map Tools", text: "Coordinates (MGRS, UTM, DMS), go to a place, features from coordinates or spreadsheets, category colours for a layer, map chips." },
+    LC_GENERAL ? null : { sel: `.${NS}-rtab[data-rtab="maptools"]`, title: "Map Tools", text: "Coordinates (MGRS, UTM, DMS), go to a place, features from coordinates or spreadsheets, category colours for a layer, map chips." },
     { sel: `.${NS}-zoompill`, title: "Zoom", text: "Zoom the page with these buttons, the mouse wheel or Ctrl + / −. Ctrl 0 fits the page, Ctrl 1 shows it at 100 %." },
     { sel: `.${NS}-status .${NS}-pagetools`, title: "Page", text: "Orientation and page border here; canvas grid, guides, snapping and the look of the selection frame next to them. Page size and margins are in the Page panel." },
     { sel: `.${NS}-exportbtn`, title: "Export", text: "PNG, JPG, PDF, vector PDF, GeoPDF or SVG at the resolution you need. On the desktop app you choose the folder to save in." },
@@ -66,7 +66,7 @@ function startTour(kind = "layout", force = false) {
   document.addEventListener("keydown", onKey, true);
   const onResize = () => tourShow();
   window.addEventListener("resize", onResize);
-  tourState = { kind, steps: TOURS[kind](), i: 0, layer, hole, card, shade, onKey, onResize };
+  tourState = { kind, steps: TOURS[kind]().filter(Boolean), i: 0, layer, hole, card, shade, onKey, onResize };
   tourShow();
 }
 function tourGo(d) {

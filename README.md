@@ -21,9 +21,11 @@
 
 Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani/Layout-Composer>
 
-![Layout Composer editor](docs/img/ui-overview.png)
+![Layout Composer editor](docs/guide/overview.png)
 
 *The editor with a slope map of Kabupaten Kuningan (West Java) made from real data. The layout file is in [`examples/`](examples/kelerengan-kuningan.layout.json); the exported page is shown under [Example map](#example-map).*
+
+> **📖 [User Guide](docs/GUIDE.md)** — every menu, ribbon and dialog with screenshots, and a step-by-step tutorial for your first print map.
 
 ---
 
@@ -115,7 +117,19 @@ Author: **Defani Arman Alfitriansyah** · Repository: <https://github.com/Defani
 
 1. Download `layout-composer-1.11.0.zip` from [Releases](https://github.com/Defani/Layout-Composer/releases) (or build it with `python tools/build.py --release`).
 2. GeoLibre Desktop: copy the zip into `%APPDATA%\org.geolibre.desktop\plugins` (Windows) and restart GeoLibre — or install it from **Manage Plugins** in Settings once it is in the registry.
-3. Enable **Layout Composer** in the **Plugins** menu. A **Layout Composer** menu with the plugin's icon appears in GeoLibre's menu bar: *Open Layout Composer* to design a print map, *Back to the Map* to return, plus Map Tools, the Map Tools ribbon and the tour.
+3. Enable **Layout Composer** in the **Plugins** menu. A **Layout** menu (*Open Layout Composer*, *Take the Tour*) and a Layout Composer button among the map controls appear, in the same places as in 1.8.2.
+
+### Two builds
+
+| | Registry build (`--general`) | Full build |
+| --- | --- | --- |
+| Where | GeoLibre plugin registry / *Manage Plugins*, release zip | built locally with `python tools/build.py` |
+| Layout View: page, items, ribbon, export, Map Series, QGIS `.qpt` | yes | yes |
+| Opening it | **Layout** menu + a button among the map controls | one **Layout Composer** menu with icons |
+| Map Tools on GeoLibre's map (ribbon dock, coordinate tools, Category Colors) | no | yes |
+| Ask AI and `window.LayoutComposer.ai` (Live MCP Bridge) | no | yes |
+
+The registry build adds nothing to GeoLibre's map but its own button, so GeoLibre's icons keep their positions, and it talks to no local AI bridge.
 
 ## Quick start
 
@@ -281,6 +295,7 @@ src/            sources (JavaScript and style.css), bundled and minified into pl
   09-plugin.js      GeoLibre plugin entry
   10b-palette.js    Category Colors: Distinct 200 / KLHK / ColorBrewer palettes applied to a layer
   10-maptools.js    Map Tools ribbon and menu: MGRS/UTM/DMS coordinates, features from coordinates and tables, map chips
+src-general/    stand-ins used by the registry build in place of 06f, 06g, 10 and 10b
 plugin/         plugin.json, LICENSE, NOTICE.md; index.js and style.css are built
 vendor/         jsPDF, svg2pdf.js, MathJax, Mermaid and Plotly.js as released, embedded in the bundle
 tools/          build.py (bundle, minify, zip), build_catalog.py (groups Maki/Temaki icons by type), build_material.py (Material Symbols by category), screenshots.py (README images)
@@ -293,6 +308,8 @@ sh build.sh
 ```
 
 Builds a single minified ES module (`plugin/index.js`, esbuild) and `plugin/style.css`, then zips them as `layout-composer.zip`; `--release` also writes `dist/layout-composer-<version>.zip` with its SHA-256. Put the esbuild binary on `PATH`, in `tools/bin/`, or set `ESBUILD`. The plugin loads no code from other hosts: jsPDF, svg2pdf.js, MathJax, Mermaid and Plotly.js are embedded and started from a Blob URL the first time they are needed. To test without GeoLibre, serve the folder (`python -m http.server`) and open `test/index.html`.
+
+`python tools/build.py --general --release` makes the registry build instead: it leaves out `06f`, `06g`, `10` and `10b`, adds `src-general/`, sets the compile-time constant `LC_GENERAL` (so the minifier drops the other build's branches), writes `build/general/` and `layout-composer-general.zip`, and with `--release` `dist/layout-composer-<version>.zip` with the catalog screenshots.
 
 ## Licenses and third-party notices
 

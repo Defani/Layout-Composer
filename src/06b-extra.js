@@ -132,7 +132,8 @@ function openContextMenu(e) {
   if (items.length) {
     const one = items.length === 1 ? items[0] : null;
     const allLocked = items.every((i) => i.locked);
-    m.append(
+    // entries that do not apply are null: append() would print them as "null"
+    m.append(...[
       one ? menuItem("Rename…", () => {
         const n = prompt("Item name:", one.name);
         if (n && n.trim()) commit(() => (one.name = n.trim()));
@@ -152,7 +153,7 @@ function openContextMenu(e) {
       one?.type === "map" ? menuItem("Match GeoLibre view", () => commit(() => viewFromGeoLibre(one))) : null,
       el("div", { class: `${NS}-msep` }),
       menuItem("Delete", deleteSelection, { kbd: "Del", iconName: "trash", danger: true }),
-    );
+    ].filter(Boolean));
   } else {
     m.append(
       menuItem("Paste", pasteClipboard, { kbd: "Ctrl+V", disabled: !S.clipboard }),
@@ -167,7 +168,6 @@ function openContextMenu(e) {
       menuItem("Page settings", () => setTab("page")),
     );
   }
-  for (const c of [...m.children]) if (!c) c.remove();
   popoverAt(anchor, m, `${NS}-ctxpop`);
   const pop = S.ui.popover;
   const rr = S.ui.root.getBoundingClientRect();

@@ -13,6 +13,19 @@
   html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
   #map { position: absolute; inset: 40px 0 0 0; }
   #bar { height: 40px; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid #ddd; }
+  /* plugin menus as GeoLibre's banner shows them: icon + label, dropdown with icons */
+  .pmenu { position: relative; }
+  .pmenu > button, .pitem { display: flex; align-items: center; gap: 8px; border: 0; background: none; font: 14px system-ui, sans-serif; color: #0f172a; padding: 6px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+  .pmenu > button:hover, .pitem:hover, .psub.open > .pitem { background: #f1f5f9; }
+  .pmenu img, .pitem img { width: 16px; height: 16px; }
+  .pdrop { display: none; position: absolute; left: 0; top: 100%; z-index: 2147483647; min-width: 220px; padding: 4px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.14); }
+  .pmenu.open > .pdrop { display: block; }
+  .psub { position: relative; }
+  .psub > .pdrop { left: 100%; top: -5px; }
+  .psub.open > .pdrop { display: block; }
+  .pitem { width: 100%; text-align: left; }
+  .psub > .pitem::after { content: "›"; margin-left: auto; padding-left: 16px; color: #64748b; }
+  .psep { height: 1px; background: #e2e8f0; margin: 4px 0; }
 </style>
 </head>
 <body>
@@ -50,12 +63,47 @@
     map.addSource("titik-kec", { type: "geojson", data: titik });
     map.addLayer({ id: "titik-kec-circle", type: "circle", source: "titik-kec", paint: { "circle-color": "#ffffff", "circle-radius": 3, "circle-stroke-color": "#111827", "circle-stroke-width": 1.2 } });
   });
+  // GeoLibre's banner menu for a plugin (registerToolbarMenu)
+  function renderMenu(menu) {
+    const items = (list) => {
+      const box = document.createElement("div");
+      box.className = "pdrop";
+      for (const it of list) {
+        if (it.type === "separator") { box.append(Object.assign(document.createElement("div"), { className: "psep" })); continue; }
+        const b = document.createElement("button");
+        b.className = "pitem";
+        b.innerHTML = `${it.icon ? `<img src="${it.icon}" alt="">` : ""}<span>${it.label}</span>`;
+        if (it.type === "submenu") {
+          const wrap = document.createElement("div");
+          wrap.className = "psub";
+          wrap.dataset.id = it.id;
+          wrap.append(b, items(it.items));
+          wrap.onmouseenter = () => wrap.classList.add("open");
+          wrap.onmouseleave = () => wrap.classList.remove("open");
+          box.append(wrap);
+        } else {
+          b.onclick = () => { root.classList.remove("open"); it.onSelect(); };
+          box.append(b);
+        }
+      }
+      return box;
+    };
+    const root = document.createElement("div");
+    root.className = "pmenu";
+    root.dataset.id = menu.id;
+    const btn = document.createElement("button");
+    btn.innerHTML = `${menu.icon ? `<img src="${menu.icon}" alt="">` : ""}<span>${menu.label}</span>`;
+    btn.onclick = () => root.classList.toggle("open");
+    root.append(btn, items(menu.items));
+    document.getElementById("bar").append(root);
+    return () => root.remove();
+  }
   const app = {
     getMap: () => map,
     listLayers: () => layers,
     addMapControl: (c, pos) => map.addControl(c, pos),
     removeMapControl: (c) => map.removeControl(c),
-    registerToolbarMenu: (m) => { console.log("menu registered", m.label); return () => {}; },
+    registerToolbarMenu: (m) => { console.log("menu registered", m.label); return renderMenu(m); },
     getLayerFeatures: (id) => ({ kelerengan: lereng, kecamatan, "titik-kec": titik }[id]?.features || []),
     getProjectSnapshot: () => ({ name: "Peta Kelerengan Kabupaten Kuningan", layers: snapLayers }),
   };

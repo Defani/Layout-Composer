@@ -227,7 +227,7 @@ function renderQuickBarGroups() {
       b.textContent = isMap ? "Grid" : "Table Layout";
     }
   }
-  if (isMap && tab !== "insert") {
+  if (isMap && tab !== "insert" && tab !== "maptools") {
     host.append(...mapRibbon(item, tab === "layout2" ? "grid" : "frame"), ...(tab === "layout2" ? [] : [seriesRibbonGroup()]), ...itemTailGroups(item));
     return;
   }
