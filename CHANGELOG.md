@@ -4,6 +4,12 @@
 
 A Word-style workspace with far more room for the page, many new items and a long list of fixes.
 
+### Registry build (2026-10-29)
+- The release zip on the GeoLibre plugin registry is the **registry build** (`python tools/build.py --general --release`): the full Layout View, without the Map Tools on GeoLibre's map (ribbon dock, Map Tools menu and tab, Category Colors) and without Ask AI / the Live MCP Bridge API (`window.LayoutComposer.ai`).
+- It opens as in 1.8.2: a **Layout** menu and a button among the map controls, so GeoLibre's own icons keep their places. The tour skips the Map Tools step.
+- Catalog screenshots: the 1.11 Insert ribbon and the Kuningan example map as JPEG (the registry limit is 1 MiB per image).
+- The full build (`python tools/build.py`) is unchanged.
+
 ### Guided tour for new users
 - **Layout View tour** (12 steps) on first use: a spotlight with a dimmed screen walks through Insert, adding a map frame, Format, the page and handles, Select / Hand, Layers, Map Tools, zoom, page settings, export and saving. Back / Next / Skip, ← → Enter and Esc.
 - **Map Tools tour** (4 steps) for the ribbon over the map on first use.
@@ -63,7 +69,12 @@ A **Map Tools ribbon docked across the top of the map** (tabs Map · Create · E
 - Layers and legend blocks are reordered by dragging with the pointer (works in the desktop app); legend group headings move their whole block, and the order survives *Sync*.
 - On the desktop app, saving and exporting open a **Save as** dialog to pick the folder; the web build downloads as before.
 
+### Documentation
+- A **User Guide** (`docs/GUIDE.md`) with screenshots of every menu, ribbon tab and dialog, and a step-by-step tutorial; `tools/guide_shots.py` recaptures them.
+
 ### Fixes
+- With a map frame selected, the Map Tools tab showed the Map Frame tools.
+- The right-click menu showed "nullnull" lines.
 - The drag-to-draw box was wiped on every mouse move, so items appeared without a preview.
 - Grid and labels drew at the wrong size after the zoom changed (the wrong SVG was updated inside map frames).
 - Double outlines on selected items (hover line next to the selection frame; auto-sized text out of step with its frame).

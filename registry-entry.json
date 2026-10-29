@@ -9,6 +9,28 @@
   "issues": "https://github.com/Defani/Layout-Composer/issues",
   "license": "MIT",
   "manifestUrl": "plugins/layout-composer/plugin.json",
+  "source": {
+    "url": "https://github.com/Defani/Layout-Composer/releases/download/v1.11.0/layout-composer-1.11.0.zip",
+    "sha256": "17658bef8db92daaf60b2286ecf676f72076d3625a9fbf5b9fd600f6c825c2e1"
+  },
+  "screenshots": [
+    {
+      "path": "screenshots/overview.jpg",
+      "caption": "The Layout Composer 1.11 workspace: Insert ribbon, a map frame with a coordinate grid, legend, scale bar and north arrow"
+    },
+    {
+      "path": "screenshots/example-map.jpg",
+      "caption": "Slope map of Kuningan Regency, West Java, exported from Layout Composer"
+    },
+    {
+      "path": "screenshots/data.png",
+      "caption": "Attribute table and charts built from a layer's features"
+    },
+    {
+      "path": "screenshots/map-frames.png",
+      "caption": "Shaped map frames, image mask, and a legend with tile and raster layers"
+    }
+  ],
   "categories": [
     "Cartography"
   ],

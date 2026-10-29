@@ -203,12 +203,59 @@ export function activateEmbedded(app) {
   return window.LayoutComposer;
 }
 
+// General (registry) build: the launcher button among the map controls and a
+// "Layout" menu, as in 1.8.2, so GeoLibre's own icons keep their positions.
+const launcherControl = {
+  _el: null,
+  onAdd() {
+    const c = el("div", { class: `maplibregl-ctrl maplibregl-ctrl-group ${NS}-launcher` });
+    const b = el("button", {
+      type: "button",
+      title: "Open Layout Composer (design print map layouts)",
+      "aria-label": "Open Layout Composer",
+      html: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1.5"/><rect x="5.5" y="5.5" width="10" height="9"/><path d="M18 6.5v3M17 8.5l1-2 1 2M5.5 17.5h6M14 17.5h4"/></svg>`,
+      onclick: () => openComposer(),
+    });
+    c.appendChild(b);
+    this._el = c;
+    return c;
+  },
+  onRemove() {
+    this._el?.remove();
+    this._el = null;
+  },
+};
+
+function activateGeneral(app, options) {
+  if (!options.embedded) {
+    try {
+      app.addMapControl?.(launcherControl, "top-right");
+      S.disposers.push(() => app.removeMapControl?.(launcherControl));
+    } catch (e) {
+      console.warn("[Layout Composer] map control", e);
+    }
+    const dispose = app.registerToolbarMenu?.({
+      id: `${PLUGIN_ID}-menu`,
+      label: "Layout",
+      items: [
+        { id: "open", label: "Open Layout Composer", onSelect: () => openComposer() },
+        { id: "tour", label: "Take the Tour", onSelect: () => (S.open ? startTour("layout", true) : openComposer()) },
+      ],
+    });
+    if (typeof dispose === "function") S.disposers.push(dispose);
+  }
+  window.LayoutComposer = window.GeoLibreLayoutComposer = { open: openComposer, close: closeComposer, version: PLUGIN_VERSION, _state: S, _debug: { embeddedFontCss, docFontFamilies, ensureFont, layoutToQpt, qptToLayout, aggregate, legendFromMap, glLayers, mainMap, composePageSVG, renderMapImage, rasterize, addItemFromTool, select, renderAll, loadMathJax, geoFrames, geoRegister, saveVectorPdf, findItem } };
+}
+
 export const plugin = {
   id: PLUGIN_ID,
   name: PLUGIN_NAME,
   version: PLUGIN_VERSION,
   activate(app, options = {}) {
     S.app = app;
+    // LC_GENERAL is set at build time; the minifier drops the branch not taken
+    if (LC_GENERAL) activateGeneral(app, options);
+    else {
     // One menu in GeoLibre's menu bar, like a native one, headed by the plugin's
     // own icon: open the composer, the Map Tools (ArcGIS Pro "Map Fundamentals"
     // workflows), the Map Tools ribbon and the tours. No extra button on the map.
@@ -255,6 +302,7 @@ export const plugin = {
       document.querySelector(`.${NS}-mtdock-on`)?.classList.remove(`${NS}-mtdock-on`);
     });
     window.LayoutComposer = window.GeoLibreLayoutComposer = { open: openComposer, close: closeComposer, version: PLUGIN_VERSION, ai: aiApi(), _state: S, mapTools: { parseCoord, formatCoord, toMGRS, fromMGRS, geoDestination }, _debug: { embeddedFontCss, docFontFamilies, ensureFont, layoutToQpt, qptToLayout, aggregate, legendFromMap, glLayers, mainMap, composePageSVG, renderMapImage, rasterize, addItemFromTool, select, renderAll, loadMathJax, geoFrames, geoRegister, saveVectorPdf, findItem, mtCreate, mtGoTo, mapToolsMenu } };
+    }
   },
   deactivate(app) {
     closeComposer();

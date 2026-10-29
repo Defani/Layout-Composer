@@ -5159,3 +5159,101 @@ html.glc-grabbing, html.glc-grabbing * { cursor: grabbing !important; user-selec
 /* shortcut sheet */
 .glc-kbdlist { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; font-size: 12.5px; }
 .glc-kbdlist kbd { justify-self: start; padding: 2px 7px; border: 1px solid var(--glc-border); border-bottom-width: 2px; border-radius: 5px; background: var(--glc-muted); font: 11.5px ui-monospace, Consolas, monospace; white-space: nowrap; }
+
+/* ==== Ask AI as a CLI terminal — same look as the Live MCP panel ==========
+   Dark matte terminal, monospace, square corners, Claude orange accent,
+   ">" for your lines and "●" for the AI, task steps as "⎿ ✓". Roomier than
+   the old bubble chat: a wider docked column and a wider floating bar. */
+.glc-aichat {
+  --ai-bg: #1f1e1d;
+  --ai-fg: #e8e6e1;
+  --ai-dim: #8f8b84;
+  --ai-faint: #5c5852;
+  --ai-line: #4a4640;
+  --ai-acc: #d97757;
+  --ai-ok: #6fc27e;
+  --ai-warn: #e0b15b;
+  width: min(720px, calc(100% - 48px));
+  border: 1px solid var(--ai-line);
+  border-radius: 0;
+  background: var(--ai-bg);
+  color: var(--ai-fg);
+  box-shadow: 4px 4px 0 rgb(0 0 0 / 0.35);
+  font-family: "JetBrains Mono", "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.glc-aichat * { border-radius: 0 !important; }
+.glc-stage.glc-aiside { grid-template-columns: 20px minmax(0, 1fr) minmax(380px, 480px); }
+.glc-aichat.side { border: 0; border-left: 1px solid var(--ai-line); box-shadow: none; }
+.glc-aichat.side .glc-airow { max-width: none; }
+
+/* header: a title line like the CLI welcome box */
+.glc-aihead { padding: 8px 10px; border-bottom: 1px solid var(--ai-line); background: transparent; }
+.glc-aititle, .glc-aititle svg { color: var(--ai-acc); }
+.glc-aititle b { color: var(--ai-fg); font-weight: 700; }
+.glc-aititle b::after { content: " \00B7  Live MCP"; color: var(--ai-dim); font-weight: 400; }
+.glc-aistatus, .glc-aistatus span { color: var(--ai-dim); }
+.glc-aistatus i { border-radius: 50% !important; }
+.glc-aistatus.on i { background: var(--ai-ok); }
+.glc-aistatus.busy i { background: var(--ai-warn); }
+.glc-aistatus.off i { background: #ff7a85; }
+.glc-aihead button, .glc-aihead .glc-iconbtn { color: var(--ai-dim); }
+.glc-aihead button:hover { color: var(--ai-acc); background: rgb(217 119 87 / 0.12); }
+
+/* scrollback: plain lines, no bubbles or avatars */
+.glc-ailist { padding: 8px 12px; gap: 2px; background: transparent; scrollbar-width: thin; scrollbar-color: var(--ai-faint) transparent; }
+.glc-airow, .glc-airow.me, .glc-airow.ai { display: block; max-width: none; margin: 0; align-items: stretch; }
+.glc-aiwho { display: none; }
+.glc-aimsg, .glc-airow .glc-aimsg, .glc-airow.me .glc-aimsg, .glc-airow.ai .glc-aimsg {
+  max-width: none; margin: 0; padding: 0 0 0 3ch; border: 0; background: transparent;
+  color: var(--ai-fg); box-shadow: none; position: relative;
+}
+.glc-aimsg::before { position: absolute; left: 0; width: 2ch; text-align: center; }
+.glc-aimsg.me { margin-top: 10px; padding: 2px 0 2px 3ch; background: rgb(255 255 255 / 0.04); color: var(--ai-dim); }
+.glc-aimsg.me::before { content: ">"; color: var(--ai-dim); font-weight: 700; }
+.glc-aimsg.ai { margin-top: 4px; }
+.glc-aimsg.ai::before { content: "\25CF"; color: var(--ai-fg); }
+.glc-aimsg.ai.working::before { color: var(--ai-warn); }
+.glc-aimsg.working::after { display: none; }
+.glc-aimsg.sys { padding-left: 3ch; color: var(--ai-dim); font-style: italic; background: transparent; }
+.glc-aimsg.sys::before { content: "\23BF"; color: var(--ai-faint); font-style: normal; }
+.glc-aimsg small { color: var(--ai-faint); font-size: 10.5px; }
+.glc-aimsg code { background: rgb(255 255 255 / 0.06); color: #b1b9f9; padding: 0 3px; }
+.glc-aiempty { color: var(--ai-dim); padding: 6px 0; }
+.glc-aiempty b { color: var(--ai-fg); }
+.glc-aiempty b::before { content: "\273B  "; color: var(--ai-acc); }
+
+/* task steps: "⎿ ✓ done" / "⎿ ◌ running" */
+.glc-aitasks { margin: 2px 0 0; padding: 0; }
+.glc-aitasks li { gap: 1ch; color: var(--ai-dim); }
+.glc-aitasks li i { display: none; }
+.glc-aitasks li::before { width: 2ch; flex: none; text-align: center; }
+.glc-aitasks li.done::before { content: "\2713"; color: var(--ai-ok); }
+.glc-aitasks li.run::before { content: "\25CC"; color: var(--ai-warn); }
+.glc-aitasks li.run span { color: var(--ai-fg); }
+.glc-aichart { border: 1px solid var(--ai-line); background: #fff; }
+
+/* busy line: the Claude asterisk instead of bouncing dots */
+.glc-aityping { padding-left: 3ch; color: var(--ai-acc); background: transparent; }
+.glc-aityping .glc-aidots { display: none; }
+.glc-aityping em { font-style: normal; color: var(--ai-acc); }
+.glc-aityping em::before { content: "\273B  "; display: inline-block; }
+.glc-aispin { border-color: var(--ai-acc); border-top-color: transparent; }
+.glc-aiwork { color: var(--ai-acc); background: var(--ai-bg); border-top: 1px solid var(--ai-line); }
+
+/* prompt box */
+.glc-aibar { gap: 1ch; padding: 8px 10px; border-top: 1px solid var(--ai-line); background: transparent; }
+.glc-aibar::before { content: ">"; color: var(--ai-dim); font-weight: 700; align-self: center; }
+.glc-aiinput {
+  border: 1px solid var(--ai-fg); background: transparent; color: var(--ai-fg);
+  font: inherit; padding: 6px 8px; caret-color: var(--ai-fg);
+}
+.glc-aiinput::placeholder { color: var(--ai-faint); }
+.glc-aiinput:focus { outline: none; border-color: var(--ai-acc); }
+.glc-aisend { background: transparent; color: var(--ai-acc); border: 1px solid var(--ai-line); }
+.glc-aisend:hover { background: var(--ai-acc); color: #fff; border-color: var(--ai-acc); }
+.glc-aitoggle.on { color: var(--ai-acc); }
+
+/* AI cursor in the Claude accent */
+.glc-aicursor span { background: var(--ai-acc, #d97757); color: #fff; border-radius: 0; }

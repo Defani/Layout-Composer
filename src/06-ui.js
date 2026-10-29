@@ -270,7 +270,7 @@ function buildShell() {
     ),
     // ribbon tabs (Word): Insert holds every element, Format the selection's settings
     el("div", { class: `${NS}-topc ${NS}-rtabs`, role: "tablist" },
-      ...[["insert", "Insert"], ["format", "Format"], ["layout2", "Table Layout"], ["maptools", "Map Tools"]].map(([id, label]) =>
+      ...[["insert", "Insert"], ["format", "Format"], ["layout2", "Table Layout"], ...(LC_GENERAL ? [] : [["maptools", "Map Tools"]])].map(([id, label]) =>
         el("button", { type: "button", class: `${NS}-rtab`, role: "tab", "data-rtab": id, onclick: () => setRibbonTab(id) }, label)),
     ),
     el("div", { class: `${NS}-topr` },
@@ -283,7 +283,7 @@ function buildShell() {
       vsep(),
       iconBtn("save", "Save layout file (.json)", () => exportJSON()),
       iconBtn("help", "Tour: how this works", () => startTour("layout", true), `${NS}-helpbtn`),
-      iconBtn("sparkle", "Ask AI", () => setAiOpen(!AI.open), `${NS}-aitoggle`),
+      LC_GENERAL ? null : iconBtn("sparkle", "Ask AI", () => setAiOpen(!AI.open), `${NS}-aitoggle`),
       iconBtn("download", "Export", () => openExportDialog(), `${NS}-exportbtn`),
       iconBtn("dockright", "Show / hide the Properties panel", () => toggleDock("right"), `${NS}-docktog`),
       iconBtn("close", "Close Layout Composer", () => closeComposer(), `${NS}-closebtn`),
