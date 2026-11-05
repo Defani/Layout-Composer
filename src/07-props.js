@@ -412,7 +412,8 @@ function customNorthRow(item) {
 // Raster thumbnails are a single zoom-3 tile over Indonesia.
 function basemapThumb(kind) {
   const c = catalogBasemap(kind);
-  const raster = c?.[3] === "raster" ? c[4].split("|")[0] : RASTER_BASEMAPS[kind]?.tiles[0];
+  const g = geolibreBasemap(kind);
+  const raster = g ? (g.source.type === "raster" ? g.source.tiles[0] : null) : c?.[3] === "raster" ? c[4].split("|")[0] : RASTER_BASEMAPS[kind]?.tiles[0];
   if (raster) {
     const url = raster.replace("{z}", "3").replace("{x}", "6").replace("{y}", "4").replace("{s}", "a");
     return `<span class="${NS}-bmthumb" style="background-image:url('${esc(url)}')"></span>`;
@@ -421,7 +422,7 @@ function basemapThumb(kind) {
   return `<span class="${NS}-bmthumb ${NS}-bmvec" style="background:${tint}"></span>`;
 }
 function basemapLabel(kind) {
-  return BASEMAP_STYLES[kind] || catalogBasemap(kind)?.[1] || kind;
+  return BASEMAP_STYLES[kind] || geolibreBasemap(kind)?.name || catalogBasemap(kind)?.[1] || kind;
 }
 function basemapPicker(item) {
   const p = item.props;
@@ -430,9 +431,11 @@ function basemapPicker(item) {
   btnEl.addEventListener("click", () => {
     const list = el("div", { class: `${NS}-bmlist` });
     const search = el("input", { type: "search", class: `${NS}-input`, placeholder: "Search basemaps…" });
+    // GeoLibre's own basemap list when it has loaded; the keyless catalog otherwise.
+    const geolibre = geolibreBasemapEntries();
     const entries = [
       ...Object.keys(BASEMAP_STYLES).map((k) => [k, BASEMAP_STYLES[k], "Layout Composer"]),
-      ...BASEMAP_CATALOG.map((b) => [`cat:${b[0]}`, b[1], b[2]]),
+      ...(geolibre.length ? geolibre : BASEMAP_CATALOG.map((b) => [`cat:${b[0]}`, b[1], b[2]])),
     ];
     const draw = () => {
       const q = search.value.trim().toLowerCase();
@@ -457,7 +460,20 @@ function basemapPicker(item) {
     };
     search.addEventListener("input", draw);
     draw();
-    popoverAt(btnEl, el("div", {}, el("div", { class: `${NS}-ptitle` }, "Basemap"), search, list), `${NS}-bmpop`);
+    // Provider keys, as in GeoLibre's basemap control. Saved in this browser only.
+    const keys = basemapKeys();
+    const keyForm = el("details", { class: `${NS}-bmkeys` }, el("summary", {}, "API keys"),
+      ...BASEMAP_KEY_FIELDS.map(([name, label]) => {
+        const input = el("input", { type: "password", class: `${NS}-input`, placeholder: label, value: keys[name] || "", autocomplete: "off" });
+        input.addEventListener("change", () => {
+          saveBasemapKey(name, input.value.trim());
+          // The style cache is keyed by the saved keys, so the frame rebuilds with them.
+          if (p.basemap?.startsWith("ctrl:")) commit(() => (S.styleEpoch = (S.styleEpoch || 0) + 1));
+        });
+        return el("label", {}, label, input);
+      }),
+      el("p", { class: `${NS}-muted` }, "Keys are stored in this browser only."));
+    popoverAt(btnEl, el("div", {}, el("div", { class: `${NS}-ptitle` }, "Basemap"), search, list, keyForm), `${NS}-bmpop`);
     search.focus();
   });
   return btnEl;

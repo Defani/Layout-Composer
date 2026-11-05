@@ -116,6 +116,8 @@ async function buildStyle(item) {
       console.warn("[Layout Composer] basemap failed to load", e);
       toast(`Basemap ${c[1]} failed to load; using no basemap.`, "warn");
     }
+  } else if (geolibreBasemap(kind)) {
+    base = await geolibreBaseStyle(kind);
   } else if (RASTER_BASEMAPS[kind] || catalogBasemap(kind)) {
     const c = catalogBasemap(kind);
     const r = RASTER_BASEMAPS[kind] || { tiles: c[4].split("|"), attribution: c[5] };
@@ -150,11 +152,23 @@ function hideFrameLayers(style, item) {
   for (const id of hidden) {
     for (const l of styleLayersFor(style, id)) l.layout = { ...(l.layout || {}), visibility: "none" };
   }
+  return orderFrameLayers(style, item);
+}
+
+// The frame's layer order (its own table of contents, like an ArcMap data frame).
+// The first layer in the list is drawn on top, so layers move to the top of the
+// style in reverse order.
+function orderFrameLayers(style, item) {
+  const order = item.props.layerOrder || [];
+  for (const id of [...order].reverse()) {
+    const mine = styleLayersFor(style, id);
+    if (mine.length) style.layers = [...style.layers.filter((l) => !mine.includes(l)), ...mine];
+  }
   return style;
 }
 
 function styleKey(item) {
-  return `${item.props.basemap}|${item.props.background}|${S.styleEpoch || 0}|${(item.props.hiddenLayers || []).join(",")}`;
+  return `${item.props.basemap}|${item.props.background}|${S.styleEpoch || 0}|${(item.props.hiddenLayers || []).join(",")}|${(item.props.layerOrder || []).join(",")}`;
 }
 
 // Live (preview) maps ---------------------------------------------------------

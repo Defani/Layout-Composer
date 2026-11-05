@@ -347,17 +347,14 @@ function dimGroup(kind) {
   return dim(ribbonGroup("Shape", shapeQuickTools(probe)));
 }
 
-// Page orientation and border sit in the status bar, next to grid / guides / snap.
+// The page size in the status bar opens Page settings, where orientation and border are set.
 function renderStatusPageTools() {
   const host = S.ui.root?.querySelector(`.${NS}-pagetools`);
   if (!host || !S.doc) return;
   const pg = S.doc.page;
   host.innerHTML = "";
   host.append(
-    el("span", { class: `${NS}-pagesize` }, `${fmtNumber(round(pg.width, 1))} × ${fmtNumber(round(pg.height, 1))} mm`),
-    el("button", { type: "button", class: `${NS}-vtog ${pg.width < pg.height ? "active" : ""}`, onclick: () => commit(() => pg.width > pg.height && ([pg.width, pg.height] = [pg.height, pg.width])) }, "Portrait"),
-    el("button", { type: "button", class: `${NS}-vtog ${pg.width > pg.height ? "active" : ""}`, onclick: () => commit(() => pg.width < pg.height && ([pg.width, pg.height] = [pg.height, pg.width])) }, "Landscape"),
-    el("button", { type: "button", class: `${NS}-vtog ${pg.border?.show ? "active" : ""}`, title: "Page border (neatline)", onclick: () => commit(() => (pg.border.show = !pg.border.show)) }, "Border"),
+    el("button", { type: "button", class: `${NS}-pagesize`, title: "Page settings", onclick: () => setTab("page") }, `${fmtNumber(round(pg.width, 1))} × ${fmtNumber(round(pg.height, 1))} mm`),
   );
 }
 

@@ -5159,3 +5159,636 @@ html.glc-grabbing, html.glc-grabbing * { cursor: grabbing !important; user-selec
 /* shortcut sheet */
 .glc-kbdlist { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; font-size: 12.5px; }
 .glc-kbdlist kbd { justify-self: start; padding: 2px 7px; border: 1px solid var(--glc-border); border-bottom-width: 2px; border-radius: 5px; background: var(--glc-muted); font: 11.5px ui-monospace, Consolas, monospace; white-space: nowrap; }
+
+/* maplibre-gl-basemap-control 0.14.4 (MIT), bundled for the inset basemap panel */
+/* MapLibre GL Basemap Control */
+
+.basemap-control {
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  color-scheme: light;
+  color: #1f2933;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.basemap-control-toggle {
+  width: 29px;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1f2933;
+  cursor: pointer;
+  outline: none;
+}
+
+.basemap-control-toggle:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.basemap-control-toggle:focus-visible,
+.basemap-control-close:focus-visible,
+.basemap-control-result:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.basemap-control-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  line-height: 0;
+}
+
+.basemap-control-icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+}
+
+.basemap-control-panel {
+  position: absolute;
+  min-width: 240px;
+  max-width: min(420px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 24px));
+  display: none;
+  overflow: hidden;
+  padding: 8px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.12);
+  z-index: 1000;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.basemap-control-panel.expanded {
+  display: flex;
+  flex-direction: column;
+}
+
+/* When the user has resized the panel, honour the explicit width/height set
+   inline (already clamped to the map bounds in JS) instead of letting the
+   default caps shrink it back down. */
+.basemap-control-panel.is-resized {
+  max-width: none;
+  max-height: none;
+}
+
+/* When the user has resized the panel to an explicit height, let the content
+   and results area flex to fill it instead of fitting the content. */
+.basemap-control-panel.is-resized .basemap-control-content {
+  flex: 1 1 auto;
+}
+
+.basemap-control-panel.is-resized .basemap-control-results {
+  flex: 1 1 auto;
+  max-height: none;
+}
+
+.basemap-control-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.basemap-control-title {
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 650;
+  color: #111827;
+}
+
+.basemap-control-settings-toggle {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.basemap-control-settings-toggle[hidden] {
+  display: none;
+}
+
+.basemap-control-settings-toggle:hover {
+  color: #111827;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.basemap-control-settings-toggle.is-active {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.basemap-control-settings-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.basemap-control-close {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.basemap-control-close:hover {
+  color: #111827;
+}
+
+.basemap-control-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding-top: 8px;
+}
+
+.basemap-control-search-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.basemap-control-search,
+.basemap-control-before-id,
+.basemap-control-maptiler-key,
+.basemap-control-mapbox-token,
+.basemap-control-amazon-key,
+.basemap-control-aws-region {
+  position: relative;
+}
+
+.basemap-control-multiple-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 1px;
+  color: #374151;
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}
+
+.basemap-control-multiple-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.basemap-control-multiple-toggle-text {
+  flex: 1 1 auto;
+}
+
+.basemap-control-settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.basemap-control-settings-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.basemap-control-settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px 3px 5px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.basemap-control-settings-back:hover {
+  border-color: #9ca3af;
+  background: #f9fafb;
+}
+
+.basemap-control-settings-back:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.basemap-control-settings-heading {
+  font-size: 13px;
+  font-weight: 650;
+  color: #111827;
+}
+
+.basemap-control-settings-intro {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.basemap-control-provider-settings-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.basemap-control-provider-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.basemap-control-provider-group-label {
+  color: #374151;
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.basemap-control-input,
+.basemap-control-select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  outline: none;
+}
+
+.basemap-control-select option {
+  background: #fff;
+  color: #111827;
+}
+
+.basemap-control-input {
+  height: 34px;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+
+.basemap-control-select {
+  height: 30px;
+  padding: 4px 6px;
+}
+
+.basemap-control-input:focus,
+.basemap-control-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.basemap-control-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.basemap-control-status {
+  flex: 0 0 auto;
+  min-height: 17px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.basemap-control-status.is-error {
+  color: #b91c1c;
+}
+
+/* The error message wraps freely so the full text is always readable, never
+   clipped to a single fixed-height line (#837). `overflow-wrap: anywhere`
+   keeps long unbroken strings (encoded keys/URLs) from forcing an overflow. */
+.basemap-control-status-message {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.basemap-control-status-actions {
+  display: block;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.basemap-control-status-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.basemap-control-status-link {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+}
+
+.basemap-control-status-link:hover {
+  text-decoration: none;
+}
+
+.basemap-control-status-link:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: 2px;
+}
+
+.basemap-control-status-hint {
+  color: inherit;
+}
+
+/* The status region gains a little breathing room when it hosts the optional
+   key prompt, so the input is not cramped against the results list. */
+.basemap-control-status.has-optional-key {
+  margin-bottom: 4px;
+}
+
+/* Optional, non-error prompt offering an API key upgrade after a basemap falls
+   back to its keyless public tiles. Styled as a subtle info callout, distinct
+   from the red error state, so it reads as an opt-in tip rather than a problem. */
+.basemap-control-optional-key {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid #d6dbe4;
+  border-radius: 6px;
+  background: #f5f7fa;
+}
+
+.basemap-control-optional-key-message {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.basemap-control-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.basemap-control-result {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #fff;
+  color: #111827;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.basemap-control-result:hover {
+  border-color: #9ca3af;
+  background: #f9fafb;
+}
+
+.basemap-control-result.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.basemap-control-result:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.basemap-control-result-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.basemap-control-result-name {
+  overflow: hidden;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basemap-control-result-meta,
+.basemap-control-result-attribution {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basemap-control-result-type {
+  align-self: start;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.basemap-control-result-attribution {
+  grid-column: 1 / -1;
+}
+
+.basemap-control-empty {
+  padding: 18px 8px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.basemap-control-results::-webkit-scrollbar {
+  width: 6px;
+}
+
+.basemap-control-results::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.basemap-control-results::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: #d1d5db;
+}
+
+.basemap-control-resize-handle {
+  position: absolute;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  z-index: 2;
+  touch-action: none;
+}
+
+.basemap-control-resize-bottom-right {
+  right: 0;
+  cursor: nwse-resize;
+}
+
+.basemap-control-resize-bottom-left {
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.basemap-control-resize-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-color: #cbd5e1;
+  border-style: solid;
+}
+
+.basemap-control-resize-bottom-right::after {
+  right: 3px;
+  border-width: 0 2px 2px 0;
+}
+
+.basemap-control-resize-bottom-left::after {
+  left: 3px;
+  border-width: 0 0 2px 2px;
+}
+
+.basemap-control-resize-handle:hover::after {
+  border-color: #94a3b8;
+}
+
+@media (max-width: 420px) {
+  .basemap-control-panel:not(.is-resized) {
+    width: calc(100vw - 24px) !important;
+  }
+
+  .basemap-control-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Map frame table of contents (layers per frame, drag to reorder) */
+.glc-toc { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 8px; }
+.glc-tocrow { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border: 1px solid transparent; border-radius: 4px; cursor: grab; user-select: none; }
+.glc-tocrow:hover { border-color: #0d99ff55; background: #0d99ff10; }
+.glc-tocrow.dragging { opacity: .45; }
+.glc-tocrow input[type="checkbox"] { margin: 0; accent-color: #0d99ff; }
+.glc-grip { color: #8b949e; font-size: 12px; line-height: 1; }
+.glc-tocname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glc-tocrow small { font-size: 11px; }
+
+/* Office-style task pane: the properties panel floats over the canvas, opened from the ribbon.
+   The only fixed sidebar is Layers on the left. The pane runs down to the page area's bottom. */
+.glc-root { --glc-lw: 220px; }
+.glc-root.hide-left { --glc-lw: 0px; }
+.glc-body,
+.glc-root .glc-body,
+.glc-root.hide-left .glc-body,
+.glc-root.hide-right .glc-body,
+.glc-root.hide-left.hide-right .glc-body,
+.glc-embedded .glc-body,
+.glc-embedded.hide-left .glc-body,
+.glc-embedded.hide-right .glc-body,
+.glc-embedded.hide-left.hide-right .glc-body {
+  position: relative;
+  grid-template-columns: var(--glc-lw) minmax(0, 1fr) !important;
+}
+.glc-right,
+.glc-root .glc-right,
+.glc-embedded .glc-right {
+  position: absolute !important;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px !important;
+  max-height: 100%;
+  grid-column: auto !important;
+  grid-row: auto !important;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--glc-panel, #fff);
+  border-left: 1px solid #d0d7de;
+  box-shadow: -6px 0 18px #0000001a;
+  overflow: hidden;
+}
+.glc-root.hide-right .glc-right { display: none !important; }
+.glc-right .glc-props { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* Layers: a fixed sidebar on the left, shown by default. It is the only docked panel. */
+.glc-root:not(.hide-left) .glc-left,
+.glc-root.glc-layers-open:not(.hide-left) .glc-left {
+  display: flex !important;
+  flex-direction: column;
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  z-index: auto !important;
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  width: var(--glc-lw) !important;
+  max-height: none !important;
+  min-height: 0;
+  border: 0 !important;
+  border-right: 1px solid var(--glc-border) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: var(--glc-panel, #fff);
+}
+
+/* Body grid: Layers (left) and the page. The task pane floats, so it has no column. */
+.glc-root.glc-embedded .glc-body,
+.glc-root.glc-embedded.hide-left .glc-body,
+.glc-root.glc-embedded.hide-right .glc-body,
+.glc-root.glc-embedded.hide-left.hide-right .glc-body,
+.glc-root .glc-body.glc-body {
+  grid-template-columns: var(--glc-lw) minmax(0, 1fr) !important;
+}
+.glc-root.glc-embedded .glc-left { grid-column: 1 !important; }
+
+/* Layers sidebar: expand a map frame to see its layers */
+.glc-licaret { display: inline-block; width: 14px; color: #57606a; cursor: pointer; user-select: none; }
+.glc-licontent { padding: 2px 0 6px 22px; }
