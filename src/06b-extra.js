@@ -429,11 +429,25 @@ function applyDocks() {
   try {
     d = JSON.parse(localStorage.getItem(DOCK_KEY) || "{}");
   } catch {}
-  // no docked layers panel any more: layers open as a drop-down (toggleLayersMenu)
-  d.left = false;
+  // the Layers sidebar is the only panel docked by default, on the left.
+  // Older saved states closed it, so the default is applied once (leftV2).
+  if (!d.leftV2) {
+    d.left = true;
+    d.leftV2 = true;
+    try {
+      localStorage.setItem(DOCK_KEY, JSON.stringify(d));
+    } catch {}
+  }
   // the Format tab on top covers everyday settings: the full property panel
   // stays closed until asked for, so the page gets the whole width
-  if (d.right == null) d.right = false;
+  // the task pane starts closed; it opens from the ribbon (rightV2 applies the default once)
+  if (!d.rightV2) {
+    d.right = false;
+    d.rightV2 = true;
+    try {
+      localStorage.setItem(DOCK_KEY, JSON.stringify(d));
+    } catch {}
+  }
   S.ui.root.classList.toggle("hide-left", !d.left);
   S.ui.root.classList.toggle("hide-right", !d.right);
   for (const b of S.ui.root.querySelectorAll(`.${NS}-docktog`)) {

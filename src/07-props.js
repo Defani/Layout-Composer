@@ -468,7 +468,7 @@ function basemapPicker(item) {
         input.addEventListener("change", () => {
           saveBasemapKey(name, input.value.trim());
           // The style cache is keyed by the saved keys, so the frame rebuilds with them.
-          if (p.basemap?.startsWith("ctrl:")) commit(() => (p.basemap = p.basemap));
+          if (p.basemap?.startsWith("ctrl:")) commit(() => (S.styleEpoch = (S.styleEpoch || 0) + 1));
         });
         return el("label", {}, label, input);
       }),

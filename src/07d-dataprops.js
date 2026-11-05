@@ -141,22 +141,86 @@ function chartProps(item) {
 }
 
 // Which GeoLibre layers a map frame shows.
+// The frame's layers in its own order. Layers not in the saved order go last.
+function frameLayerOrder(item) {
+  const ids = glLayers().map((l) => l.id);
+  const saved = (item.props.layerOrder || []).filter((id) => ids.includes(id));
+  return [...saved, ...ids.filter((id) => !saved.includes(id))];
+}
+
+function setFrameLayer(item, id, on) {
+  commit(() => {
+    const h = new Set(item.props.hiddenLayers || []);
+    if (on) h.delete(id);
+    else h.add(id);
+    item.props.hiddenLayers = [...h];
+    // legends linked to this map follow its layers
+    for (const lg of S.doc.items) if (lg.type === "legend" && linkedMapOf(lg)?.id === item.id) syncLegendEntries(lg);
+  });
+}
+
+function moveFrameLayer(item, fromId, toId) {
+  if (!fromId || fromId === toId) return;
+  commit(() => {
+    const order = frameLayerOrder(item).filter((id) => id !== fromId);
+    order.splice(order.indexOf(toId), 0, fromId);
+    item.props.layerOrder = order;
+  });
+}
+
+// Zoom the frame to a GeoLibre layer's extent (the same view as the Map Frame ribbon).
+function zoomFrameToLayer(item, id) {
+  const b = layerBounds(id);
+  if (!b) return toast("That layer has no extent.", "warn");
+  const pw = (b.east - b.west) * 0.06 || 0.01;
+  const ph = (b.north - b.south) * 0.06 || 0.01;
+  const bb = { west: b.west - pw, east: b.east + pw, south: b.south - ph, north: b.north + ph };
+  item.props.scaleLock = 0;
+  setMapView(item, { center: [(bb.west + bb.east) / 2, (bb.south + bb.north) / 2], zoom: zoomForBounds(bb, item.w, item.h), bearing: 0 });
+}
+
+function openLayerMenu(e, item, id) {
+  e.preventDefault();
+  const anchor = { getBoundingClientRect: () => ({ left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY }), closest: () => null, contains: () => false };
+  const ids = glLayers().map((l) => l.id);
+  const m = el("div", { class: `${NS}-menu ${NS}-ctx` },
+    menuItem("Zoom to layer", () => zoomFrameToLayer(item, id)),
+    el("div", { class: `${NS}-msep` }),
+    menuItem("Show only this layer", () => commit(() => (item.props.hiddenLayers = ids.filter((x) => x !== id)))),
+    menuItem("Show all layers", () => commit(() => (item.props.hiddenLayers = []))),
+  );
+  popoverAt(anchor, m, `${NS}-ctxpop`);
+}
+
 function mapLayersSection(item) {
   const p = item.props;
   const hidden = new Set(p.hiddenLayers || []);
-  const list = el("div", { class: `${NS}-checklist` });
   const layers = glLayers();
-  for (const l of layers) {
-    const c = el("input", { type: "checkbox", checked: !hidden.has(l.id) });
-    c.addEventListener("change", () => commit(() => {
-      const h = new Set(p.hiddenLayers || []);
-      if (c.checked) h.delete(l.id);
-      else h.add(l.id);
-      p.hiddenLayers = [...h];
-      // legends linked to this map follow its layers
-      for (const lg of S.doc.items) if (lg.type === "legend" && linkedMapOf(lg)?.id === item.id) syncLegendEntries(lg);
-    }));
-    list.appendChild(el("label", { class: `${NS}-check` }, c, el("span", {}, l.name || l.id), l.visible === false ? el("small", { class: `${NS}-muted` }, " hidden in GeoLibre") : null));
+  const byId = new Map(layers.map((l) => [l.id, l]));
+  const list = el("div", { class: `${NS}-toc` });
+  for (const id of frameLayerOrder(item)) {
+    const l = byId.get(id);
+    if (!l) continue;
+    const c = el("input", { type: "checkbox", checked: !hidden.has(id) });
+    c.addEventListener("change", () => setFrameLayer(item, id, c.checked));
+    const row = el("div", { class: `${NS}-tocrow`, draggable: "true", title: "Drag to reorder · right-click for more" },
+      el("span", { class: `${NS}-grip` }, "⠿"),
+      c,
+      el("span", { class: `${NS}-tocname` }, l.name || id),
+      l.visible === false ? el("small", { class: `${NS}-muted` }, "hidden in GeoLibre") : null,
+    );
+    row.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", id);
+      row.classList.add("dragging");
+    });
+    row.addEventListener("dragend", () => row.classList.remove("dragging"));
+    row.addEventListener("dragover", (e) => e.preventDefault());
+    row.addEventListener("drop", (e) => {
+      e.preventDefault();
+      moveFrameLayer(item, e.dataTransfer.getData("text/plain"), id);
+    });
+    row.addEventListener("contextmenu", (e) => openLayerMenu(e, item, id));
+    list.appendChild(row);
   }
   return section("Layers", [
     layers.length ? list : el("p", { class: `${NS}-muted` }, "No layers in the GeoLibre project."),
@@ -164,6 +228,38 @@ function mapLayersSection(item) {
       btn("Show all", () => commit(() => (p.hiddenLayers = [])), {}),
       btn("Hide all", () => commit(() => (p.hiddenLayers = layers.map((l) => l.id))), {}),
     ),
-    el("p", { class: `${NS}-muted` }, "Each map frame can show its own set of layers, e.g. an inset with only the boundary. Linked legends follow."),
-  ], (p.hiddenLayers || []).length > 0);
+    el("p", { class: `${NS}-muted` }, "Each map frame has its own layers, order and visibility, like a data frame in ArcMap. Right-click a layer to zoom to it."),
+  ], (p.hiddenLayers || []).length > 0 || (p.layerOrder || []).length > 0);
+}
+
+// The layers of one map frame, listed under it in the Layers sidebar (drag to reorder,
+// checkbox to show or hide, right-click to zoom to a layer).
+function frameLayerRows(item) {
+  const hidden = new Set(item.props.hiddenLayers || []);
+  const byId = new Map(glLayers().map((l) => [l.id, l]));
+  const wrap = el("div", { class: `${NS}-licontent` });
+  for (const id of frameLayerOrder(item)) {
+    const l = byId.get(id);
+    if (!l) continue;
+    const c = el("input", { type: "checkbox", checked: !hidden.has(id) });
+    c.addEventListener("change", () => setFrameLayer(item, id, c.checked));
+    const row = el("div", { class: `${NS}-tocrow`, draggable: "true", title: "Drag to reorder · right-click for more" },
+      el("span", { class: `${NS}-grip` }, "⠿"),
+      c,
+      el("span", { class: `${NS}-tocname` }, l.name || id),
+    );
+    row.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", id);
+      row.classList.add("dragging");
+    });
+    row.addEventListener("dragend", () => row.classList.remove("dragging"));
+    row.addEventListener("dragover", (e) => e.preventDefault());
+    row.addEventListener("drop", (e) => {
+      e.preventDefault();
+      moveFrameLayer(item, e.dataTransfer.getData("text/plain"), id);
+    });
+    row.addEventListener("contextmenu", (e) => openLayerMenu(e, item, id));
+    wrap.appendChild(row);
+  }
+  return wrap;
 }

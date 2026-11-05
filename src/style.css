@@ -5709,3 +5709,86 @@ html.glc-grabbing, html.glc-grabbing * { cursor: grabbing !important; user-selec
     grid-template-columns: 1fr;
   }
 }
+
+/* Map frame table of contents (layers per frame, drag to reorder) */
+.glc-toc { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 8px; }
+.glc-tocrow { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border: 1px solid transparent; border-radius: 4px; cursor: grab; user-select: none; }
+.glc-tocrow:hover { border-color: #0d99ff55; background: #0d99ff10; }
+.glc-tocrow.dragging { opacity: .45; }
+.glc-tocrow input[type="checkbox"] { margin: 0; accent-color: #0d99ff; }
+.glc-grip { color: #8b949e; font-size: 12px; line-height: 1; }
+.glc-tocname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glc-tocrow small { font-size: 11px; }
+
+/* Office-style task pane: the properties panel floats over the canvas, opened from the ribbon.
+   The only fixed sidebar is Layers on the left. The pane runs down to the page area's bottom. */
+.glc-root { --glc-lw: 220px; }
+.glc-root.hide-left { --glc-lw: 0px; }
+.glc-body,
+.glc-root .glc-body,
+.glc-root.hide-left .glc-body,
+.glc-root.hide-right .glc-body,
+.glc-root.hide-left.hide-right .glc-body,
+.glc-embedded .glc-body,
+.glc-embedded.hide-left .glc-body,
+.glc-embedded.hide-right .glc-body,
+.glc-embedded.hide-left.hide-right .glc-body {
+  position: relative;
+  grid-template-columns: var(--glc-lw) minmax(0, 1fr) !important;
+}
+.glc-right,
+.glc-root .glc-right,
+.glc-embedded .glc-right {
+  position: absolute !important;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px !important;
+  max-height: 100%;
+  grid-column: auto !important;
+  grid-row: auto !important;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--glc-panel, #fff);
+  border-left: 1px solid #d0d7de;
+  box-shadow: -6px 0 18px #0000001a;
+  overflow: hidden;
+}
+.glc-root.hide-right .glc-right { display: none !important; }
+.glc-right .glc-props { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* Layers: a fixed sidebar on the left, shown by default. It is the only docked panel. */
+.glc-root:not(.hide-left) .glc-left,
+.glc-root.glc-layers-open:not(.hide-left) .glc-left {
+  display: flex !important;
+  flex-direction: column;
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  z-index: auto !important;
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  width: var(--glc-lw) !important;
+  max-height: none !important;
+  min-height: 0;
+  border: 0 !important;
+  border-right: 1px solid var(--glc-border) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: var(--glc-panel, #fff);
+}
+
+/* Body grid: Layers (left) and the page. The task pane floats, so it has no column. */
+.glc-root.glc-embedded .glc-body,
+.glc-root.glc-embedded.hide-left .glc-body,
+.glc-root.glc-embedded.hide-right .glc-body,
+.glc-root.glc-embedded.hide-left.hide-right .glc-body,
+.glc-root .glc-body.glc-body {
+  grid-template-columns: var(--glc-lw) minmax(0, 1fr) !important;
+}
+.glc-root.glc-embedded .glc-left { grid-column: 1 !important; }
+
+/* Layers sidebar: expand a map frame to see its layers */
+.glc-licaret { display: inline-block; width: 14px; color: #57606a; cursor: pointer; user-select: none; }
+.glc-licontent { padding: 2px 0 6px 22px; }

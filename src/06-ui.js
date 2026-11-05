@@ -1157,6 +1157,20 @@ function renderItemList() {
       });
     }
     host.appendChild(row);
+    // a map frame lists its own layers under it, like the ArcGIS table of contents
+    if (item.type === "map" && !q) {
+      S.ui.openMaps = S.ui.openMaps || new Set();
+      const open = S.ui.openMaps.has(item.id);
+      const caret = el("span", { class: `${NS}-licaret`, title: open ? "Hide layers" : "Show layers" }, open ? "▾" : "▸");
+      caret.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (open) S.ui.openMaps.delete(item.id);
+        else S.ui.openMaps.add(item.id);
+        renderItemList();
+      });
+      row.insertBefore(caret, row.firstChild);
+      if (open) host.appendChild(frameLayerRows(item));
+    }
   }
 }
 

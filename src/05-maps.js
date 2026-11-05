@@ -152,11 +152,23 @@ function hideFrameLayers(style, item) {
   for (const id of hidden) {
     for (const l of styleLayersFor(style, id)) l.layout = { ...(l.layout || {}), visibility: "none" };
   }
+  return orderFrameLayers(style, item);
+}
+
+// The frame's layer order (its own table of contents, like an ArcMap data frame).
+// The first layer in the list is drawn on top, so layers move to the top of the
+// style in reverse order.
+function orderFrameLayers(style, item) {
+  const order = item.props.layerOrder || [];
+  for (const id of [...order].reverse()) {
+    const mine = styleLayersFor(style, id);
+    if (mine.length) style.layers = [...style.layers.filter((l) => !mine.includes(l)), ...mine];
+  }
   return style;
 }
 
 function styleKey(item) {
-  return `${item.props.basemap}|${item.props.background}|${S.styleEpoch || 0}|${(item.props.hiddenLayers || []).join(",")}`;
+  return `${item.props.basemap}|${item.props.background}|${S.styleEpoch || 0}|${(item.props.hiddenLayers || []).join(",")}|${(item.props.layerOrder || []).join(",")}`;
 }
 
 // Live (preview) maps ---------------------------------------------------------
