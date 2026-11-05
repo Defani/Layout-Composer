@@ -44,6 +44,7 @@ function refreshAutoLegends() {
 
 function openComposer(container) {
   ensureLibrary();
+  loadBasemapControl().catch((e) => console.warn("[Layout Composer] GeoLibre basemaps unavailable", e));
   if (!S.root) S.root = buildShell();
   // Embedded (GeoLibre Layout View): live inside the host's workspace and keep
   // the current layout across Data View / Layout View switches.
@@ -74,7 +75,10 @@ function openComposer(container) {
   }
   // Every open starts on a blank page: reuse an empty layout or add one.
   // Earlier layouts stay in the library (the layout menu).
-  let blank = Object.values(S.library.layouts).find((l) => !l.items.length);
+  // Coming back to the layout you were working on keeps its content; an empty
+  // layout is still reused, and "New layout" from the menu makes a fresh one.
+  const last = S.library.layouts[S.library.active];
+  let blank = last && last.items.length ? last : Object.values(S.library.layouts).find((l) => !l.items.length);
   if (!blank) {
     blank = newDoc(`Layout ${Object.keys(S.library.layouts).length + 1}`);
     S.library.layouts[blank.id] = blank;

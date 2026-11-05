@@ -14,7 +14,7 @@ import hashlib, json, os, shutil, subprocess, sys, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC, PLUGIN, VENDOR = (os.path.join(ROOT, d) for d in ("src", "plugin", "vendor"))
-VENDOR_FILES = {"jspdf": "jspdf.umd.min.js", "svg2pdf": "svg2pdf.umd.min.js", "mathjax": "tex-svg.js", "mermaid": "mermaid.min.js", "plotly": "plotly.min.js"}
+VENDOR_FILES = {"jspdf": "jspdf.umd.min.js", "svg2pdf": "svg2pdf.umd.min.js", "mathjax": "tex-svg.js", "mermaid": "mermaid.min.js", "plotly": "plotly.min.js", "basemap": "basemap-control.js"}
 SCREENSHOTS = [
     ("docs/img/ui-overview.png", "screenshots/overview.png"),
     ("docs/img/kelerengan-kuningan.png", "screenshots/example-map.png"),

@@ -116,6 +116,8 @@ async function buildStyle(item) {
       console.warn("[Layout Composer] basemap failed to load", e);
       toast(`Basemap ${c[1]} failed to load; using no basemap.`, "warn");
     }
+  } else if (geolibreBasemap(kind)) {
+    base = await geolibreBaseStyle(kind);
   } else if (RASTER_BASEMAPS[kind] || catalogBasemap(kind)) {
     const c = catalogBasemap(kind);
     const r = RASTER_BASEMAPS[kind] || { tiles: c[4].split("|"), attribution: c[5] };
